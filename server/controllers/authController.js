@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import userModel from '../models/userModel.js';
 import transporter from '../config/nodemailer.js';
 
-// 🔄 Helper Function: Send OTP Email
+// Helper Function: Send OTP Email
 const sendOtpEmail = async (user, type = 'verify') => {
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const now = Date.now();
@@ -21,14 +21,14 @@ const sendOtpEmail = async (user, type = 'verify') => {
     const mailOptions = {
         from: process.env.SENDER_EMAIL,
         to: user.email,
-        subject: type === 'verify' ? 'Account Verification OTP' : 'Password Reset OTP',
-        text: `Your OTP is ${otp}. Use this to ${type === 'verify' ? 'verify your account' : 'reset your password'}.`
+        subject: type === 'verify' ? 'Segma - Account Verification OTP' : 'Segma - Password Reset OTP',
+        text: `Your OTP is ${otp}. Use this to ${type === 'verify' ? 'verify your account' : 'reset your password'}. The OTP will expired in 15 minutes`
     };
 
     await transporter.sendMail(mailOptions);
 };
 
-// 🔐 Register
+// Register
 export const register = async (req, res) => {
     const { username, email, password } = req.body;
 
@@ -57,7 +57,7 @@ export const register = async (req, res) => {
 
         await sendOtpEmail(user, 'verify');
 
-        return res.json({ success: true });
+        return res.json({ success: true, userId: user._id });
     } catch (error) {
         return res.json({ success: false, message: error.message });
     }
@@ -80,7 +80,7 @@ export const login = async (req, res) => {
 
         if (!user.isAccountVerified) {
             await sendOtpEmail(user, 'verify');
-            return res.json({ success: false, message: 'Please verify your email before logging in' });
+            return res.json({ success: false, message: 'Please verify your email before logging in', userId: user._id  });
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
@@ -117,7 +117,7 @@ export const logout = async (req, res) => {
     }
 };
 
-// ✅ Verify Email
+// Verify Email
 export const verifyEmail = async (req, res) => {
     const { userId, otp } = req.body;
 
@@ -128,8 +128,11 @@ export const verifyEmail = async (req, res) => {
     try {
         const user = await userModel.findById(userId);
 
-        if (!user || user.verifyOtp !== otp) {
-            return res.json({ success: false, message: 'Invalid OTP' });
+        if (!user) {
+            return res.json({ success: false, message: 'User not found' });
+        }
+        if (user.verifyOtp !== otp) {
+            return res.json({ success: false, message: 'Incorrect OTP' });
         }
 
         if (user.verifyOtpExpiredAt < Date.now()) {
@@ -147,7 +150,7 @@ export const verifyEmail = async (req, res) => {
     }
 };
 
-// 📤 Send Reset OTP
+// Reset Password, send new OTP to reset password
 export const sendResetOtp = async (req, res) => {
     const { email } = req.body;
 
@@ -199,3 +202,12 @@ export const resetPassword = async (req, res) => {
         return res.json({ success: false, message: error.message });
     }
 };
+
+// Check is user authenticatedAdd commentMore actions
+export const isAuthenticated = async (req, res) => {
+    try {
+        return res.json({success:true});
+    } catch (error) {
+        res.json({success:false, message: error.message});
+    }
+}
