@@ -1,12 +1,12 @@
 import React, { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AppContent } from '../context/AppContext';
+import { AppContext } from '../context/AppContext';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 
 const UserHome = () => {
   
-  const { userData } = useContext(AppContent);
+  const { userData } = useContext(AppContext);
   const navigate = useNavigate();
 
   const datasetCount = 42;  // Replace with real data

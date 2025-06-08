@@ -2,7 +2,7 @@ import { createContext, useState, useEffect } from "react";
 import { toast } from 'react-toastify';
 import axios from 'axios';
 
-export const AppContent = createContext();
+export const AppContext = createContext();
 
 export const AppContextProvider = (props) => {
 
@@ -22,7 +22,7 @@ export const AppContextProvider = (props) => {
 
     const backendUrl = import.meta.env.VITE_BACKEND_URL
     const [isLoggedin, setIsLoggedin] = useState(false);
-    const [userData, setUserData] = useState(false);
+    const [userData, setUserData] = useState(null);
 
     const getUserData = async () =>{
         try {
@@ -35,7 +35,7 @@ export const AppContextProvider = (props) => {
 
     useEffect(()=>{
         getAuthState();
-    })
+    },[])
 
     const value = {
         backendUrl,
@@ -45,8 +45,8 @@ export const AppContextProvider = (props) => {
     }
 
     return (
-        <AppContent.Provider value = {value}>
+        <AppContext.Provider value = {value}>
             {props.children}
-        </AppContent.Provider>
+        </AppContext.Provider>
     )
 }

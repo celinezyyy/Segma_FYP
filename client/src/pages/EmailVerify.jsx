@@ -1,13 +1,13 @@
 import React, { useContext, useEffect } from 'react'
 import { assets } from '../assets/assets'
-import { AppContent } from '../context/AppContext'
+import { AppContext } from '../context/AppContext'
 import axios from 'axios'
 import { toast } from 'react-toastify'
 import { useNavigate } from 'react-router-dom'
 
 const EmailVerify = () => {
   axios.defaults.withCredentials = true;
-  const { backendUrl, getUserData } = useContext(AppContent);
+  const { backendUrl, getUserData } = useContext(AppContext);
   const navigate = useNavigate();
   const inputRefs = React.useRef([]);
 

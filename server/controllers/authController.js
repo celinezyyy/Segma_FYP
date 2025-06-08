@@ -5,7 +5,7 @@ import transporter from '../config/nodemailer.js';
 import { EMAIL_VERIFY_TEMPLATE, PASSWORD_RESET_TEMPLATE } from '../config/emailTemplete.js';
 
 // Helper Function: Send OTP Email
-const sendOtpEmail = async (user, type = 'verify') => {
+export const sendOtpEmail = async (user, type = 'verify') => {
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const now = Date.now();
 
