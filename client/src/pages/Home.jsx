@@ -50,8 +50,6 @@ const Home = () => {
           Our platform empowers you to understand your customers deeply, make smarter marketing decisions, and grow your business effectively. Combining advanced technology with simplicity, we turn complex data into clear, actionable insights — so you can focus on what matters most: your success.
         </p>
       </div>
-
-
        <Footer />
     </div>
   )

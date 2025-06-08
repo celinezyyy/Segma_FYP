@@ -138,6 +138,7 @@ const Login = () => {
                 className="bg-transparent outline-none text-gray-800 w-full"
                 type="text"
                 placeholder="Username"
+                required
               />
             </div>
           )}
@@ -152,6 +153,7 @@ const Login = () => {
               className="bg-transparent outline-none text-gray-800 w-full"
               type="email"
               placeholder="Email"
+              required
             />
           </div>
           {errors.email && <p className="text-red-600 text-xs mb-2">{errors.email?.message}</p>}
@@ -163,6 +165,7 @@ const Login = () => {
               className="bg-transparent outline-none text-gray-800 w-full"
               type="password"
               placeholder="Password"
+              required
             />
           </div>
           {errors.password && (

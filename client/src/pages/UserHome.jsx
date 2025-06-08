@@ -2,6 +2,7 @@ import React, { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContent } from '../context/AppContext';
 import Navbar from '../components/Navbar';
+import Sidebar from '../components/Sidebar';
 
 const UserHome = () => {
   
@@ -15,7 +16,7 @@ const UserHome = () => {
     <div className="flex flex-col items-center min-h-screen pt-24 px-4 sm:px-0 ">
       {/* Header */}
       <Navbar />
-
+      <Sidebar />
       {/* Greeting */}
       <h1 className="text-3xl font-bold mt-6 mb-12 text-center max-w-3xl text-[#2C3E50]">
         Hi {userData ? userData.username : 'Business Owner'}👋 <br />Welcome to your dashboard!
@@ -44,28 +45,13 @@ const UserHome = () => {
 
       {/* Buttons */}
       <div className="flex flex-col sm:flex-row justify-center gap-4 mb-12 max-w-4xl w-full">
-        {['/upload-dataset', '/start-segmentation', '/view-report'].map((path, idx) => {
+        {['/dataset-tab', '/start-segmentation', '/view-report'].map((path, idx) => {
           const labels = ['Upload Dataset', 'Start Segmentation', 'View Reports'];
           return (
             <button
               key={path}
               onClick={() => navigate(path)}
-              className="px-6 py-3 rounded-md font-semibold transition-colors"
-              style={{
-                backgroundColor: '#C7EDC3',
-                color: '#000000',
-                border: '2px solid #000000',
-                minWidth: '150px',
-                textAlign: 'center',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.backgroundColor = '#000000';
-                e.currentTarget.style.color = '#C7EDC3';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.backgroundColor = '#C7EDC3';
-                e.currentTarget.style.color = '#000000';
-              }}
+              className="px-6 py-3 rounded-md font-semibold transition-colors bg-[#C7EDC3] text-black border-2 border-black min-w-[150px] text-center hover:bg-black hover:text-[#C7EDC3]"
             >
               {labels[idx]}
             </button>
