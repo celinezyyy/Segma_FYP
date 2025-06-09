@@ -82,7 +82,7 @@ export const login = async (req, res) => {
         const user = await userModel.findOne({ email });
 
         if (!user) {
-            return res.json({ success: false, message: 'Invalid email' });
+            return res.json({ success: false, message: 'Invalid Email or Email not found from database' });
         }
 
         if (!user.isAccountVerified) {
@@ -151,7 +151,7 @@ export const verifyEmail = async (req, res) => {
         user.verifyOtpExpiredAt = 0;
         await user.save();
 
-        return res.json({ success: true, message: 'Email Verified successfully' });
+        return res.json({ success: true, message: 'Email Verified successfully! Login Now' });
     } catch (error) {
         return res.json({ success: false, message: error.message });
     }

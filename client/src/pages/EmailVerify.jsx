@@ -65,12 +65,12 @@ const EmailVerify = () => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen px-6 sm:px-0 bg-gradient-to-br from-blue-200 to-purple-400">
+    <div className="flex items-center justify-center min-h-screen px-6 sm:px-0 bg-gradient-to-br from-[#C3E5F1] via-[#F0F8FE] to-[#C3E5F1]">
       <img onClick={() => navigate('/')} src={assets.SegmaLogo} alt="logo" className="absolute left-5 sm:left-20 top-5 w-28 sm:w-32 cursor-pointer" />
 
-      <form onSubmit={onSubmitHandler} className='bg-slate-900 p-8 rounded-lg shadow-lg w-96 text-sm'>
-        <h1 className='text-white text-2xl font-semibold text-center mb-4'>Email Verify OTP</h1>
-        <p className='text-center mb-6 text-indigo-300'>Enter the 6-digit code sent to your email.</p>
+      <form onSubmit={onSubmitHandler} className='bg-white p-10 rounded-lg shadow-md w-96 text-gray-800 text-sm'>
+        <h1 className='text-black text-2xl font-semibold text-center mb-4'>Email Verify OTP</h1>
+        <p className='text-center mb-6 text-gray-600'>Enter the 6-digit code sent to your email.</p>
 
         <div className='flex justify-between mb-8' onPaste={handlePaste}>
           {Array(6).fill(0).map((_, index) => (
@@ -79,7 +79,7 @@ const EmailVerify = () => {
               maxLength="1"
               key={index}
               required
-              className="w-12 h-12 bg-[#333A5C] text-white text-center text-xl rounded-md"
+              className="w-12 h-12 bg-white text-gray-800 text-center text-xl rounded-md border border-gray-300"
               ref={el => inputRefs.current[index] = el}
               onInput={(e) => handleInput(e, index)}
               onKeyDown={(e) => handleKeyDown(e, index)}
@@ -87,7 +87,8 @@ const EmailVerify = () => {
           ))}
         </div>
 
-        <button className='w-full py-3 bg-gradient-to-r from-indigo-500 to-indigo-900 text-white rounded-full'>
+        <button className='w-full py-2.5 rounded-full px-6 text-black font-semibold transition-all border border-gray-400 hover:brightness-95'
+        style={{ backgroundColor: '#C7EDC3' }}>
           Verify Email
         </button>
       </form>

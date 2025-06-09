@@ -1,5 +1,5 @@
 import userModel from "../models/userModel.js";
-import { sendOtpEmail } from '../controllers/authController.js'; // or correct path if in separate file
+import { sendOtpEmail } from '../controllers/authController.js'; 
 
 export const getUserData = async (req, res) => {
     try {
@@ -72,3 +72,26 @@ export const updateProfile = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
+export const deleteAccount = async (req, res) => {
+  console.log("DELETE /delete-account route hit");
+    try {
+    const userId = req.userId; // JWT middleware sets req.user
+    console.log("userId to delete:", userId);
+    // Delete user record
+    await userModel.findByIdAndDelete(userId);
+        if (!userId) {
+            return res.status(400).json({ success: false, message: "No userId found" });
+        }
+
+    // If you have related collections like Dataset, Report in future, you'd also delete them here
+    // await Dataset.deleteMany({ userId });
+    // await Report.deleteMany({ userId });
+
+    res.clearCookie('token'); // 'token' is the cookie name store in frontend
+    res.status(200).json({ success: true, message: "Account deleted successfully" });
+  } catch (err) {
+    console.error("Delete account error:", err.message);
+    res.status(500).json({ success: false, message: "Failed to delete account" });
+  }
+}
