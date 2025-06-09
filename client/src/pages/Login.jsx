@@ -4,7 +4,6 @@ import { assets } from '../assets/assets';
 import { AppContext } from '../context/AppContext';
 import axios from 'axios';
 import { toast } from 'react-toastify';
-
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
@@ -69,16 +68,19 @@ const Login = () => {
     }
   };
 
-  const onSubmitHandler = async (data) => {
+  const onSubmitHandler = async (data,e) => {
+    e.preventDefault();
+
     try {
       axios.defaults.withCredentials = true;
 
-      if (isSignup) {
-        const { username, email, password } = data;
+      if (isSignup) { // Create Account
+        const { username, email, password, inviteCode } = data;
         const res = await axios.post(`${backendUrl}/api/auth/register`, {
           username,
           email,
           password,
+          inviteCode
         });
 
         if (res.data.success) {
@@ -88,7 +90,7 @@ const Login = () => {
         } else {
           toast.error(res.data.message);
         }
-      } else {
+      } else { // Login
         const { email, password } = data;
         const res = await axios.post(`${backendUrl}/api/auth/login`, {
           email,
@@ -97,8 +99,14 @@ const Login = () => {
 
         if (res.data.success) {
           setIsLoggedin(true);
+          const userRole = res.data.role; 
+          console.log('User role is:', userRole);
           getUserData();
-          navigate('/user-home');
+          if (userRole === 'admin'){
+            navigate('/admin-home');
+          }else{
+            navigate('/user-home');
+          }
         } else if (res.data.message === 'Please verify your email before logging in') {
           if (res.data.userId) {
             localStorage.setItem('verifyUserId', res.data.userId);
@@ -132,19 +140,35 @@ const Login = () => {
 
         <form onSubmit={handleSubmit(onSubmitHandler)}>
           {isSignup && (
-            <div className="mb-4 flex items-center gap-3 w-full px-5 py-2.5 rounded-full bg-white border border-gray-300">
-              <img src={assets.person_icon} alt="" />
-              <input
-                {...register('username')}
-                className="bg-transparent outline-none text-gray-800 w-full"
-                type="text"
-                placeholder="Username"
-                required
-              />
-            </div>
-          )}
-          {errors.username && (
-            <p className="text-red-600 text-xs mb-2">{errors.username?.message}</p>
+            <>
+              <div className="mb-4 flex items-center gap-3 w-full px-5 py-2.5 rounded-full bg-white border border-gray-300">
+                <img src={assets.person_icon} alt="" />
+                <input
+                  {...register('username')}
+                  className="bg-transparent outline-none text-gray-800 w-full"
+                  type="text"
+                  placeholder="Username"
+                  required
+                />
+              </div>
+              {errors.username && (
+                <p className="text-red-600 text-xs mb-2">{errors.username?.message}</p>
+              )}
+
+              {/* New Invite Code input */}
+              <div className="mb-4 flex items-center gap-3 w-full px-5 py-2.5 rounded-full bg-white border border-gray-300">
+                <img src={assets.person_icon} alt="Invite Icon" />
+                <input
+                  {...register('inviteCode')}
+                  className="bg-transparent outline-none text-gray-800 w-full"
+                  type="text"
+                  placeholder="Admin Invite Code (optional)"
+                />
+              </div>
+              {errors.inviteCode && (
+                <p className="text-red-600 text-xs mb-2">{errors.inviteCode?.message}</p>
+              )}
+            </>
           )}
 
           <div className="mb-4 flex items-center gap-3 w-full px-5 py-2.5 rounded-full bg-white border border-gray-300">

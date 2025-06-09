@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Navbar from '../components/Navbar';
 
-const Sidebar = () => {
+const UserSidebar = () => {
   const [isOpen, setIsOpen] = useState(false); // Toggle sidebar expand/collapse
   const [segOpen, setSegOpen] = useState(false); // Toggle segmentation submenu
 
@@ -208,4 +208,4 @@ const Sidebar = () => {
   );
 };
 
-export default Sidebar;
+export default UserSidebar;

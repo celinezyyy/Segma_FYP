@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import Navbar from '../components/Navbar';
-import UserSidebar from '../components/UserSidebar';
+import AdminSidebar from '../components/AdminSidebar';
 import { assets } from '../assets/assets';
 import { AppContext } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
@@ -8,7 +8,7 @@ import { toast } from 'react-toastify';
 import Swal from 'sweetalert2';
 import axios from 'axios';
 
-const MyProfile = () => {
+const AdminProfile = () => {
     const { userData, backendUrl } = useContext(AppContext);
     const navigate = useNavigate();
 
@@ -122,7 +122,7 @@ const MyProfile = () => {
     <div>
         <Navbar />
         <div className="flex pt-20">
-        <UserSidebar />
+        <AdminSidebar />
             <main className="flex-grow px-4 md:px-8 mt-20 flex flex-col items-center">
                 {/* Title Outside the Form Box */}
                 <h2 className="text-3xl font-bold text-center mb-6 text-[#1f3f66]">
@@ -226,4 +226,4 @@ const MyProfile = () => {
   );
 };
 
-export default MyProfile;
+export default AdminProfile;

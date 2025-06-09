@@ -1,10 +1,10 @@
 import React from 'react'
-import Sidebar from '../components/Sidebar'
+import UserSidebar from '../components/UserSidebar'
 
 const DatasetTab = () => {
   return (
     <div>
-      <Sidebar />
+      <UserSidebar />
     </div>
   )
 }

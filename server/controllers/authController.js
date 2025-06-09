@@ -37,8 +37,8 @@ export const sendOtpEmail = async (user, type = 'verify') => {
 
 // Register
 export const register = async (req, res) => {
-    const { username, email, password } = req.body;
-
+    const { username, email, password, inviteCode } = req.body;
+    
     if (!username || !email || !password) {
         return res.json({ success: false, message: 'Missing Details' });
     }
@@ -51,10 +51,15 @@ export const register = async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        const user = new userModel({ username, email, password: hashedPassword });
+
+        // Determine role based on adminCode
+        const role = (inviteCode && inviteCode === process.env.ADMIN_CODE) ? 'admin' : 'user';
+
+        const user = new userModel({ username, email, password: hashedPassword, role });
         await user.save();
 
-        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
         res.cookie('token', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
@@ -64,13 +69,13 @@ export const register = async (req, res) => {
 
         await sendOtpEmail(user, 'verify');
 
-        return res.json({ success: true, userId: user._id });
+        return res.json({ success: true, userId: user._id, role: user.role });
     } catch (error) {
         return res.json({ success: false, message: error.message });
     }
 };
 
-// 🔐 Login
+// Login
 export const login = async (req, res) => {
     const { email, password } = req.body;
 
@@ -82,7 +87,7 @@ export const login = async (req, res) => {
         const user = await userModel.findOne({ email });
 
         if (!user) {
-            return res.json({ success: false, message: 'Invalid Email or Email not found from database' });
+            return res.json({ success: false, message: 'Invalid Email or Email is not registered' });
         }
 
         if (!user.isAccountVerified) {
@@ -103,13 +108,13 @@ export const login = async (req, res) => {
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
-        return res.json({ success: true });
+        return res.json({ success: true, role: user.role});
     } catch (error) {
         return res.json({ success: false, message: error.message });
     }
 };
 
-// 🔓 Logout
+// Logout
 export const logout = async (req, res) => {
     try {
         res.clearCookie('token', {
@@ -179,7 +184,7 @@ export const sendResetOtp = async (req, res) => {
     }
 };
 
-// 🔐 Reset Password
+// Reset Password
 export const resetPassword = async (req, res) => {
     const { email, otp, newPassword } = req.body;
 

@@ -7,6 +7,7 @@ import person_icon from './person_icon.svg';
 import loginbackground from './loginbackground.png';
 import editprofile from './editprofile.png';
 import warning from './warning.png';
+import feedback from './feedback.png'
 
 export const assets = {
     SegmaLogo,
@@ -17,5 +18,6 @@ export const assets = {
     person_icon,
     loginbackground,
     editprofile,
-    warning
+    warning,
+    feedback
 };

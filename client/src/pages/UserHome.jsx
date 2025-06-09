@@ -2,7 +2,7 @@ import React, { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../context/AppContext';
 import Navbar from '../components/Navbar';
-import Sidebar from '../components/Sidebar';
+import UserSidebar from '../components/UserSidebar';
 import Footer from '../components/Footer';
 
 const UserHome = () => {
@@ -17,7 +17,7 @@ const UserHome = () => {
       {/* Navbar and Sidebar outside main content */}
       <Navbar />
       <div className="flex pt-20 min-h-screen">
-        <Sidebar />
+        <UserSidebar />
         {/* Main content area grows to fill the space */}
         <main className="flex-grow px-4 md:px-8">
           {/* Greeting */}
@@ -76,7 +76,7 @@ const UserHome = () => {
             </p>
             <div className="flex justify-center">
               <button
-                onClick={() => navigate('/feedback')}
+                onClick={() => navigate('/feedback-tab')}
                 className="flex items-center gap-2 border border-gray-500 rounded-full px-3 py-1 sm:px-6 sm:py-2 text-sm sm:text-base text-gray-800 transition-all whitespace-nowrap hover:bg-[#C3E5F1]"
               >
                 Give Feedback
