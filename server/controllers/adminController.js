@@ -1,4 +1,5 @@
 import userModel from '../models/userModel.js';
+import feedbackModel from '../models/feedbackModel.js';
 
 // Get all users with role: 'user'
 export const getAllUsers = async (req, res) => {
@@ -24,3 +25,27 @@ export const deleteUserById = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to delete user' });
   }
 };
+
+export const submitFeedback = async ( req, res) => {
+  try {
+        const { userId, subject, description } = req.body;
+        console.log('Userid:', userId);
+
+        if (!userId || !subject || !description) {
+            return res.status(400).json({ success: false, message: 'Missing required fields' });
+        }
+
+        const newFeedback = new feedbackModel({
+            user: userId,
+            subject,
+            description,
+        });
+
+        await newFeedback.save();
+
+        res.json({ success: true, message: 'Feedback submitted successfully' });
+    } catch (err) {
+        console.error('Error submitting feedback:', err);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+}
