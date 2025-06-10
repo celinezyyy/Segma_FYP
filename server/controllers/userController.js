@@ -1,5 +1,6 @@
 import userModel from "../models/userModel.js";
-import { sendOtpEmail } from '../controllers/authController.js'; 
+import { sendOtpEmail } from '../controllers/authController.js';
+import feedbackModel from '../models/feedbackModel.js';
 
 export const getUserData = async (req, res) => {
     try {
@@ -78,13 +79,16 @@ export const deleteAccount = async (req, res) => {
   console.log("DELETE /delete-account route hit");
     try {
     const userId = req.userId; // JWT middleware sets req.user
-    console.log("userId to delete:", userId);
+    
+    if (!userId) {
+      return res.status(400).json({ success: false, message: "No userId found" });
+    }
+    
+    await feedbackModel.deleteMany({ user: userId });
+
     // Delete user record
     await userModel.findByIdAndDelete(userId);
-        if (!userId) {
-            return res.status(400).json({ success: false, message: "No userId found" });
-        }
-
+       
     // If you have related collections like Dataset, Report in future, you'd also delete them here
     // await Dataset.deleteMany({ userId });
     // await Report.deleteMany({ userId });
@@ -95,4 +99,29 @@ export const deleteAccount = async (req, res) => {
     console.error("Delete account error:", err.message);
     res.status(500).json({ success: false, message: "Failed to delete account" });
   }
+}
+
+// submit feedback
+export const submitFeedback = async (req, res) => {
+  try {
+        const { userId, subject, description } = req.body;
+        console.log('Userid:', userId);
+
+        if (!userId || !subject || !description) {
+            return res.status(400).json({ success: false, message: 'Missing required fields' });
+        }
+
+        const newFeedback = new feedbackModel({
+            user: userId,
+            subject,
+            description,
+        });
+
+        await newFeedback.save();
+
+        res.json({ success: true, message: 'Feedback submitted successfully' });
+    } catch (err) {
+        console.error('Error submitting feedback:', err);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
 }

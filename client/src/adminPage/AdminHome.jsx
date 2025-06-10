@@ -1,13 +1,36 @@
-import React, { useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../context/AppContext';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import axios from 'axios';
+import { toast } from 'react-toastify';
 import AdminSidebar from '../components/AdminSidebar';
 
 const UserHome = () => {
-  const { userData } = useContext(AppContext);
+  const { userData, backendUrl } = useContext(AppContext);
   const navigate = useNavigate();
+  const [metrics, setMetrics] = useState({
+    users: 0,
+    feedback: 0,
+    resolved: 0
+  });
+
+useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const res = await axios.get(`${backendUrl}/api/admin/home-cards-info`);
+        if (res.data.success) {
+          setMetrics(res.data.metrics);
+        } else {
+          toast.error(res.data.message || 'Failed to fetch metrics');
+        }
+      } catch (err) {
+        toast.error(err.response?.data?.message || 'Error loading dashboard data');
+      }
+    };
+    fetchMetrics();
+  }, [backendUrl]);
 
   return (
     <div>
@@ -27,21 +50,21 @@ const UserHome = () => {
           {/* Total Users */}
           <div className="bg-white rounded-lg p-6 flex flex-col items-center justify-center shadow-md border-2 border-[#C3E5F1]">
             <h3 className="text-xl font-semibold mb-2 text-[#2C3E50]">Users</h3>
-            <p className="text-4xl font-bold text-[#2C3E50]">123</p> {/* Replace with real data */}
+            <p className="text-4xl font-bold text-[#2C3E50]">{metrics.users}</p> {/* Replace with real data */}
             <p className="text-gray-600 mt-1">Registered Users</p>
           </div>
 
           {/* Total Feedback */}
           <div className="bg-white rounded-lg p-6 flex flex-col items-center justify-center shadow-md border-2 border-[#C3E5F1]">
             <h3 className="text-xl font-semibold mb-2 text-[#2C3E50]">Feedback</h3>
-            <p className="text-4xl font-bold text-[#2C3E50]">45</p> {/* Replace with real data */}
+            <p className="text-4xl font-bold text-[#2C3E50]">{metrics.feedback}</p> {/* Replace with real data */}
             <p className="text-gray-600 mt-1">Total Feedback Submitted</p>
           </div>
 
           {/* Feedback Resolved */}
           <div className="bg-white rounded-lg p-6 flex flex-col items-center justify-center shadow-md border-2 border-[#C3E5F1]">
             <h3 className="text-xl font-semibold mb-2 text-[#2C3E50]">Resolved</h3>
-            <p className="text-4xl font-bold text-[#2C3E50]">28</p> {/* Replace with real data */}
+            <p className="text-4xl font-bold text-[#2C3E50]">{metrics.resolved}</p> {/* Replace with real data */}
             <p className="text-gray-600 mt-1">Feedback Resolved</p>
           </div>
         </div>
@@ -49,7 +72,7 @@ const UserHome = () => {
         {/* Optional Feedback Button */}
         <div className="flex justify-center mb-12">
           <button
-            onClick={() => navigate('/feedback-management')}
+            onClick={() => navigate('/admin-feedback-list')}
             className="py-2.5 px-6 rounded-full text-black font-semibold transition-all border border-black hover:brightness-90"
             style={{ backgroundColor: '#C3E5F1' }}
           >

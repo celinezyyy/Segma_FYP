@@ -21,7 +21,7 @@ const Feedback = () => {
     try {
       axios.defaults.withCredentials = true;
 
-      const res = await axios.post(`${backendUrl}/api/admin/submit-feedback`, {
+      const res = await axios.post(`${backendUrl}/api/user/submit-feedback`, {
         userId: userData?._id,
         subject: formData.subject,
         description: formData.description,
@@ -39,9 +39,7 @@ const Feedback = () => {
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'An error occurred');
-    } finally {
-      setIsSubmitting(false); // End loading
-    }
+    } 
   };
   // Determine if the form is valid
   const isFormValid = formData.subject.trim() !== '' && formData.description.trim() !== '';

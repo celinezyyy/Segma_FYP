@@ -13,39 +13,114 @@ export const getAllUsers = async (req, res) => {
 };
 
 // Delete user by ID
-export const deleteUserById = async (req, res) => {
+export const adminDeleteUserAccount  = async (req, res) => {
   try {
-    const deleted = await userModel.findByIdAndDelete(req.params.id);
-    if (!deleted) {
-      return res.status(404).json({ success: false, message: 'userModel not found' });
+    const { userId } = req.params; // now target userId is passed in URL param
+    
+    if (!userId) {
+      console.log('❌ No userId received in req.params');
+      return res.status(400).json({ success: false, message: "No User Found" });
     }
-    res.status(200).json({ success: true, message: 'userModel deleted successfully' });
-  } catch (err) {
-    console.error('Error deleting user:', err);
-    res.status(500).json({ success: false, message: 'Failed to delete user' });
+
+    console.log('🔍 Deleting userId:', userId);
+    // Delete feedbacks linked to user
+    await feedbackModel.deleteMany({ user: userId });
+
+    // Delete datasets/reports if needed
+    // await datasetModel.deleteMany({ userId });
+    // await reportModel.deleteMany({ userId });
+
+    // Finally delete the user
+    await userModel.findByIdAndDelete(userId);
+
+    res.status(200).json({ success: true, message: "User account and related data deleted successfully" });
+     } catch (err) {
+    console.error('Admin delete user error:', err);
+    res.status(500).json({ success: false, message: 'Failed to delete user account'});
   }
 };
 
-export const submitFeedback = async ( req, res) => {
+// get feedback 
+export const getFeedbackList = async (req, res) => {
   try {
-        const { userId, subject, description } = req.body;
-        console.log('Userid:', userId);
+    const feedbacks = await feedbackModel
+      .find()
+      .sort({ createdAt: -1 })
+      .populate('user', 'username email'); // populate user data (only username + email)
+    
+      console.log('Feedback:', feedbacks);
+    res.json({ success: true, feedbacks });
+  } catch (err) {
+    console.error('Error fetching feedback:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
 
-        if (!userId || !subject || !description) {
-            return res.status(400).json({ success: false, message: 'Missing required fields' });
-        }
+// handle view(process) button
+export const markFeedbackAsInProcess = async (req, res) => {
+  try {
+    const { id } = req.params;
 
-        const newFeedback = new feedbackModel({
-            user: userId,
-            subject,
-            description,
-        });
+    const feedback = await feedbackModel.findById(id);
 
-        await newFeedback.save();
-
-        res.json({ success: true, message: 'Feedback submitted successfully' });
-    } catch (err) {
-        console.error('Error submitting feedback:', err);
-        res.status(500).json({ success: false, message: 'Server error' });
+    if (!feedback) {
+      return res.status(404).json({ success: false, message: 'Feedback not found' });
     }
+
+    if (feedback.status === 'Solved' || feedback.status === 'Processing') {
+      return res.status(400).json({ success: false, message: 'Feedback is already processed' });
+    }
+
+    feedback.status = 'Processing';
+    await feedback.save();
+
+    res.status(200).json({ success: true, message: 'Feedback marked as In Process', feedback });
+  } catch (err) {
+    console.error('Error updating feedback status:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// handle complete button
+export const markFeedbackAsCompleted = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const feedback = await feedbackModel.findById(id);
+
+    if (!feedback) {
+      return res.status(404).json({ success: false, message: 'Feedback not found' });
+    }
+
+    if (feedback.status === 'Solved') {
+      return res.status(400).json({ success: false, message: 'Feedback is already solved' });
+    }
+
+    feedback.status = 'Solved';
+    await feedback.save();
+
+    res.status(200).json({ success: true, message: 'Feedback marked as Solved', feedback});
+  } catch (err) {
+    console.error('Error updating feedback status:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+export const getHomeCardsInfo = async (req, res) => {
+  try {
+    const userCount = await userModel.countDocuments({ role: 'user' });
+    const feedbackCount = await feedbackModel.countDocuments();
+    const resolvedFeedbackCount = await feedbackModel.countDocuments({ status: 'Solved' });
+    
+    res.json({
+      success: true,
+      metrics: {
+        users: userCount,
+        feedback: feedbackCount,
+        resolved: resolvedFeedbackCount
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
 }

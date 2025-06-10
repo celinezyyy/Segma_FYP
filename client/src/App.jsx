@@ -13,6 +13,7 @@ import Feedback from './pages/Feedback';
 import AdminHome from './adminPage/AdminHome';
 import UserList from './adminPage/UserList';
 import AdminProfile from './adminPage/AdminProfile';
+import FeedbackList from './adminPage/FeedbackList';
   
 const App = () => {
   return(
@@ -31,6 +32,7 @@ const App = () => {
         <Route path='/admin-home' element={<AdminHome/>}/>
         <Route path='/admin-user-list' element={<UserList />}/>
         <Route path='/admin-profile' element={<AdminProfile />}/>
+        <Route path='/admin-feedback-list' element={<FeedbackList />}/>
         <Route></Route>
       </Routes>
     </div>

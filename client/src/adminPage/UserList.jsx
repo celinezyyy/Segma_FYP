@@ -49,6 +49,15 @@ const UserList = () => {
           const updated = users.filter((user) => user._id !== userId);
           setUsers(updated);
           setFilteredUsers(updated.filter(matchSearch));
+          
+          // SHOW SUCCESS POPUP:
+          await Swal.fire({
+            title: 'Deleted!',
+            text: 'The user account has been deleted successfully.',
+            icon: 'success',
+            confirmButtonColor: '#3b82f6', // Blue
+            confirmButtonText: 'OK',
+          });
         }
       } catch (err) {
         console.error('Failed to delete user:', err);
@@ -81,7 +90,7 @@ const UserList = () => {
     <div className="flex min-h-screen">
       <AdminSidebar />
 
-      <main className="flex-grow px-4 md:px-8 pt-20 min-h-[calc(100vh-5rem)] flex flex-col items-center justify-start">
+      <main className="flex-grow px-4 md:px-8 pt-20 min-h-[calc(100vh-5rem)]">
         <h1 className="text-2xl font-bold mb-4 text-center text-[#2C3E50]">
           👥 Registered Users
         </h1>
@@ -114,7 +123,7 @@ const UserList = () => {
           </div>
         </div>
         
-        <div className="overflow-x-auto bg-white shadow-lg rounded-lg border-2 border-[#C3E5F1] w-full max-w-6xl">
+        <div className="overflow-x-auto bg-white shadow-lg rounded-lg border-2 border-[#C3E5F1] w-full">
           <table className="min-w-full text-left text-[#2C3E50]">
             <thead className="bg-[#C3E5F1] text-sm uppercase">
               <tr>
@@ -162,7 +171,6 @@ const UserList = () => {
                 ))
               )}
             </tbody>
-
           </table>
         </div>
       </main>

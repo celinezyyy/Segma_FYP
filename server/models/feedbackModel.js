@@ -5,6 +5,7 @@ const feedbackSchema = new mongoose.Schema({
     subject: { type: String, required: true },
     description: { type: String, required: true },
     submittedAt: { type: Date, default: Date.now, required: true },
+    status: { type: String, enum: ['New', 'Processing', 'Solved'], default: 'New'},
 });
 
 const feedbackModel = mongoose.models.feedback || mongoose.model('feedback', feedbackSchema);
