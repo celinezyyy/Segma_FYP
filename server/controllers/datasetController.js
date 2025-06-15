@@ -87,9 +87,7 @@ export const getDatasetCounts = async (req, res) => {
 console.log('User ID:', userId);
     const customerCount = await datasetModel.countDocuments({ type: 'Customer', user: userId });
     const productCount = await datasetModel.countDocuments({ type: 'Product', user: userId });
-
-console.log('Customer Count:', customerCount);
-console.log('Product Count:', productCount);
+    
     res.json({
       success: true,
       counts: {
