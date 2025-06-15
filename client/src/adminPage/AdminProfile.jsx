@@ -88,7 +88,7 @@ const AdminProfile = () => {
     const handleDeleteAccount = async () => {
         const result = await Swal.fire({
             title: 'Are you sure you want to delete your account?',
-            text: 'This action is permanent and cannot be undone. All your data, settings, and history will be permanently removed. If you proceed, you will lose access to your account and all associated information. Please confirm if you want to continue.',
+            text: 'This action is permanent and cannot be undone. All your data, settings, and history will be permanently removed. If you proceed, you will lose access to your account and all associated information. Please confirm if you want to delete this user.',
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#f87171',

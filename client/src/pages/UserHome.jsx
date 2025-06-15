@@ -64,7 +64,7 @@ const UserHome = () => {
           </div>
 
           {/* Feedback Section */}
-          <section
+          <div
             className="max-w-4xl w-full bg-white rounded-lg p-6 mb-8 shadow-md text-center mx-auto"
             style={{ border: "2px solid #C3E5F1", color: '#2C3E50' }}
           >
@@ -82,11 +82,11 @@ const UserHome = () => {
                 Give Feedback
               </button>
             </div>
-          </section>
+          </div>
         </main>
       </div>
       {/* Footer */}
-          <Footer />
+      <Footer />
     </div>
   );
 };

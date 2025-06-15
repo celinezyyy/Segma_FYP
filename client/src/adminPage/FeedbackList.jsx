@@ -169,8 +169,8 @@ const FeedbackList = () => {
                         disabled={feedback.status === 'Solved'}
                         className={`py-1 px-3 rounded text-white text-sm ${
                           feedback.status === 'Solved'
-                            ? 'bg-purple-300 cursor-not-allowed'
-                            : 'bg-purple-500 hover:bg-purple-600'
+                            ? 'bg-green-300 cursor-not-allowed'
+                            : 'bg-green-500 hover:bg-green-600'
                         }`}
                       >
                         {feedback.status === 'Solved'
