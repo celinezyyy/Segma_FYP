@@ -3,7 +3,8 @@ import {
   uploadDataset,
   getUserDatasets,
   deleteDataset,
-  previewDataset
+  previewDataset, 
+  getDatasetCounts
 } from '../controllers/datasetController.js';
 import userAuth from '../middleware/userAuth.js';
 import datasetUpload from '../middleware/multerMiddleware.js';
@@ -13,6 +14,8 @@ datasetRouter.post('/upload/:type', userAuth, datasetUpload.single('file'), uplo
 datasetRouter.get('/', userAuth, getUserDatasets);
 datasetRouter.get('/preview/:id', userAuth, previewDataset);
 datasetRouter.delete('/delete-dataset/:id', userAuth, deleteDataset);
+datasetRouter.get('/dataset-counts', userAuth, getDatasetCounts);
+
 
 export default datasetRouter;
 
