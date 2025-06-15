@@ -8,8 +8,8 @@ const adminRouter = express.Router();
 adminRouter.get('/users', userAuth, getAllUsers);
 adminRouter.delete('/users/:userId', userAuth, adminDeleteUserAccount);
 adminRouter.get('/feedback-list', userAuth, adminAuth, getFeedbackList);
-adminRouter.put('/feedback/:id/mark-in-process', markFeedbackAsInProcess);
-adminRouter.put('/feedback/:id/mark-completed', markFeedbackAsCompleted);
+adminRouter.put('/feedback/:id/mark-in-process', userAuth, markFeedbackAsInProcess);
+adminRouter.put('/feedback/:id/mark-completed', userAuth, markFeedbackAsCompleted);
 adminRouter.get('/home-cards-info', userAuth, getHomeCardsInfo);
 
 export default adminRouter;
