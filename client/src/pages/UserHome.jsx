@@ -11,7 +11,7 @@ const UserHome = () => {
   const navigate = useNavigate();
 
   const [datasetCounts, setDatasetCounts] = useState({ customer: 0, product: 0 });
-  const reportCount = 17; // Replace with real report count later
+  const reportCount = 0; // Replace with real report count later
 
   useEffect(() => {
     const fetchCounts = async () => {

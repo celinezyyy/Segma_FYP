@@ -1,6 +1,7 @@
 import datasetModel from '../models/datasetModel.js';
 import path from 'path';
-import fs from 'fs/promises';
+import fsp from 'fs/promises';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -60,10 +61,9 @@ export const deleteDataset = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Dataset not found' });
 
     const filePath = path.join(__dirname, '..', 'datasets', dataset.user.toString(), dataset.type, dataset.filename);
-    // console.log('Deleting file at:', filePath);
 
     try {
-      await fs.unlink(filePath);
+      await fsp.unlink(filePath);
     } catch (err) {
       if (err.code !== 'ENOENT') {
         console.error('File deletion error:', err);
@@ -84,10 +84,10 @@ export const deleteDataset = async (req, res) => {
 export const getDatasetCounts = async (req, res) => {
   try {
     const userId = req.userId; 
-console.log('User ID:', userId);
+
     const customerCount = await datasetModel.countDocuments({ type: 'Customer', user: userId });
     const productCount = await datasetModel.countDocuments({ type: 'Product', user: userId });
-    
+
     res.json({
       success: true,
       counts: {
@@ -110,12 +110,19 @@ export const previewDataset = async (req, res) => {
     const dataset = await datasetModel.findOne({ _id: datasetId, user: userId });
     if (!dataset) return res.status(404).json({ success: false, message: 'Dataset not found' });
 
-    const filePath = path.join('uploads', dataset.filename);
-    const fileContent = fs.readFileSync(filePath, 'utf8');
-    const lines = fileContent.split('\n').slice(0, 10); // preview first 10 lines
+    const filePath = path.join(__dirname, '..', 'datasets', userId, dataset.type, dataset.filename);
+
+    if (!fs.existsSync(filePath)) {
+      console.error('File does not exist');
+      return res.status(404).json({ success: false, message: 'File not found' });
+    }
+
+    const fileContent = await fsp.readFile(filePath, 'utf8');
+    const lines = fileContent.split('\n').slice(0, 100); // First 100 lines for preview
 
     res.json({ success: true, preview: lines });
   } catch (error) {
+    console.error('🔥 Error in previewDataset:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

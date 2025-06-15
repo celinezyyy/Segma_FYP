@@ -13,6 +13,8 @@ const DatasetTab = () => {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [file, setFile] = useState(null);
   const { backendUrl } = useContext(AppContext);
+  const [previewData, setPreviewData] = useState(null); // for preview
+  const [previewingDataset, setPreviewingDataset] = useState(null); // optional: to track which one
 
   useEffect(() => {
     fetchDatasets();
@@ -78,10 +80,25 @@ const DatasetTab = () => {
     }
   };
 
-  const handlePreview = (dataset) => {
-    toast.info(`Previewing: ${dataset.originalname}`);
-    // You can navigate to a preview page or open modal
-  };
+  const handlePreview = async (dataset) => {
+  try {
+    const res = await axios.get(`${backendUrl}/api/dataset/preview/${dataset._id}`, {
+      withCredentials: true,
+    });
+
+    if (res.data.success) {
+      const lines = res.data.preview;
+      const rows = lines.map((line) => line.split(','));
+      setPreviewData(rows);
+      setPreviewingDataset(dataset); // Save current dataset
+    } else {
+      toast.error(res.data.message);
+    }
+  } catch (err) {
+    console.error('Preview error:', err);
+    toast.error('Failed to preview dataset');
+  }
+};
 
   const handleDelete = async (id) => {
     const result = await Swal.fire({
@@ -132,7 +149,7 @@ const DatasetTab = () => {
             className={`px-6 py-2 border rounded-r-md ${activeTab === 'product' ? 'bg-[#C3E5F1]' : 'bg-white'} border-[#C3E5F1]`}
             onClick={() => setActiveTab('product')}
           >
-            Product
+            Orders
           </button>
         </div>
 
@@ -175,7 +192,7 @@ const DatasetTab = () => {
         )}
 
         {/* Dataset Table */}
-        <div className="border border-[#C3E5F1] p-6 bg-white rounded-lg shadow">
+        {/* <div className="border border-[#C3E5F1] p-6 bg-white rounded-lg shadow">
           <table className="w-full text-center table-fixed">
           <thead>
             <tr className="border-b font-semibold">
@@ -184,7 +201,15 @@ const DatasetTab = () => {
               <th className="py-2 w-[200px] cursor-pointer" onClick={handleSort}>
                 <div className="flex justify-center items-center gap-1">
                   <span>Date Uploaded</span>
-                  {sortDirection === 'asc' ? '▲' : '▼'}
+                  {sortDirection === 'asc' ? (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h5.25m5.25-.75L17.25 9m0 0L21 12.75M17.25 9v12" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h9.75m4.5-4.5v12m0 0-3.75-3.75M17.25 21 21 17.25" />
+                    </svg>
+                  )}
                 </div>
               </th>
               <th className="py-2 w-[180px]">Actions</th>
@@ -223,7 +248,115 @@ const DatasetTab = () => {
             )}
           </tbody>
         </table>
+        </div> */}
+        {/* Dataset Table */}
+        <div className="overflow-x-auto bg-white shadow-lg rounded-lg border-2 border-[#C3E5F1] w-full">
+          <table className="min-w-full text-left text-[#2C3E50]">
+            <thead className="bg-[#C3E5F1] text-sm uppercase">
+              <tr>
+                <th className="py-3 px-6 w-12">No.</th>
+                <th className="py-3 px-6">Dataset Name</th>
+                <th className="py-3 px-6 cursor-pointer" onClick={handleSort}>
+                  <div className="flex items-center gap-1">
+                    <span>Date Uploaded</span>
+                    {sortDirection === 'asc' ? (
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h5.25m5.25-.75L17.25 9m0 0L21 12.75M17.25 9v12" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h9.75m4.5-4.5v12m0 0-3.75-3.75M17.25 21 21 17.25" />
+                      </svg>
+                    )}
+                  </div>
+                </th>
+                <th className="py-3 px-6 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {datasets.length === 0 ? (
+                <tr>
+                  <td colSpan="4" className="py-6 text-center text-gray-500">
+                    No datasets uploaded yet.
+                  </td>
+                </tr>
+              ) : (
+                datasets.map((dataset, index) => (
+                  <tr key={dataset._id} className="border-t hover:bg-gray-50 transition">
+                    <td className="py-3 px-6 text-gray-600">{index + 1}</td>
+                    <td className="py-3 px-6 truncate max-w-xs">{dataset.originalname}</td>
+                    <td className="py-3 px-6">{new Date(dataset.uploadedAt).toLocaleString()}</td>
+                    <td className="py-3 px-6 text-center">
+                      <div className="flex justify-center gap-2">
+                        <button
+                          onClick={() => handlePreview(dataset)}
+                          className="text-blue-600 border border-blue-600 px-3 py-1 rounded hover:bg-blue-50 transition text-sm"
+                        >
+                          Preview
+                        </button>
+                        <button
+                          onClick={() => handleDelete(dataset._id)}
+                          className="text-red-600 border border-red-600 px-3 py-1 rounded hover:bg-red-50 transition text-sm"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
+
+
+        {/* Preview Modal */}
+        {previewData && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+            <div className="bg-white rounded-xl p-6 max-w-4xl w-full max-h-[80vh] overflow-auto shadow-xl relative">
+              <button
+                className="absolute top-2 right-3 text-gray-500 hover:text-black text-xl font-bold"
+                onClick={() => {
+                  setPreviewData(null);
+                  setPreviewingDataset(null);
+                }}
+              >
+                &times;
+              </button>
+
+              <h2 className="text-lg font-semibold mb-4 text-[#2C3E50]">
+                Preview: {previewingDataset?.originalname}
+              </h2>
+              <p className="text-sm text-gray-500 mb-4 italic">
+                (Only the first 100 rows are shown in this preview)
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full border border-gray-300 text-sm">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      {previewData[0].map((header, index) => (
+                        <th key={index} className="px-2 py-1 border">
+                          {header}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewData.slice(1).map((row, rowIndex) => (
+                      <tr key={rowIndex}>
+                        {row.map((cell, cellIndex) => (
+                          <td key={cellIndex} className="px-2 py-1 border">
+                            {cell}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Fixed Upload Button */}
         <div className="fixed bottom-6 right-6 z-50">

@@ -1,6 +1,7 @@
 import userModel from "../models/userModel.js";
 import { sendOtpEmail } from '../controllers/authController.js';
 import feedbackModel from '../models/feedbackModel.js';
+import datasetModel from "../models/datasetModel.js";
 
 export const getUserData = async (req, res) => {
     try {
@@ -88,7 +89,8 @@ export const deleteAccount = async (req, res) => {
 
     // Delete user record
     await userModel.findByIdAndDelete(userId);
-       
+    await datasetModel.deleteMany({ user: userId });
+
     // If you have related collections like Dataset, Report in future, you'd also delete them here
     // await Dataset.deleteMany({ userId });
     // await Report.deleteMany({ userId });

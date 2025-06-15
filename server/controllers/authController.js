@@ -23,7 +23,7 @@ export const sendOtpEmail = async (user, type = 'verify') => {
         from: process.env.SENDER_EMAIL,
         to: user.email,
         subject: type === 'verify' ? 'Segma - Account Verification OTP' : 'Segma - Password Reset OTP',
-        text: `Your OTP is ${otp}. Use this to ${type === 'verify' ? 'verify your account' : 'reset your password'}. The OTP will expire in ${type === 'verify' ? '24 hours' : '15 minutes'}.`,
+        text: `Your OTP is ${otp}. Use this to ${type === 'verify' ? 'verify your account' : 'reset your password'}. The OTP will expire in 15 minutes.`,
         html: (type === 'verify'
             ? EMAIL_VERIFY_TEMPLATE
             : PASSWORD_RESET_TEMPLATE
