@@ -9,12 +9,8 @@ const features = [
     description: 'Discover meaningful customer groups with AI-powered clustering.',
   },
   {
-    title: '📁 Real-time Data Sync',
-    description: 'Keep your insights fresh by connecting live data sources.',
-  },
-  {
     title: '📊 Interactive Dashboards',
-    description: 'Visualize customer behavior and segments with ease.',
+    description: 'Visualize customer behavior and segments with ease. Interact with it to gain more insights',
   },
   {
     title: '📝 Automated Reporting',
@@ -29,21 +25,21 @@ const Home = () => {
       <Header />
 
       {/* Features section */}
-      <div className="w-full max-w-7xl mt-12 px-4">
-        <h2 className="text-3xl font-bold text-center mb-8">Key Features</h2>
-        {/* Features Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-          {features.map(({ title, description }, idx) => (
-            <div
-              key={idx}
-              className="bg-white rounded-lg shadow-lg p-6 flex flex-col items-center text-center"
-            >
-              <h3 className="text-xl font-semibold mb-3">{title}</h3>
-              <p className="text-gray-600">{description}</p>
-            </div>
-          ))}
-        </div>
+    <div className="w-full max-w-7xl mt-12 px-4">
+      <h2 className="text-3xl font-bold text-center mb-8">Key Features</h2>
+      {/* Features Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+        {features.map(({ title, description }, idx) => (
+          <div
+            key={idx}
+            className="bg-white rounded-lg shadow-lg p-6 flex flex-col items-center text-center"
+          >
+            <h3 className="text-xl font-semibold mb-3">{title}</h3>
+            <p className="text-gray-600">{description}</p>
+          </div>
+        ))}
       </div>
+    </div>
 
       {/* Strength message */}
       <div className="mt-16 mb-20 max-w-5xl px-10 py-14 mx-auto text-center bg-gradient-to-br from-slate-100 to-white rounded-2xl shadow-xl border border-slate-200">

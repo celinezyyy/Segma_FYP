@@ -120,7 +120,7 @@ export const deleteAccount = async (req, res) => {
       return res.status(400).json({ success: false, message: "No userId found" });
     }
 
-    // 🔍 Step 1: Get all datasets linked to the user
+    // Step 1: Get all datasets linked to the user
     const datasets = await datasetModel.find({ user: userId });
 
     for (const dataset of datasets) {
@@ -128,17 +128,17 @@ export const deleteAccount = async (req, res) => {
       
       try {
         await fs.unlink(filePath);
-        console.log(`✅ Deleted file: ${filePath}`);
+        // console.log(`Deleted file: ${filePath}`);
       } catch (err) {
         if (err.code !== 'ENOENT') {
-          console.error(`⚠️ Error deleting file ${filePath}:`, err.message);
+          console.error(`Error deleting file ${filePath}:`, err.message);
         } else {
-          console.warn(`⚠️ File already missing: ${filePath}`);
+          console.warn(`File already missing: ${filePath}`);
         }
       }
     }
 
-    // 🔄 Step 2: Clean up user folder (optional, but neat)
+    // Step 2: Clean up user folder (optional, but neat)
     const userFolderPath = path.join(__dirname, '..', 'datasets', userId);
     try {
       await fs.rm(userFolderPath, { recursive: true, force: true });
@@ -147,7 +147,7 @@ export const deleteAccount = async (req, res) => {
       console.error(`⚠️ Failed to delete user folder: ${err.message}`);
     }
 
-    // 🗑️ Step 3: Delete from MongoDB
+    // Step 3: Delete from MongoDB
     await feedbackModel.deleteMany({ user: userId });
     await datasetModel.deleteMany({ user: userId });
     await userModel.findByIdAndDelete(userId);
@@ -156,7 +156,7 @@ export const deleteAccount = async (req, res) => {
     res.status(200).json({ success: true, message: "Account deleted successfully" });
 
   } catch (err) {
-    console.error("❌ Delete account error:", err.message);
+    console.error("Delete account error:", err.message);
     res.status(500).json({ success: false, message: "Failed to delete account" });
   }
 };
