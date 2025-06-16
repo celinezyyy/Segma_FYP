@@ -7,13 +7,19 @@ import { toast } from 'react-toastify';
 
 const DatasetTab = () => {
   const [customerDatasets, setCustomerDatasets] = useState([]);
-  const [productDatasets, setProductDatasets] = useState([]);
+  const [orderDatasets, setOrderDatasets] = useState([]);
   const [activeTab, setActiveTab] = useState('customer');
   const [sortDirection, setSortDirection] = useState('desc');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [file, setFile] = useState(null);
   const { backendUrl } = useContext(AppContext);
-  const [previewData, setPreviewData] = useState(null); // for preview
+  // Add these state variables at the top
+  const [previewData, setPreviewData] = useState(false);
+
+const [previewHeaders, setPreviewHeaders] = useState([]);
+const [previewRows, setPreviewRows] = useState([]);
+
+  // const [previewData, setPreviewData] = useState(null); // for preview
   const [previewingDataset, setPreviewingDataset] = useState(null); // optional: to track which one
 
   useEffect(() => {
@@ -25,7 +31,7 @@ const DatasetTab = () => {
       const res = await axios.get(`${backendUrl}/api/dataset`, { withCredentials: true });
       if (res.data.success) {
         setCustomerDatasets(res.data.customer || []);
-        setProductDatasets(res.data.product || []);
+        setOrderDatasets(res.data.order || []);
       }
     } catch (error) {
       console.error('Failed to fetch datasets:', error);
@@ -58,9 +64,31 @@ const DatasetTab = () => {
         toast.error('Upload failed: ' + res.data.message);
       }
     } catch (err) {
-      console.error('Upload error:', err);
-      toast.error('Error uploading dataset. Please try again.');
-    }
+        console.error('Upload error:', err);
+
+        const backendMsg = err?.response?.data?.message;
+        if (backendMsg?.includes('Missing required columns')) {
+          const missingList = backendMsg
+            .replace('Missing required columns: ', '')
+            .split(',')
+            .map(col => `<li>${col.trim()}</li>`)
+            .join('');
+
+          Swal.fire({
+            icon: 'error',
+            title: 'Upload Failed',
+            html: `
+              <p><b>Please upload correct dataset format.</b><br>
+              The following required columns are missing:</p>
+              <ul style="text-align:center; list-style: none; padding: 0;">
+                ${missingList}
+              </ul>`,
+            confirmButtonText: 'Fix Dataset',
+            confirmButtonColor: '#3b82f6',
+          });
+
+        }
+      }
   };
 
   const handleSort = () => {
@@ -76,29 +104,41 @@ const DatasetTab = () => {
     if (activeTab === 'customer') {
       setCustomerDatasets([...customerDatasets].sort(sortFunction));
     } else {
-      setProductDatasets([...productDatasets].sort(sortFunction));
+      setOrderDatasets([...orderDatasets].sort(sortFunction));
     }
   };
 
-  const handlePreview = async (dataset) => {
-  try {
-    const res = await axios.get(`${backendUrl}/api/dataset/preview/${dataset._id}`, {
-      withCredentials: true,
-    });
+  const handlePreview = async (datasetId) => {
+    try {
+      const res = await axios.get(`${backendUrl}/api/dataset/preview/${datasetId}`, {
+        withCredentials: true
+      });
+      console.log("Previewing dataset ID:", datasetId);
+      
+      const data = res.data.preview || [];
 
-    if (res.data.success) {
-      const lines = res.data.preview;
-      const rows = lines.map((line) => line.split(','));
-      setPreviewData(rows);
-      setPreviewingDataset(dataset); // Save current dataset
-    } else {
-      toast.error(res.data.message);
+      if (data.length === 0) {
+        setPreviewHeaders([]);
+        setPreviewRows([]);
+        return;
+      }
+
+      const headers = Object.keys(data[0]);
+      const rows = data.map((row) => headers.map((h) => row[h]));
+
+      // Find the full dataset object for modal title display
+      const allDatasets = [...customerDatasets, ...orderDatasets];
+      const matchedDataset = allDatasets.find((d) => d._id === datasetId);
+
+      setPreviewHeaders(headers);
+      setPreviewRows(rows);
+      setPreviewingDataset(matchedDataset);
+      setPreviewData(true);
+    } catch (err) {
+      console.error('Preview error:', err);
+      toast.error('Error previewing dataset');
     }
-  } catch (err) {
-    console.error('Preview error:', err);
-    toast.error('Failed to preview dataset');
-  }
-};
+  };
 
   const handleDelete = async (id) => {
     const result = await Swal.fire({
@@ -129,7 +169,7 @@ const DatasetTab = () => {
     }
   };
 
-  const datasets = activeTab === 'customer' ? customerDatasets : productDatasets;
+  const datasets = activeTab === 'customer' ? customerDatasets : orderDatasets;
 
   return (
     <div className="flex min-h-screen">
@@ -146,11 +186,25 @@ const DatasetTab = () => {
             Customer
           </button>
           <button
-            className={`px-6 py-2 border rounded-r-md ${activeTab === 'product' ? 'bg-[#C3E5F1]' : 'bg-white'} border-[#C3E5F1]`}
-            onClick={() => setActiveTab('product')}
+            className={`px-6 py-2 border rounded-r-md ${activeTab === 'order' ? 'bg-[#C3E5F1]' : 'bg-white'} border-[#C3E5F1]`}
+            onClick={() => setActiveTab('order')}
           >
             Orders
           </button>
+        </div>
+        {/* Download Template */}
+        <div className="flex justify-center mb-4">
+          <a
+            href={
+              activeTab === 'customer'
+                ? '/template/customer_data_template.csv'
+                : '/template/order_data_template.csv'
+            }
+            download
+            className="inline-block bg-[#F1F8E9] border border-green-400 text-green-700 font-medium py-2 px-4 rounded hover:bg-[#E6F4D7] transition"
+          >
+            Download {activeTab === 'customer' ? 'Customer' : 'Order'} Dataset Template
+          </a>
         </div>
 
         {/* Upload Modal */}
@@ -191,65 +245,6 @@ const DatasetTab = () => {
           </div>
         )}
 
-        {/* Dataset Table */}
-        {/* <div className="border border-[#C3E5F1] p-6 bg-white rounded-lg shadow">
-          <table className="w-full text-center table-fixed">
-          <thead>
-            <tr className="border-b font-semibold">
-              <th className="py-2 w-12">No</th>
-              <th className="py-2 w-[300px]">Dataset Name</th>
-              <th className="py-2 w-[200px] cursor-pointer" onClick={handleSort}>
-                <div className="flex justify-center items-center gap-1">
-                  <span>Date Uploaded</span>
-                  {sortDirection === 'asc' ? (
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h5.25m5.25-.75L17.25 9m0 0L21 12.75M17.25 9v12" />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h9.75m4.5-4.5v12m0 0-3.75-3.75M17.25 21 21 17.25" />
-                    </svg>
-                  )}
-                </div>
-              </th>
-              <th className="py-2 w-[180px]">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {datasets.map((dataset, index) => (
-              <tr key={index} className="border-b hover:bg-gray-50">
-                <td className="py-2">{index + 1}</td>
-                <td className="py-2 truncate text-left overflow-hidden text-ellipsis">{dataset.originalname}</td>
-                <td className="py-2">{new Date(dataset.uploadedAt).toLocaleString()}</td>
-                <td className="py-2">
-                  <div className="flex justify-center gap-2">
-                    <button
-                      onClick={() => handlePreview(dataset)}
-                      className="bg-white border border-gray-400 px-3 py-1 rounded hover:bg-gray-100 text-sm"
-                    >
-                      Preview
-                    </button>
-                    <button
-                      onClick={() => handleDelete(dataset._id)}
-                      className="bg-red-100 border border-red-300 text-red-600 px-3 py-1 rounded hover:bg-red-200 text-sm"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {datasets.length === 0 && (
-              <tr>
-                <td colSpan="4" className="text-center text-gray-500 py-4">
-                  No datasets uploaded yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        </div> */}
-        {/* Dataset Table */}
         <div className="overflow-x-auto bg-white shadow-lg rounded-lg border-2 border-[#C3E5F1] w-full">
           <table className="min-w-full text-left text-[#2C3E50]">
             <thead className="bg-[#C3E5F1] text-sm uppercase">
@@ -289,7 +284,7 @@ const DatasetTab = () => {
                     <td className="py-3 px-6 text-center">
                       <div className="flex justify-center gap-2">
                         <button
-                          onClick={() => handlePreview(dataset)}
+                          onClick={() => handlePreview(dataset._id)}
                           className="text-blue-600 border border-blue-600 px-3 py-1 rounded hover:bg-blue-50 transition text-sm"
                         >
                           Preview
@@ -309,54 +304,55 @@ const DatasetTab = () => {
           </table>
         </div>
 
-
         {/* Preview Modal */}
         {previewData && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-            <div className="bg-white rounded-xl p-6 max-w-4xl w-full max-h-[80vh] overflow-auto shadow-xl relative">
-              <button
-                className="absolute top-2 right-3 text-gray-500 hover:text-black text-xl font-bold"
-                onClick={() => {
-                  setPreviewData(null);
-                  setPreviewingDataset(null);
-                }}
-              >
-                &times;
-              </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-xl p-6 max-w-4xl w-full max-h-[80vh] overflow-auto shadow-xl relative">
+            <button
+              className="absolute top-2 right-3 text-gray-500 hover:text-black text-xl font-bold"
+              onClick={() => {
+                setPreviewData(null);
+                setPreviewHeaders([]);
+                setPreviewRows([]);
+                setPreviewingDataset(null);
+              }}
+            >
+              &times;
+            </button>
 
-              <h2 className="text-lg font-semibold mb-4 text-[#2C3E50]">
-                Preview: {previewingDataset?.originalname}
-              </h2>
-              <p className="text-sm text-gray-500 mb-4 italic">
-                (Only the first 100 rows are shown in this preview)
-              </p>
-              <div className="overflow-x-auto">
-                <table className="w-full border border-gray-300 text-sm">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      {previewData[0].map((header, index) => (
-                        <th key={index} className="px-2 py-1 border">
-                          {header}
-                        </th>
+            <h2 className="text-lg font-semibold mb-4 text-[#2C3E50]">
+              Preview: {previewingDataset?.originalname}
+            </h2>
+            <p className="text-sm text-gray-500 mb-4 italic">
+              (Only the first 100 rows are shown in this preview)
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full border border-gray-300 text-sm">
+                <thead>
+                  <tr className="bg-gray-100">
+                    {previewHeaders.map((header, index) => (
+                      <th key={index} className="px-2 py-1 border">
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewRows.map((row, rowIndex) => (
+                    <tr key={rowIndex}>
+                      {row.map((cell, cellIndex) => (
+                        <td key={cellIndex} className="px-2 py-1 border">
+                          {cell}
+                        </td>
                       ))}
                     </tr>
-                  </thead>
-                  <tbody>
-                    {previewData.slice(1).map((row, rowIndex) => (
-                      <tr key={rowIndex}>
-                        {row.map((cell, cellIndex) => (
-                          <td key={cellIndex} className="px-2 py-1 border">
-                            {cell}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
         {/* Fixed Upload Button */}
         <div className="fixed bottom-6 right-6 z-50">

@@ -2,6 +2,13 @@ import userModel from "../models/userModel.js";
 import { sendOtpEmail } from '../controllers/authController.js';
 import feedbackModel from '../models/feedbackModel.js';
 import datasetModel from "../models/datasetModel.js";
+import path from 'path';
+import fs from 'fs/promises';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 
 export const getUserData = async (req, res) => {
     try {
@@ -76,34 +83,84 @@ export const updateProfile = async (req, res) => {
   }
 };
 
+// export const deleteAccount = async (req, res) => {
+//   console.log("DELETE /delete-account route hit");
+//     try {
+//     const userId = req.userId; // JWT middleware sets req.user
+    
+//     if (!userId) {
+//       return res.status(400).json({ success: false, message: "No userId found" });
+//     }
+    
+//     await feedbackModel.deleteMany({ user: userId });
+//     await datasetModel.deleteMany({ user: userId });
+//     await userModel.findByIdAndDelete(userId);
+//     // Delete user record
+//     // If you have related collections like Dataset, Report in future, you'd also delete them here
+//     // await Dataset.deleteMany({ userId });
+//     // await Report.deleteMany({ userId });
+
+//     res.clearCookie('token'); // 'token' is the cookie name store in frontend
+//     res.status(200).json({ success: true, message: "Account deleted successfully" });
+//   } catch (err) {
+//     console.error("Delete account error:", err.message);
+//     res.status(500).json({ success: false, message: "Failed to delete account" });
+//   }
+// }
+
+// submit feedback
+
+
 export const deleteAccount = async (req, res) => {
   console.log("DELETE /delete-account route hit");
-    try {
+  try {
     const userId = req.userId; // JWT middleware sets req.user
-    
+
     if (!userId) {
       return res.status(400).json({ success: false, message: "No userId found" });
     }
-    
+
+    // 🔍 Step 1: Get all datasets linked to the user
+    const datasets = await datasetModel.find({ user: userId });
+
+    for (const dataset of datasets) {
+      const filePath = path.join(__dirname, '..', 'datasets', userId, dataset.type, dataset.filename);
+      
+      try {
+        await fs.unlink(filePath);
+        console.log(`✅ Deleted file: ${filePath}`);
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          console.error(`⚠️ Error deleting file ${filePath}:`, err.message);
+        } else {
+          console.warn(`⚠️ File already missing: ${filePath}`);
+        }
+      }
+    }
+
+    // 🔄 Step 2: Clean up user folder (optional, but neat)
+    const userFolderPath = path.join(__dirname, '..', 'datasets', userId);
+    try {
+      await fs.rm(userFolderPath, { recursive: true, force: true });
+      console.log(`🧹 Deleted folder: ${userFolderPath}`);
+    } catch (err) {
+      console.error(`⚠️ Failed to delete user folder: ${err.message}`);
+    }
+
+    // 🗑️ Step 3: Delete from MongoDB
     await feedbackModel.deleteMany({ user: userId });
-
-    // Delete user record
-    await userModel.findByIdAndDelete(userId);
     await datasetModel.deleteMany({ user: userId });
+    await userModel.findByIdAndDelete(userId);
 
-    // If you have related collections like Dataset, Report in future, you'd also delete them here
-    // await Dataset.deleteMany({ userId });
-    // await Report.deleteMany({ userId });
-
-    res.clearCookie('token'); // 'token' is the cookie name store in frontend
+    res.clearCookie('token'); // Clear login cookie
     res.status(200).json({ success: true, message: "Account deleted successfully" });
+
   } catch (err) {
-    console.error("Delete account error:", err.message);
+    console.error("❌ Delete account error:", err.message);
     res.status(500).json({ success: false, message: "Failed to delete account" });
   }
-}
+};
 
-// submit feedback
 export const submitFeedback = async (req, res) => {
   try {
         const { userId, subject, description } = req.body;

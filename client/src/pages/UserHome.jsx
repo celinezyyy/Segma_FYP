@@ -10,7 +10,7 @@ const UserHome = () => {
   const { backendUrl, userData } = useContext(AppContext);
   const navigate = useNavigate();
 
-  const [datasetCounts, setDatasetCounts] = useState({ customer: 0, product: 0 });
+  const [datasetCounts, setDatasetCounts] = useState({ customer: 0, order: 0 });
   const reportCount = 0; // Replace with real report count later
 
   useEffect(() => {
@@ -51,7 +51,7 @@ const UserHome = () => {
 
             <div className="flex-1 bg-white rounded-lg p-6 flex flex-col items-center justify-center shadow-md" style={{ border: "2px solid #C3E5F1" }}>
               <h3 className="text-xl font-semibold mb-2 text-[#2C3E50]">Order Dataset</h3>
-              <p className="text-4xl font-bold text-[#2C3E50]">{datasetCounts.product}</p>
+              <p className="text-4xl font-bold text-[#2C3E50]">{datasetCounts.order}</p>
               <p className="text-gray-600 mt-1">Behavioral Data</p>
             </div>
 

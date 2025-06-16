@@ -1,5 +1,13 @@
 import userModel from '../models/userModel.js';
 import feedbackModel from '../models/feedbackModel.js';
+import datasetModel from '../models/datasetModel.js';
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 
 // Get all users with role: 'user'
 export const getAllUsers = async (req, res) => {
@@ -12,31 +20,54 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
-// Delete user by ID
-export const adminDeleteUserAccount  = async (req, res) => {
+export const adminDeleteUserAccount = async (req, res) => {
   try {
-    const { userId } = req.params; // now target userId is passed in URL param
-    
+    const { userId } = req.params;
+
     if (!userId) {
-      console.log('❌ No userId received in req.params');
+      console.log('No userId received in req.params');
       return res.status(400).json({ success: false, message: "No User Found" });
     }
 
     console.log('🔍 Deleting userId:', userId);
-    // Delete feedbacks linked to user
+
+    // 1. Find all datasets of this user
+    const datasets = await datasetModel.find({ user: userId });
+
+    for (const dataset of datasets) {
+      const filePath = path.join(__dirname, '..', 'datasets', userId, dataset.type, dataset.filename);
+
+      try {
+        await fs.unlink(filePath);
+        console.log(`✅ Deleted file: ${filePath}`);
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          console.error(`⚠️ Failed to delete file ${filePath}:`, err.message);
+        } else {
+          console.warn(`⚠️ File already missing: ${filePath}`);
+        }
+      }
+    }
+
+    // 2. Clean up folders (optional but tidy)
+    const userFolderPath = path.join(__dirname, '..', 'datasets', userId);
+    try {
+      await fs.rm(userFolderPath, { recursive: true, force: true });
+      console.log(`🧹 Deleted folder: ${userFolderPath}`);
+    } catch (err) {
+      console.error(`⚠️ Failed to delete folder ${userFolderPath}:`, err.message);
+    }
+
+    // 3. Delete from DB
     await feedbackModel.deleteMany({ user: userId });
-
-    // Delete datasets/reports if needed
-    // await datasetModel.deleteMany({ userId });
-    // await reportModel.deleteMany({ userId });
-
-    // Finally delete the user
+    await datasetModel.deleteMany({ user: userId });
     await userModel.findByIdAndDelete(userId);
 
-    res.status(200).json({ success: true, message: "User account and related data deleted successfully" });
-     } catch (err) {
-    console.error('Admin delete user error:', err);
-    res.status(500).json({ success: false, message: 'Failed to delete user account'});
+    res.status(200).json({ success: true, message: "User and data deleted successfully" });
+
+  } catch (err) {
+    console.error('❌ Server error:', err);
+    res.status(500).json({ success: false, message: 'Failed to delete user account' });
   }
 };
 

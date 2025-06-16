@@ -13,7 +13,7 @@ const storage = multer.diskStorage({
     const type = req.params.type; // 💡 get type from route param
 
     if (!userId) return cb(new Error('Missing user ID'), null);
-    if (!['customer', 'product'].includes(type)) {
+    if (!['customer', 'order'].includes(type)) {
       return cb(new Error('Invalid dataset type'), null);
     }
 
@@ -29,14 +29,14 @@ const storage = multer.diskStorage({
 });
 
 const datasetUpload = multer({
-  storage,
+  storage: multer.memoryStorage(), // ✅ store in memory
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'text/csv') {
       cb(null, true);
     } else {
       cb(new Error('Only .csv files are allowed!'), false);
     }
-  }
+  },
 });
 
 export default datasetUpload;
