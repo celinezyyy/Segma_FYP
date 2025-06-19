@@ -1,6 +1,7 @@
 import userModel from '../models/userModel.js';
 import feedbackModel from '../models/feedbackModel.js';
 import datasetModel from '../models/datasetModel.js';
+import { getGridFSBucket } from '../utils/gridfs.js'; 
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -25,7 +26,6 @@ export const adminDeleteUserAccount = async (req, res) => {
     const { userId } = req.params;
 
     if (!userId) {
-      console.log('No userId received in req.params');
       return res.status(400).json({ success: false, message: "No User Found" });
     }
 
@@ -33,29 +33,18 @@ export const adminDeleteUserAccount = async (req, res) => {
 
     // 1. Find all datasets of this user
     const datasets = await datasetModel.find({ user: userId });
+    const bucket = getGridFSBucket();
 
     for (const dataset of datasets) {
-      const filePath = path.join(__dirname, '..', 'datasets', userId, dataset.type, dataset.filename);
-
       try {
-        await fs.unlink(filePath);
-        console.log(`✅ Deleted file: ${filePath}`);
+        await bucket.delete(dataset.fileId);
       } catch (err) {
         if (err.code !== 'ENOENT') {
-          console.error(`⚠️ Failed to delete file ${filePath}:`, err.message);
+          console.error(`⚠️ Failed to delete GridFS file with ID ${dataset.fileId}:`, err.message);
         } else {
-          console.warn(`⚠️ File already missing: ${filePath}`);
+          console.warn(`⚠️ File with ID ${dataset.fileId} already missing`);
         }
       }
-    }
-
-    // 2. Clean up folders (optional but tidy)
-    const userFolderPath = path.join(__dirname, '..', 'datasets', userId);
-    try {
-      await fs.rm(userFolderPath, { recursive: true, force: true });
-      console.log(`🧹 Deleted folder: ${userFolderPath}`);
-    } catch (err) {
-      console.error(`⚠️ Failed to delete folder ${userFolderPath}:`, err.message);
     }
 
     // 3. Delete from DB
