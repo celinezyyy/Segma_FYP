@@ -79,6 +79,7 @@ export const uploadDataset = async (req, res) => {
       originalname,
       user: userId,
       type: formattedType,
+      isClean: false,
     });
 
     console.log('Dataset saved to DB and local disk');

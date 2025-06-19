@@ -6,6 +6,8 @@ const datasetSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'user', required: true },
   uploadedAt: { type: Date, default: Date.now },
   type: { type: String, enum: ['Customer', 'Order'], required: true },
+  isClean: { type: Boolean, default: false },
+  cleanFilename: { type: String, default: null },
 });
 
 const datasetModel = mongoose.models.dataset || mongoose.model('dataset', datasetSchema);
