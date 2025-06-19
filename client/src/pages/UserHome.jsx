@@ -64,7 +64,7 @@ const UserHome = () => {
 
           {/* Buttons */}
           <div className="flex flex-col sm:flex-row justify-center gap-4 mb-12 max-w-4xl mx-auto w-full">
-            {['/dataset-tab', '/start-segmentation', '/view-report'].map((path, idx) => {
+            {['/dataset-tab', '/dataset-selection', '/view-report'].map((path, idx) => {
               const labels = ['Upload Dataset', 'Start Segmentation', 'View Reports'];
               return (
                 <button

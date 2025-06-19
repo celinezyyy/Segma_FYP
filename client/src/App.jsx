@@ -14,6 +14,7 @@ import AdminHome from './adminPage/AdminHome';
 import UserList from './adminPage/UserList';
 import AdminProfile from './adminPage/AdminProfile';
 import FeedbackList from './adminPage/FeedbackList';
+import DatasetSelection from './pages/DatasetSelection';
   
 const App = () => {
   return(
@@ -33,6 +34,7 @@ const App = () => {
         <Route path='/admin-user-list' element={<UserList />}/>
         <Route path='/admin-profile' element={<AdminProfile />}/>
         <Route path='/admin-feedback-list' element={<FeedbackList />}/>
+        <Route path='/dataset-selection' element={<DatasetSelection />}/>
         <Route></Route>
       </Routes>
     </div>
