@@ -1,16 +1,16 @@
 import datasetModel from '../models/datasetModel.js';
 import path from 'path';
-import fsp from 'fs/promises';
-import fs from 'fs';
 import csvParser from 'csv-parser';
 import { fileURLToPath } from 'url';
 import { Readable } from 'stream';
+import { getGridFSBucket } from '../utils/gridfs.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const uploadDataset = async (req, res) => {
   try {
+    const bucket = getGridFSBucket(); 
     if (!req.file) {
       console.log('No file found in request');
       return res.status(400).json({ success: false, message: 'No file uploaded' });
@@ -65,13 +65,23 @@ export const uploadDataset = async (req, res) => {
       });
     }
 
-    // Save to disk AFTER validation
+    // // Save to gridfs AFTER validation
     const filename = Date.now() + '-' + Math.round(Math.random() * 1e9) + '.csv';
-    const savePath = path.join('datasets', userId, type);
-    await fsp.mkdir(savePath, { recursive: true });
 
-    const fullFilePath = path.join(savePath, filename);
-    await fsp.writeFile(fullFilePath, req.file.buffer);
+    const uploadStream = bucket.openUploadStream(filename, {
+      metadata: {
+        user: userId,
+        type: formattedType,
+        originalname
+      }
+    });
+
+    await new Promise((resolve, reject) => {
+      Readable.from(req.file.buffer)
+        .pipe(uploadStream)
+        .on('error', reject)
+        .on('finish', resolve);
+    });
 
     // Save to DB
     const newDataset = await datasetModel.create({
@@ -80,9 +90,10 @@ export const uploadDataset = async (req, res) => {
       user: userId,
       type: formattedType,
       isClean: false,
+      fileId: uploadStream.id
     });
 
-    console.log('Dataset saved to DB and local disk');
+    console.log('Dataset saved to DB and gridfs');
 
     return res.status(200).json({
       success: true,
@@ -120,7 +131,15 @@ export const deleteDataset = async (req, res) => {
     const filePath = path.join(__dirname, '..', 'datasets', dataset.user.toString(), dataset.type, dataset.filename);
 
     try {
-      await fsp.unlink(filePath);
+      // await fsp.unlink(filePath);
+      const bucket = getGridFSBucket();
+      const file = await bucket.find({ filename: dataset.filename }).toArray();
+
+      if (file.length > 0) {
+        await bucket.delete(file[0]._id);
+      } else {
+        console.warn('⚠️ File already missing in GridFS');
+      }
     } catch (err) {
       if (err.code !== 'ENOENT') {
         console.error('File deletion error:', err);
@@ -166,20 +185,36 @@ export const previewDataset = async (req, res) => {
     const dataset = await datasetModel.findOne({ _id: datasetId, user: userId });
     if (!dataset) return res.status(404).json({ success: false, message: 'Dataset not found' });
 
-    const filePath = path.join(__dirname, '..', 'datasets', userId, dataset.type, dataset.filename);
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ success: false, message: 'File not found' });
-    }
+    // const filePath = path.join(__dirname, '..', 'datasets', userId, dataset.type, dataset.filename);
+    // if (!fs.existsSync(filePath)) {
+    //   return res.status(404).json({ success: false, message: 'File not found' });
+    // }
+    const bucket = getGridFSBucket();
+    const stream = bucket.openDownloadStreamByName(dataset.filename);
 
     const rows = [];
     let rowIndex = 0;
 
+    // await new Promise((resolve, reject) => {
+    //   fs.createReadStream(filePath)
+    //     .pipe(csvParser())
+    //     .on('data', (row) => {
+    //       if (rowIndex === 0) {
+    //         // Skip the 2nd line (which will be read as first row of data)
+    //         rowIndex++;
+    //         return;
+    //       }
+    //       rows.push(row);
+    //     })
+    //     .on('end', resolve)
+    //     .on('error', reject);
+    // });
+
     await new Promise((resolve, reject) => {
-      fs.createReadStream(filePath)
+      stream
         .pipe(csvParser())
         .on('data', (row) => {
           if (rowIndex === 0) {
-            // Skip the 2nd line (which will be read as first row of data)
             rowIndex++;
             return;
           }
@@ -188,6 +223,7 @@ export const previewDataset = async (req, res) => {
         .on('end', resolve)
         .on('error', reject);
     });
+
 
     return res.status(200).json({ success: true, preview: rows.slice(0, 100) }); // send up to 100 rows
   } catch (error) {
