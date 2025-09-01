@@ -32,6 +32,7 @@ const ResetPassword = () => {
   const [otp, setOtp] = useState('');
   const inputRefs = useRef([]);
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // react-hook-form for new password with validation
   const {
@@ -69,27 +70,43 @@ const ResetPassword = () => {
   // Submit email to send OTP
   const onSubmitEmail = async (e) => {
     e.preventDefault();
+
+    if (loading) return; // prevent multiple clicks
+    setLoading(true);
+
     try {
       const { data } = await axios.post(backendUrl + '/api/auth/send-reset-otp', { email });
-      data.success ? toast.success(data.message) : toast.error(data.message);
-      if (data.success) setIsEmailSent(true);
+      if (data.success) {
+        toast.success(data.message, { onClose: () => setLoading(false) });
+        setIsEmailSent(true);
+      } else {
+        toast.error(data.message, { onClose: () => setLoading(false) });
+      }
     } catch (error) {
-      toast.error(error.response?.data?.message || error.message);
+      toast.error(error.response?.data?.message || error.message, { onClose: () => setLoading(false) });
     }
   };
 
   // Submit OTP
   const onSubmitOTP = (e) => {
     e.preventDefault();
+
+    if (loading) return; // prevent multiple clicks
+    setLoading(true);
+
     const otpArray = inputRefs.current.map((input) => input.value);
     const otpValue = otpArray.join('');
     if (otpValue.length !== 6) {
-      toast.error('Please enter the full 6-digit OTP.');
+      toast.error('Please enter the full 6-digit OTP.'), {
+      onClose: () => setLoading(false) // reset loading after toast closes
+    };
       return;
     }
     setOtp(otpValue);
     setIsOtpSubmitted(true);
-    toast.success('OTP verified! Please enter your new password.');
+    toast.success('OTP verified! Please enter your new password.', {
+      onClose: () => setLoading(false) // unlock button after toast
+    });
   };
 
   // Submit new password with validation
@@ -144,7 +161,8 @@ const ResetPassword = () => {
           </div>
           <button
             type="submit"
-            className="w-full py-2.5 rounded-full px-6 text-black font-semibold transition-all border border-gray-400 hover:brightness-95"
+            disabled={loading} // disable when processing
+            className={`w-full py-2.5 rounded-full px-6 text-black font-semibold transition-all border border-gray-400 hover:brightness-95 ${loading ? "opacity-50 cursor-not-allowed" : ""}`}
             style={{ backgroundColor: '#C7EDC3' }}
           >
             Submit
@@ -181,7 +199,8 @@ const ResetPassword = () => {
 
           <button
             type="submit"
-            className="w-full py-2.5 rounded-full px-6 text-black font-semibold transition-all border border-gray-400 hover:brightness-95"
+            disabled={loading}
+            className={`w-full py-2.5 rounded-full px-6 text-black font-semibold transition-all border border-gray-400 hover:brightness-95 ${loading ? "opacity-50 cursor-not-allowed" : ""}`}
             style={{ backgroundColor: '#C7EDC3' }}
           >
             Submit
@@ -196,7 +215,7 @@ const ResetPassword = () => {
           className="bg-white p-10 rounded-lg shadow-md w-96 text-gray-800 text-sm"
         >
           <h1 className="text-black text-2xl font-semibold text-center mb-4">New Password</h1>
-          <p className="text-center mb-6 text-gray-600">Enter the new password below.</p>
+          <p className="text-center mb-6 text-gray-600">Enter your new password below.</p>
           <div className="mb-4 relative flex items-center gap-3 w-full px-5 py-2.5 rounded-full bg-white border border-gray-300">
             <img src={assets.lock_icon} alt="" className="w-4 h-4" />
             <input

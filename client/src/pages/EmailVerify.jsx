@@ -1,4 +1,4 @@
-import React, { useContext, useEffect } from 'react'
+import React, { useContext, useEffect, useState } from 'react'
 import { assets } from '../assets/assets'
 import { AppContext } from '../context/AppContext'
 import axios from 'axios'
@@ -9,6 +9,7 @@ const EmailVerify = () => {
   axios.defaults.withCredentials = true;
   const { backendUrl, getUserData } = useContext(AppContext);
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
   const inputRefs = React.useRef([]);
 
   // ✅ Input handling logic
@@ -38,13 +39,16 @@ const EmailVerify = () => {
   const onSubmitHandler = async (e) => {
     e.preventDefault();
 
+    if (loading) return; // Prevent multiple submissions
+    setLoading(true);    // Disable the button
+
     const otpArray = inputRefs.current.map(input => input.value.trim());
     const otp = otpArray.join('');
 
     const userId = localStorage.getItem('verifyUserId'); // 👈 get userId
     
     if (!otp || otp.length !== 6 || !userId) {
-      toast.error('Missing OTP or User ID');
+      toast.error('Missing OTP or User ID', { onClose: () => setLoading(false) });
       return;
     }
 
@@ -52,15 +56,15 @@ const EmailVerify = () => {
       const { data } = await axios.post(`${backendUrl}/api/auth/verify-account`, { otp, userId });
 
       if (data.success) {
-        toast.success(data.message);
+        toast.success(data.message, { onClose: () => setLoading(false) });
         localStorage.removeItem('verifyUserId'); // ✅ cleanup
         getUserData();
         navigate('/login');
       } else {
-        toast.error(data.message);
+        toast.error(data.message, { onClose: () => setLoading(false) });
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || "Verification failed");
+      toast.error(error.response?.data?.message || "Verification failed", { onClose: () => setLoading(false) });
     }
   };
 

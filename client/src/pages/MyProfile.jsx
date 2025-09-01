@@ -11,6 +11,7 @@ import axios from 'axios';
 const MyProfile = () => {
     const { userData, backendUrl } = useContext(AppContext);
     const navigate = useNavigate();
+    const [loading, setLoading] = useState(false);
 
     const [formData, setFormData] = useState({
         username: '',
@@ -43,6 +44,8 @@ const MyProfile = () => {
     const handleSave = async (e) => {
         console.log("updateProfile controller triggered");
     e.preventDefault();
+    if (loading) return; // Prevent multiple submissions
+    setLoading(true);    // Disable the button
 
     try {
         axios.defaults.withCredentials = true;
@@ -53,7 +56,7 @@ const MyProfile = () => {
         const emailChanged = formData.email !== initialData.email;
 
         if (!usernameChanged && !emailChanged) {
-        toast.info("No changes made");
+        toast.info("No changes made", { onClose: () => setLoading(false) });
         return;
         }
         console.log("Update profile run, middleware");
@@ -70,17 +73,17 @@ const MyProfile = () => {
         });
 
         if (emailChanged) {
-            toast.success("Email changed successfully! Please verify again.");
+            toast.success("Email changed successfully! Please verify again.", { onClose: () => setLoading(false) });
             localStorage.setItem("verifyUserId", res.data.userId);
             navigate('/verify-account', { state: { email: formData.email } });
         } else {
-            toast.success("Profile updated successfully!");
+            toast.success("Profile updated successfully!", { onClose: () => setLoading(false) });
         }
         } else {
-        toast.error(res.data.message || "Update failed");
+        toast.error(res.data.message || "Update failed", { onClose: () => setLoading(false) });
         }
     } catch (err) {
-        toast.error(err.response?.data?.message || "An error occurred");
+        toast.error(err.response?.data?.message || "An error occurred", { onClose: () => setLoading(false) });
     }
     };
 

@@ -12,6 +12,7 @@ const Login = () => {
 
   const navigate = useNavigate();
   const location = useLocation();
+  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [state, setState] = useState(location.pathname === '/register' ? 'Sign Up' : 'Login');
 
@@ -71,9 +72,13 @@ const Login = () => {
   const onSubmitHandler = async (data,e) => {
     e.preventDefault();
 
+    if (loading) return; // Prevent multiple submissions
+    setLoading(true);    // Disable the button
+
     try {
       axios.defaults.withCredentials = true;
 
+      // Register request
       if (isSignup) { // Create Account
         const { username, email, password, inviteCode } = data;
         const res = await axios.post(`${backendUrl}/api/auth/register`, {
@@ -85,12 +90,12 @@ const Login = () => {
 
         if (res.data.success) {
           localStorage.setItem('verifyUserId', res.data.userId);
-          toast.success('OTP sent! Please check your email');
+          toast.success('OTP sent! Please check your email', { onClose: () => setLoading(false) });
           navigate('/verify-account', { state: { email } });
         } else {
-          toast.error(res.data.message);
+          toast.error(res.data.message, { onClose: () => setLoading(false) });
         }
-      } else { // Login
+      } else { // Login request
         const { email, password } = data;
         const res = await axios.post(`${backendUrl}/api/auth/login`, {
           email,
@@ -111,14 +116,14 @@ const Login = () => {
           if (res.data.userId) {
             localStorage.setItem('verifyUserId', res.data.userId);
           }
-          toast.info(res.data.message);
+          toast.info(res.data.message, { onClose: () => setLoading(false) });
           navigate('/verify-account', { state: { email } });
         } else {
-          toast.error(res.data.message);
+          toast.error(res.data.message, { onClose: () => setLoading(false) });
         }
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || error.message);
+      toast.error(error.response?.data?.message || error.message, { onClose: () => setLoading(false) });
     }
   };
 
@@ -229,6 +234,7 @@ const Login = () => {
 
         <button
           type="submit"
+          disabled={loading}
           className="w-full py-2.5 rounded-full px-6 text-black font-semibold transition-all border border-gray-400 hover:brightness-90"
           style={{ backgroundColor: '#C7EDC3' }}
         >
