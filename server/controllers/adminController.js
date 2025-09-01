@@ -67,8 +67,7 @@ export const getFeedbackList = async (req, res) => {
       .find()
       .sort({ createdAt: -1 })
       .populate('user', 'username email'); // populate user data (only username + email)
-    
-      console.log('Feedback:', feedbacks);
+  
     res.json({ success: true, feedbacks });
   } catch (err) {
     console.error('Error fetching feedback:', err);
