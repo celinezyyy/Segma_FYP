@@ -1,0 +1,11 @@
+{
+  "name": "fyp-app",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix client\" \"npm run server --prefix server\"",
+    "start": "concurrently \"npm run preview --prefix client\" \"npm run start --prefix server\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

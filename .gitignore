@@ -1,0 +1,30 @@
+# Root node_modules
+/node_modules
+
+# Client & server node_modules
+/client/node_modules
+/server/node_modules
+
+# Build outputs
+/client/dist
+/server/dist
+/server/build
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Env files
+.env
+.env.local
+.env.*.local
+/server/.env
+/server/.env.*.local
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
