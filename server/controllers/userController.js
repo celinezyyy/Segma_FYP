@@ -140,3 +140,22 @@ export const submitFeedback = async (req, res) => {
         res.status(500).json({ success: false, message: 'Server error' });
     }
 }
+
+// get feedback 
+export const viewFeedbackStatus = async (req, res) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated' });
+    }
+
+    const feedbacks = await feedbackModel
+      .find({ user: req.userId }) // use userId from middleware
+      .sort({ createdAt: -1 })
+      .populate('user', 'username email');
+
+    res.json({ success: true, feedbacks });
+  } catch (err) {
+    console.error('Error fetching feedback:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};

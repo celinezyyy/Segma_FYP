@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar';
 const UserSidebar = () => {
   const [isOpen, setIsOpen] = useState(false); // Toggle sidebar expand/collapse
   const [segOpen, setSegOpen] = useState(false); // Toggle segmentation submenu
+  const [feedbackOpen, setFeedbackOpen] = useState(false); // Toggle feedback submenu
 
   return (
     <div className="flex">
@@ -111,9 +112,9 @@ const UserSidebar = () => {
 
               {isOpen && (
                 <ul className={`${segOpen ? 'block' : 'hidden'} py-2 space-y-2 pl-11`}>
-                  <li><a href="/dataset-selection" className="block p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700">Dataset Selection</a></li>
-                  <li><a href="/mapping-result" className="block p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700">Mapping Result</a></li>
-                  <li><a href="/segmentation-result" className="block p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700">Segmentation Result</a></li>
+                  <li><a href="/dataset-selection" className="block p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700">Dataset Selection</a></li>
+                  <li><a href="/mapping-result" className="block p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700">Mapping Result</a></li>
+                  <li><a href="/segmentation-result" className="block p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700">Segmentation Result</a></li>
                 </ul>
               )}
             </li>
@@ -156,20 +157,47 @@ const UserSidebar = () => {
 
             {/* Feedback */}
             <li>
-              <a
-                href="/feedback-tab"
-                className="flex items-center p-2 text-gray-900 rounded-lg dark:text-white hover:bg-gray-200 dark:hover:bg-gray-700"
+              <button
+                type="button"
+                onClick={() => setFeedbackOpen(!feedbackOpen)}
+                className="flex items-center w-full p-2 text-gray-900 rounded-lg dark:text-white hover:bg-gray-200 dark:hover:bg-gray-700"
                 title="Feedback"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-6 h-6">
-                  <path 
-                    strokeLinecap="round" 
-                    strokeLinejoin="round" 
-                    d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-3.555-.64l-3.71 1.153a.75.75 0 0 1-.96-.96l1.152-3.71a9.76 9.76 0 0 1-.641-3.554c0-4.97 3.693-9 8.25-9s9 4.03 9 9Z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-3.555-.64l-3.71 1.153a.75.75 0 0 1-.96-.96l1.152-3.71a9.76 9.76 0 0 1-.641-3.554c0-4.97 3.693-9 8.25-9s9 4.03 9 9Z" />
                 </svg>
 
-                {isOpen && <span className="ml-3">Feedback</span>}
-              </a>
+                {isOpen && (
+                  <>
+                    <span className="ml-3 flex-1 text-left">Feedback</span>
+                    <svg
+                      className={`w-3 h-3 ml-auto transition-transform duration-200 ${
+                        feedbackOpen ? 'rotate-180' : ''
+                      }`}
+                      fill="none"
+                      viewBox="0 0 10 6"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M1 1l4 4 4-4" />
+                    </svg>
+                  </>
+                )}
+              </button>
+
+              {isOpen && (
+                <ul className={`${feedbackOpen ? 'block' : 'hidden'} py-2 space-y-2 pl-11`}>
+                  <li>
+                    <a href="/submit-feedback" className="block p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700">
+                      Submit Feedback
+                    </a>
+                  </li>
+                  <li>
+                    <a href="/view-feedback-status" className="block p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700">
+                      View Feedback Status
+                    </a>
+                  </li>
+                </ul>
+              )}
             </li>
           </ul>
         </div>

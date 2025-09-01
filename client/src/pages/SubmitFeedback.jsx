@@ -7,7 +7,7 @@ import { AppContext } from '../context/AppContext';
 import { toast } from 'react-toastify';
 import axios from 'axios';
 
-const Feedback = () => {
+const SubmitFeedback = () => {
   const { userData, backendUrl } = useContext(AppContext);
 
   const [formData, setFormData] = useState({
@@ -119,4 +119,4 @@ const Feedback = () => {
   );
 };
 
-export default Feedback;
+export default SubmitFeedback;

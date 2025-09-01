@@ -38,12 +38,17 @@ const FeedbackList = () => {
       const res = await axios.put(`${backendUrl}/api/admin/feedback/${feedbackId}/mark-in-process`);
       if (res.data.success) {
         toast.success('Feedback marked as In Process');
-        // Update local state
+
+        // Update global list
         setFeedbacks((prev) =>
-          prev.map((f) =>
-            f._id === feedbackId ? { ...f, status: 'Processing' } : f
-          )
+          prev.map((f) => (f._id === feedbackId ? { ...f, status: 'Processing' } : f))
         );
+
+        // Update modal immediately
+        if (selectedFeedback?._id === feedbackId) {
+          setSelectedFeedback((prev) => ({ ...prev, status: 'Processing' }));
+        }
+
       } else {
         toast.error(res.data.message || 'Failed to update feedback');
       }
@@ -53,23 +58,29 @@ const FeedbackList = () => {
   };
 
   const handleMarkAsCompleted = async (feedbackId) => {
-  try {
-    const res = await axios.put(`${backendUrl}/api/admin/feedback/${feedbackId}/mark-completed`);
-    if (res.data.success) {
-      toast.success('Feedback marked as Completed');
-      // Update local state
-      setFeedbacks((prev) =>
-        prev.map((f) =>
-          f._id === feedbackId ? { ...f, status: 'Solved' } : f
-        )
-      );
-    } else {
-      toast.error(res.data.message || 'Failed to update feedback');
+    try {
+      const res = await axios.put(`${backendUrl}/api/admin/feedback/${feedbackId}/mark-completed`);
+      if (res.data.success) {
+        toast.success('Feedback marked as Completed');
+
+        // Update global list
+        setFeedbacks((prev) =>
+          prev.map((f) => (f._id === feedbackId ? { ...f, status: 'Solved' } : f))
+        );
+
+        // Update modal immediately
+        if (selectedFeedback?._id === feedbackId) {
+          setSelectedFeedback((prev) => ({ ...prev, status: 'Solved' }));
+        }
+
+      } else {
+        toast.error(res.data.message || 'Failed to update feedback');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'An error occurred');
     }
-  } catch (err) {
-    toast.error(err.response?.data?.message || 'An error occurred');
-  }
-};
+  };
+
 
   const truncate = (text, maxLength = 50) => {
     if (!text) return '';

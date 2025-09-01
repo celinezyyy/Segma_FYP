@@ -9,7 +9,8 @@ import EmailVerify from './pages/EmailVerify';
 import ResetPassword from './pages/ResetPassword';
 import DatasetTab from './pages/DatasetTab';
 import MyProfile from './pages/MyProfile';
-import Feedback from './pages/Feedback';
+import SubmitFeedback from './pages/SubmitFeedback';
+import ViewFeedbackStatus from './pages/ViewFeedbackStatus';
 import AdminHome from './adminPage/AdminHome';
 import UserList from './adminPage/UserList';
 import AdminProfile from './adminPage/AdminProfile';
@@ -29,7 +30,8 @@ const App = () => {
         <Route path='/reset-password' element={<ResetPassword/>}/>
         <Route path='/dataset-tab' element={<DatasetTab/>}/>
         <Route path='/my-profile' element={<MyProfile/>}/>
-        <Route path='/feedback-tab' element={<Feedback/>}/>
+        <Route path='/submit-feedback' element={<SubmitFeedback/>}/>
+        <Route path='/view-feedback-status' element={<ViewFeedbackStatus/>}/>
         <Route path='/admin-home' element={<AdminHome/>}/>
         <Route path='/admin-user-list' element={<UserList />}/>
         <Route path='/admin-profile' element={<AdminProfile />}/>
