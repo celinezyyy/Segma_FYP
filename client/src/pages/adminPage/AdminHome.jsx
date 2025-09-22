@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../../context/AppContext';
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
-import axios from 'axios';
-import { toast } from 'react-toastify';
 import AdminSidebar from '../../components/AdminSidebar';
+import axios from 'axios';
+import Swal from 'sweetalert2';
 
 const UserHome = () => {
   const { userData, backendUrl } = useContext(AppContext);
@@ -16,22 +16,30 @@ const UserHome = () => {
     resolved: 0
   });
 
-useEffect(() => {
+  useEffect(() => {
     const fetchMetrics = async () => {
       try {
         const res = await axios.get(`${backendUrl}/api/admin/home-cards-info`);
         if (res.data.success) {
           setMetrics(res.data.metrics);
         } else {
-          toast.error(res.data.message || 'Failed to fetch metrics');
+          Swal.fire({
+            icon: 'error',
+            title: 'Oops...',
+            text: res.data.message || 'Failed to fetch metrics',
+          });
         }
       } catch (err) {
-        toast.error(err.response?.data?.message || 'Error loading dashboard data');
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: err.response?.data?.message || 'Error loading dashboard data',
+        });
       }
     };
     fetchMetrics();
   }, [backendUrl]);
-
+  
   return (
     <div>
       {/* Navbar and Sidebar outside main content */}

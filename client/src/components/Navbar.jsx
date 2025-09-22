@@ -2,7 +2,7 @@ import React, { useContext } from 'react';
 import { assets } from '../assets/assets';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../context/AppContext';
-import { toast } from 'react-toastify';
+import Swal from 'sweetalert2';
 import axios from 'axios';
 
 const Navbar = () => {
@@ -14,12 +14,23 @@ const Navbar = () => {
       axios.defaults.withCredentials = true;
       const { data } = await axios.post(backendUrl + '/api/auth/logout');
       if (data.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Logged Out',
+          text: 'You have been logged out successfully!',
+          timer: 3000,
+          showConfirmButton: false,
+        });
         setIsLoggedin(false);
         setUserData(false);
         navigate('/');
       }
     } catch (error) {
-      toast.error(error.message);
+      Swal.fire({
+        icon: 'error',
+        title: 'Oops...',
+        text: error.message,
+      });
     }
   };
 

@@ -4,7 +4,6 @@ import AdminSidebar from '../../components/AdminSidebar';
 import { assets } from '../../assets/assets';
 import { AppContext } from '../../context/AppContext';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-toastify';
 import Swal from 'sweetalert2';
 import axios from 'axios';
 
@@ -42,7 +41,7 @@ const AdminProfile = () => {
     {/*Handle Save Profile Info button */}
     const handleSave = async (e) => {
         console.log("updateProfile controller triggered");
-    e.preventDefault();
+        e.preventDefault();
 
     try {
         axios.defaults.withCredentials = true;
@@ -53,8 +52,11 @@ const AdminProfile = () => {
         const emailChanged = formData.email !== initialData.email;
 
         if (!usernameChanged && !emailChanged) {
-        toast.info("No changes made");
-        return;
+            Swal.fire({
+                icon: 'info',
+                text: 'No changes made',
+            });
+            return;
         }
         console.log("Update profile run, middleware");
         const res = await axios.post(`${backendUrl}/api/user/update-profile`, {
@@ -63,24 +65,36 @@ const AdminProfile = () => {
         });
 
         if (res.data.success) {
-        // Update initialData to the new saved values
-        setInitialData({
-            username: formData.username,
-            email: formData.email,
-        });
+            // Update initialData to the new saved values
+            setInitialData({
+                username: formData.username,
+                email: formData.email,
+            });
 
-        if (emailChanged) {
-            toast.success("Email changed successfully! Please verify again.");
-            localStorage.setItem("verifyUserId", res.data.userId);
-            navigate('/verify-account', { state: { email: formData.email } });
+            if (emailChanged) {
+                Swal.fire({
+                    icon: 'success',
+                    text: 'Email changed successfully! Please verify again.',
+                });
+                localStorage.setItem("verifyUserId", res.data.userId);
+                navigate('/verify-account', { state: { email: formData.email } });
+            } else {
+                Swal.fire({
+                    icon: 'success',
+                    text: 'Profile updated successfully!',
+                });
+            }
         } else {
-            toast.success("Profile updated successfully!");
-        }
-        } else {
-        toast.error(res.data.message || "Update failed");
+            Swal.fire({
+                icon: 'error',
+                text: res.data.message || "Update failed",
+            });
         }
     } catch (err) {
-        toast.error(err.response?.data?.message || "An error occurred");
+        Swal.fire({
+            icon: 'error',
+            text: err.response?.data?.message || "An error occurred",
+        });
     }
     };
 
