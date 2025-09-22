@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { AppContext } from '../../context/AppContext';
 import axios from 'axios';
-import { toast } from 'react-toastify';
+import Swal from 'sweetalert2';
 import AdminSidebar from '../../components/AdminSidebar';
 
 const FeedbackList = () => {
@@ -18,10 +18,20 @@ const FeedbackList = () => {
         if (res.data.success) {
           setFeedbacks(res.data.feedbacks);
         } else {
-          toast.error(res.data.message || 'Failed to fetch feedback');
+          Swal.fire({ 
+            icon: 'error', 
+            text: res.data.message || 'Failed to fetch feedback',
+            showConfirmButton: false,
+            timer: 2000
+          });
         }
       } catch (err) {
-        toast.error(err.response?.data?.message || 'An error occurred');
+        Swal.fire({ 
+          icon: 'error', 
+          text: err.response?.data?.message || 'An error occurred',
+          showConfirmButton: false,
+          timer: 2000
+        });
       }
     };
 
@@ -37,7 +47,12 @@ const FeedbackList = () => {
     try {
       const res = await axios.put(`${backendUrl}/api/admin/feedback/${feedbackId}/mark-in-process`);
       if (res.data.success) {
-        toast.success('Feedback marked as In Process');
+        Swal.fire({ 
+          icon: 'success', 
+          text: 'Feedback marked as In Process',
+          showConfirmButton: false,
+          timer: 2000 
+        });
 
         // Update global list
         setFeedbacks((prev) =>
@@ -50,10 +65,20 @@ const FeedbackList = () => {
         }
 
       } else {
-        toast.error(res.data.message || 'Failed to update feedback');
+        Swal.fire({ 
+          icon: 'error', 
+          text: res.data.message || 'Failed to update feedback',
+          showConfirmButton: false,
+          timer: 2000 
+        });
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'An error occurred');
+      Swal.fire({ 
+        icon: 'error', 
+        text: err.response?.data?.message || 'An error occurred',
+        showConfirmButton: false,
+        timer: 2000  
+      });
     }
   };
 
@@ -61,7 +86,12 @@ const FeedbackList = () => {
     try {
       const res = await axios.put(`${backendUrl}/api/admin/feedback/${feedbackId}/mark-completed`);
       if (res.data.success) {
-        toast.success('Feedback marked as Completed');
+        Swal.fire({ 
+          icon: 'success', 
+          text: 'Feedback marked as Completed',
+          showConfirmButton: false,
+          timer: 2000 
+        });
 
         // Update global list
         setFeedbacks((prev) =>
@@ -74,13 +104,22 @@ const FeedbackList = () => {
         }
 
       } else {
-        toast.error(res.data.message || 'Failed to update feedback');
+        Swal.fire({ 
+          icon: 'error', 
+          text: res.data.message || 'Failed to update feedback',
+          showConfirmButton: false,
+          timer: 2000 
+        });
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'An error occurred');
+      Swal.fire({ 
+        icon: 'error', 
+        text: err.response?.data?.message || 'An error occurred',
+        showConfirmButton: false,
+        timer: 2000 
+        });
     }
   };
-
 
   const truncate = (text, maxLength = 50) => {
     if (!text) return '';
