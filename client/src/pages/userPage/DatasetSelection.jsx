@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import UserSidebar from '../../components/UserSidebar';
 import { AppContext } from '../../context/AppContext';
 import axios from 'axios';
-import { toast } from 'react-toastify';
+import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
 
 const DatasetSelection = () => {
@@ -32,6 +32,12 @@ const DatasetSelection = () => {
       }
     } catch (error) {
       console.error('Failed to fetch datasets:', error);
+      Swal.fire({ 
+        icon: 'error', 
+        text: 'Failed to fetch datasets', 
+        showConfirmButton: false,
+        timer: 2000 
+      });
     }
   };
 
@@ -59,13 +65,22 @@ const DatasetSelection = () => {
       setPreviewData(true);
     } catch (err) {
       console.error('Preview error:', err);
-      toast.error('Error previewing dataset');
+      Swal.fire({ 
+        icon: 'error', 
+        text: 'Error previewing dataset', 
+        showConfirmButton: false,
+        timer: 2000 
+      });
     }
   };
 
   const handleConfirmSelection = async () => {
     if (!selectedCustomer || !selectedOrder) {
-      toast.error('Please select one Customer and one Order dataset.');
+      Swal.fire({
+        icon: 'warning',
+        title: 'Selection Required',
+        text: 'Please select one Customer and one Order dataset.'
+      });
       return;
     }
     navigate('/segmentation');
@@ -169,7 +184,11 @@ const DatasetSelection = () => {
             <button
               onClick={() => {
                 if (!selectedCustomer) {
-                  toast.error('Please select one Customer dataset before proceeding.');
+                  Swal.fire({
+                    icon: 'warning',
+                    title: 'Selection Required',
+                    text: 'Please select one Customer dataset before proceeding.'
+                  });
                 } else {
                   setActiveTab('order');
                   setSearchQuery('');

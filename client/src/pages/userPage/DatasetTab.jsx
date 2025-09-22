@@ -3,7 +3,6 @@ import UserSidebar from '../../components/UserSidebar';
 import { AppContext } from '../../context/AppContext';
 import axios from 'axios';
 import Swal from 'sweetalert2';
-import { toast } from 'react-toastify';
 
 const DatasetTab = () => {
   const [customerDatasets, setCustomerDatasets] = useState([]);
@@ -55,9 +54,19 @@ const DatasetTab = () => {
         fetchDatasets();
         setShowUploadModal(false);
         setFile(null);
-        toast.success('Dataset uploaded successfully!');
+        Swal.fire({
+          icon: 'success',
+          text: 'Dataset uploaded successfully!',
+          showConfirmButton: false,
+          timer: 2000,
+        });
       } else {
-        toast.error('Upload failed: ' + res.data.message);
+        Swal.fire({
+          icon: 'error',
+          text: res.data.message || 'Upload failed',
+          showConfirmButton: false,
+          timer: 2000,
+        });
       }
     } catch (err) {
       console.error('Upload error:', err);
@@ -127,7 +136,12 @@ const DatasetTab = () => {
       setPreviewData(true);
     } catch (err) {
       console.error('Preview error:', err);
-      toast.error('Error previewing dataset');
+      Swal.fire({
+        icon: 'error',
+        text: 'Error previewing dataset',
+        showConfirmButton: false,
+        timer: 2000,
+      });
     }
   };
 
@@ -148,14 +162,29 @@ const DatasetTab = () => {
         const res = await axios.delete(`${backendUrl}/api/dataset/delete-dataset/${id}`, { withCredentials: true });
 
         if (res.data.success) {
-          toast.success('Dataset deleted successfully!');
+          Swal.fire({
+            icon: 'success',
+            text: 'Dataset deleted successfully!',
+            showConfirmButton: false,
+            timer: 2000,
+          });
           fetchDatasets();
         } else {
-          toast.error(res.data.message);
+          Swal.fire({
+            icon: 'error',
+            text: res.data.message || 'Failed to delete dataset',
+            showConfirmButton: false,
+            timer: 2000,
+          });
         }
       } catch (err) {
         console.error(err);
-        toast.error('Error deleting dataset.');
+        Swal.fire({
+          icon: 'error',
+          text: 'Error deleting dataset',
+          showConfirmButton: false,
+          timer: 2000,
+        });
       }
     }
   };
