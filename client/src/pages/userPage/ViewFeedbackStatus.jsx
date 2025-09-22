@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AppContext } from '../../context/AppContext';
 import axios from 'axios';
-import { toast } from 'react-toastify';
+import Swal from 'sweetalert2';
 import UserSidebar from '../../components/UserSidebar';
 
 const ViewFeedbackStatus = () => {
@@ -27,10 +27,22 @@ const ViewFeedbackStatus = () => {
         if (res.data.success) {
           setFeedbacks(res.data.feedbacks);
         } else {
-          toast.error(res.data.message || 'Failed to fetch feedback');
+          Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: res.data.message || 'Failed to fetch feedback',
+            showConfirmButton: false,
+            timer: 2000,
+          });
         }
       } catch (err) {
-        toast.error(err.response?.data?.message || 'An error occurred');
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: err.response?.data?.message || 'An error occurred',
+            showConfirmButton: false,
+            timer: 2000,
+          });
       } finally {
         setLoading(false);
       }
