@@ -1,10 +1,10 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { AppContext } from '../context/AppContext';
-import Navbar from '../components/Navbar';
-import UserSidebar from '../components/UserSidebar';
-import Footer from '../components/Footer';
+import { AppContext } from '../../context/AppContext';
+import Navbar from '../../components/Navbar';
+import UserSidebar from '../../components/UserSidebar';
+import Footer from '../../components/Footer';
 
 const UserHome = () => {
   const { backendUrl, userData } = useContext(AppContext);
@@ -89,7 +89,7 @@ const UserHome = () => {
             </p>
             <div className="flex justify-center">
               <button
-                onClick={() => navigate('/feedback-tab')}
+                onClick={() => navigate('/submit-feedback')}
                 className="flex items-center gap-2 border border-gray-500 rounded-full px-3 py-1 sm:px-6 sm:py-2 text-sm sm:text-base text-gray-800 transition-all whitespace-nowrap hover:bg-[#C3E5F1]"
               >
                 Give Feedback

@@ -1,9 +1,9 @@
 import React, { useState, useContext } from 'react';
-import Navbar from '../components/Navbar';
-import UserSidebar from '../components/UserSidebar';
-import Footer from '../components/Footer';
-import { assets } from '../assets/assets';
-import { AppContext } from '../context/AppContext';
+import Navbar from '../../components/Navbar';
+import UserSidebar from '../../components/UserSidebar';
+import Footer from '../../components/Footer';
+import { assets } from '../../assets/assets';
+import { AppContext } from '../../context/AppContext';
 import { toast } from 'react-toastify';
 import axios from 'axios';
 

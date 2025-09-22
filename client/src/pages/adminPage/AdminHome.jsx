@@ -1,11 +1,11 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AppContext } from '../context/AppContext';
-import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
+import { AppContext } from '../../context/AppContext';
+import Navbar from '../../components/Navbar';
+import Footer from '../../components/Footer';
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import AdminSidebar from '../components/AdminSidebar';
+import AdminSidebar from '../../components/AdminSidebar';
 
 const UserHome = () => {
   const { userData, backendUrl } = useContext(AppContext);

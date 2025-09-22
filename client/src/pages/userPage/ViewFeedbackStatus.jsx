@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { AppContext } from '../context/AppContext';
+import { AppContext } from '../../context/AppContext';
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import UserSidebar from '../components/UserSidebar';
+import UserSidebar from '../../components/UserSidebar';
 
 const ViewFeedbackStatus = () => {
   const { backendUrl } = useContext(AppContext);

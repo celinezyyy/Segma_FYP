@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
-import UserSidebar from '../components/UserSidebar';
-import { AppContext } from '../context/AppContext';
+import UserSidebar from '../../components/UserSidebar';
+import { AppContext } from '../../context/AppContext';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import { toast } from 'react-toastify';

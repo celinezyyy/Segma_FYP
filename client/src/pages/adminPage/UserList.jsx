@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
-import { AppContext } from '../context/AppContext';
-import AdminSidebar from '../components/AdminSidebar';
+import { AppContext } from '../../context/AppContext';
+import AdminSidebar from '../../components/AdminSidebar';
 
 const UserList = () => {
   const [users, setUsers] = useState([]);

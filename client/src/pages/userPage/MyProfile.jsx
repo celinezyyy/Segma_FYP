@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
-import Navbar from '../components/Navbar';
-import UserSidebar from '../components/UserSidebar';
-import { assets } from '../assets/assets';
-import { AppContext } from '../context/AppContext';
+import Navbar from '../../components/Navbar';
+import UserSidebar from '../../components/UserSidebar';
+import { assets } from '../../assets/assets';
+import { AppContext } from '../../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import Swal from 'sweetalert2';

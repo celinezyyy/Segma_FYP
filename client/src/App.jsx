@@ -2,20 +2,21 @@ import React from 'react';
 import {Routes, Route} from 'react-router-dom';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import Home from './pages/Home';
-import UserHome from './pages/UserHome';
-import Login from './pages/Login';
-import EmailVerify from './pages/EmailVerify';
-import ResetPassword from './pages/ResetPassword';
-import DatasetTab from './pages/DatasetTab';
-import MyProfile from './pages/MyProfile';
-import SubmitFeedback from './pages/SubmitFeedback';
-import ViewFeedbackStatus from './pages/ViewFeedbackStatus';
-import AdminHome from './adminPage/AdminHome';
-import UserList from './adminPage/UserList';
-import AdminProfile from './adminPage/AdminProfile';
-import FeedbackList from './adminPage/FeedbackList';
-import DatasetSelection from './pages/DatasetSelection';
+import Home from './pages/userPage/Home';
+import UserHome from './pages/userPage/UserHome';
+import Login from './pages/userPage/Login';
+import EmailVerify from './pages/userPage/EmailVerify';
+import ResetPassword from './pages/userPage/ResetPassword';
+import DatasetTab from './pages/userPage/DatasetTab';
+import MyProfile from './pages/userPage/MyProfile';
+import SubmitFeedback from './pages/userPage/SubmitFeedback';
+import ViewFeedbackStatus from './pages/userPage/ViewFeedbackStatus';
+import DatasetSelection from './pages/userPage/DatasetSelection';
+
+import AdminHome from './pages/adminPage/AdminHome';
+import UserList from './pages/adminPage/UserList';
+import AdminProfile from './pages/adminPage/AdminProfile';
+import FeedbackList from './pages/adminPage/FeedbackList';
   
 const App = () => {
   return(

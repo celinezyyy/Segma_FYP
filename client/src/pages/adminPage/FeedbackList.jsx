@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useContext } from 'react';
-import { AppContext } from '../context/AppContext';
+import { AppContext } from '../../context/AppContext';
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import AdminSidebar from '../components/AdminSidebar';
+import AdminSidebar from '../../components/AdminSidebar';
 
 const FeedbackList = () => {
   const { backendUrl } = useContext(AppContext);

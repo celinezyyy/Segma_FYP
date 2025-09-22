@@ -1,7 +1,7 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { assets } from '../assets/assets';
-import { AppContext } from '../context/AppContext';
+import { assets } from '../../assets/assets';
+import { AppContext } from '../../context/AppContext';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { useForm } from 'react-hook-form';
