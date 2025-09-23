@@ -2,7 +2,7 @@ import React, { useContext, useEffect, useState } from 'react'
 import { assets } from '../../assets/assets'
 import { AppContext } from '../../context/AppContext'
 import axios from 'axios'
-import { toast } from 'react-toastify'
+import Swal from 'sweetalert2'
 import { useNavigate } from 'react-router-dom'
 
 const EmailVerify = () => {
@@ -47,8 +47,25 @@ const EmailVerify = () => {
 
     const userId = localStorage.getItem('verifyUserId'); // 👈 get userId
     
-    if (!otp || otp.length !== 6 || !userId) {
-      toast.error('Missing OTP or User ID', { onClose: () => setLoading(false) });
+    // Check User ID
+    if (!userId) {
+      Swal.fire({
+        icon: 'error',
+        title: 'User Not Found',
+        text: 'Verification failed.',
+        showConfirmButton: false,
+        timer: 3000,
+      }).then(() => setLoading(false));
+      return;
+    }
+
+    // Check OTP first
+    if (!otp || otp.length !== 6) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Invalid OTP',
+        text: 'Please enter a valid 6-digit OTP code.'
+      }).then(() => setLoading(false));
       return;
     }
 
@@ -56,15 +73,38 @@ const EmailVerify = () => {
       const { data } = await axios.post(`${backendUrl}/api/auth/verify-account`, { otp, userId });
 
       if (data.success) {
-        toast.success(data.message, { onClose: () => setLoading(false) });
-        localStorage.removeItem('verifyUserId'); // ✅ cleanup
-        getUserData();
-        navigate('/login');
+        Swal.fire({
+          icon: 'success',
+          title: 'Verified!',
+          text: data.message,
+          showConfirmButton: false,
+          timer: 3000,
+        }).then(() => {
+          setLoading(false);
+          localStorage.removeItem('verifyUserId'); // ✅ cleanup
+          getUserData();
+          navigate('/login');
+        });
       } else {
-        toast.error(data.message, { onClose: () => setLoading(false) });
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: data.message,
+          showConfirmButton: false,
+          timer: 3000,
+        }).then(() => 
+          setLoading(false)
+        );
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || "Verification failed", { onClose: () => setLoading(false) });
+      Swal.fire({
+        icon: 'error',
+        text: error.response?.data?.message || "Verification failed",
+        showConfirmButton: false,
+        timer: 3000,
+      }).then(() => 
+        setLoading(false)
+      );
     }
   };
 

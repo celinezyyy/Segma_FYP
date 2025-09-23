@@ -4,7 +4,6 @@ import UserSidebar from '../../components/UserSidebar';
 import { assets } from '../../assets/assets';
 import { AppContext } from '../../context/AppContext';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-toastify';
 import Swal from 'sweetalert2';
 import axios from 'axios';
 
@@ -43,48 +42,79 @@ const MyProfile = () => {
     {/*Handle Save Profile Info button */}
     const handleSave = async (e) => {
         console.log("updateProfile controller triggered");
-    e.preventDefault();
-    if (loading) return; // Prevent multiple submissions
-    setLoading(true);    // Disable the button
+        e.preventDefault();
+        if (loading) return; // Prevent multiple submissions
+        setLoading(true);    // Disable the button
 
-    try {
-        axios.defaults.withCredentials = true;
+        try {
+            axios.defaults.withCredentials = true;
 
-        if (!userData) return;
+            if (!userData) 
+                return;
 
-        const usernameChanged = formData.username !== initialData.username;
-        const emailChanged = formData.email !== initialData.email;
+            const usernameChanged = formData.username !== initialData.username;
+            const emailChanged = formData.email !== initialData.email;
 
-        if (!usernameChanged && !emailChanged) {
-        toast.info("No changes made", { onClose: () => setLoading(false) });
-        return;
+            if (!usernameChanged && !emailChanged) {
+                Swal.fire({
+                    icon: 'info',
+                    title: 'No Changes',
+                    text: 'You did not make any changes.',
+                    showConfirmButton: false,
+                    timer: 2000,
+                }).then(() => setLoading(false));
+                return;
+            }
+            console.log("Update profile run, middleware");
+            const res = await axios.post(`${backendUrl}/api/user/update-profile`, {
+                username: formData.username,
+                email: formData.email,
+            });
+
+            if (res.data.success) {
+                // Update initialData to the new saved values
+                setInitialData({
+                    username: formData.username,
+                    email: formData.email,
+                });
+
+                if (emailChanged) {
+                    localStorage.setItem('verifyUserId', res.data.userId);
+                    Swal.fire({
+                        icon: 'success',
+                        text: 'Email changed successfully! Please verify again.',
+                        showConfirmButton: false,
+                        timer: 2000,
+                    }).then(() => {
+                        setLoading(false);
+                        navigate('/verify-account', { state: { email: formData.email } });
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'success',
+                        text: 'Your profile has been updated successfully!',
+                        showConfirmButton: false,
+                        timer: 2000,
+                    }).then(() => setLoading(false));
+                }
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Update Failed',
+                    text: res.data.message || 'Update failed',
+                    showConfirmButton: false,
+                    timer: 2000,
+                }).then(() => setLoading(false));
+            }
+        } catch (err) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: err.response?.data?.message || "An error occurred",
+                showConfirmButton: false,
+                timer: 2000,
+            }).then(() => setLoading(false));
         }
-        console.log("Update profile run, middleware");
-        const res = await axios.post(`${backendUrl}/api/user/update-profile`, {
-            username: formData.username,
-            email: formData.email,
-        });
-
-        if (res.data.success) {
-        // Update initialData to the new saved values
-        setInitialData({
-            username: formData.username,
-            email: formData.email,
-        });
-
-        if (emailChanged) {
-            toast.success("Email changed successfully! Please verify again.", { onClose: () => setLoading(false) });
-            localStorage.setItem("verifyUserId", res.data.userId);
-            navigate('/verify-account', { state: { email: formData.email } });
-        } else {
-            toast.success("Profile updated successfully!", { onClose: () => setLoading(false) });
-        }
-        } else {
-        toast.error(res.data.message || "Update failed", { onClose: () => setLoading(false) });
-        }
-    } catch (err) {
-        toast.error(err.response?.data?.message || "An error occurred", { onClose: () => setLoading(false) });
-    }
     };
 
     {/*Handle Delete Account */}
@@ -106,18 +136,32 @@ const MyProfile = () => {
             axios.defaults.withCredentials = true;
             const res = await axios.delete(`${backendUrl}/api/user/delete-account`);
             if (res.data.success) {
-            Swal.fire(
-                'Deleted!',
-                'Your account has been deleted.',
-                'success'
-            );
-            localStorage.clear();
-            navigate('/');
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Deleted',
+                    text: 'Your account has been deleted successfully.',
+                    showConfirmButton: false,
+                    timer: 2000,
+                });
+                localStorage.clear();
+                navigate('/');
             } else {
-            Swal.fire('Failed', res.data.message || 'Deletion failed', 'error');
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Failed',
+                    text: res.data.message || 'Account deletion failed.',
+                    showConfirmButton: false,
+                    timer: 2000,
+                });
             }
         } catch (err) {
-            Swal.fire('Error', err.response?.data?.message || 'An error occurred', 'error');
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: err.response?.data?.message || 'An unexpected error occurred.',
+                showConfirmButton: false,
+                timer: 2000,
+            });
         }
     };
 

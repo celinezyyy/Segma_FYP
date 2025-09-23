@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { assets } from '../../assets/assets';
 import { AppContext } from '../../context/AppContext';
 import axios from 'axios';
-import { toast } from 'react-toastify';
+import Swal from 'sweetalert2';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
@@ -90,10 +90,24 @@ const Login = () => {
 
         if (res.data.success) {
           localStorage.setItem('verifyUserId', res.data.userId);
-          toast.success('OTP sent! Please check your email', { onClose: () => setLoading(false) });
-          navigate('/verify-account', { state: { email } });
+            Swal.fire({
+            icon: 'success',
+            title: 'Registration Successful',
+            text: 'OTP has been sent! Please check your email to verify your account.',
+            showConfirmButton: false,
+            timer: 3000,
+          }).then(() => {
+            setLoading(false);
+            navigate('/verify-account', { state: { email } });
+          });
         } else {
-          toast.error(res.data.message, { onClose: () => setLoading(false) });
+          Swal.fire({
+            icon: 'error',
+            title: 'Registration Failed',
+            text: res.data.message,
+            showConfirmButton: false,
+            timer: 2000,
+          }).then(() => setLoading(false));
         }
       } else { // Login request
         const { email, password } = data;
@@ -107,23 +121,49 @@ const Login = () => {
           const userRole = res.data.role; 
           console.log('User role is:', userRole);
           getUserData();
-          if (userRole === 'admin'){
-            navigate('/admin-home');
-          }else{
-            navigate('/user-home');
-          }
+
+          Swal.fire({
+            icon: 'success',
+            text: 'Redirecting...',
+            showConfirmButton: false,
+            timer: 1500,
+          }).then(() => {
+            setLoading(false);
+            if (userRole === 'admin') 
+              navigate('/admin-home');
+            else 
+              navigate('/user-home');
+          });
         } else if (res.data.message === 'Please verify your email before logging in') {
           if (res.data.userId) {
             localStorage.setItem('verifyUserId', res.data.userId);
           }
-          toast.info(res.data.message, { onClose: () => setLoading(false) });
-          navigate('/verify-account', { state: { email } });
+          Swal.fire({
+            icon: 'info',
+            title: 'Email Verification Required',
+            text: res.data.message + '. New OTP has been sent to your email.',
+            }).then(() => {
+              setLoading(false);
+              navigate('/verify-account', { state: { email } });
+            });
         } else {
-          toast.error(res.data.message, { onClose: () => setLoading(false) });
+          Swal.fire({
+            icon: 'error',
+            title: 'Login Failed',
+            text: res.data.message,
+            showConfirmButton: false,
+            timer: 2000,
+            }).then(() => setLoading(false));
         }
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || error.message, { onClose: () => setLoading(false) });
+        Swal.fire({
+        icon: 'error',
+        title: 'Unexpected Error',
+        text: error.response?.data?.message || error.message,
+        showConfirmButton: false,
+        timer: 2000,
+      }).then(() => setLoading(false));
     }
   };
 

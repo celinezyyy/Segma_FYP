@@ -4,7 +4,7 @@ import UserSidebar from '../../components/UserSidebar';
 import Footer from '../../components/Footer';
 import { assets } from '../../assets/assets';
 import { AppContext } from '../../context/AppContext';
-import { toast } from 'react-toastify';
+import Swal from 'sweetalert2';
 import axios from 'axios';
 
 const SubmitFeedback = () => {
@@ -29,16 +29,34 @@ const SubmitFeedback = () => {
 
       if (res.data.success) {
         setTimeout(() => {
-        toast.success('Feedback submitted successfully!');
+        Swal.fire({
+            icon: 'success',
+            title: 'Success',
+            text: 'Feedback submitted successfully!',
+            showConfirmButton: false,
+            timer: 2000,
+          });
         setFormData({ subject: '', description: '' });
       }, 500); 
       } else {
         setTimeout(() => {
-        toast.error(res.data.message || 'Submission failed');
+          Swal.fire({
+            icon: 'error',
+            title: 'Failed',
+            text: res.data.message || 'Submission failed',
+            showConfirmButton: false,
+            timer: 2000,
+          });
       }, 500);
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'An error occurred');
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: err.response?.data?.message || 'An error occurred',
+        showConfirmButton: false,
+        timer: 2000,
+      });
     } 
   };
   // Determine if the form is valid

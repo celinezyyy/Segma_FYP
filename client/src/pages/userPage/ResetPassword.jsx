@@ -2,7 +2,7 @@ import React, { useContext, useState, useRef } from 'react';
 import { assets } from '../../assets/assets';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../../context/AppContext';
-import { toast } from 'react-toastify';
+import Swal from 'sweetalert2';
 import axios from 'axios';
 
 import { useForm } from 'react-hook-form';
@@ -77,18 +77,37 @@ const ResetPassword = () => {
     try {
       const { data } = await axios.post(backendUrl + '/api/auth/send-reset-otp', { email });
       if (data.success) {
-        toast.success(data.message, { onClose: () => setLoading(false) });
+        localStorage.setItem('verifyUserId', data.userId);
+
+        Swal.fire({
+          icon: 'success',
+          text: 'New OTP sent to your email. Please check!',
+          showConfirmButton: false,
+          timer: 3000,
+        }).then(() => setLoading(false));
         setIsEmailSent(true);
       } else {
-        toast.error(data.message, { onClose: () => setLoading(false) });
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: data.message,
+          showConfirmButton: false,
+          timer: 3000,
+        }).then(() => setLoading(false));
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || error.message, { onClose: () => setLoading(false) });
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: error.response?.data?.message || error.message,
+        showConfirmButton: false,
+        timer: 3000,
+      }).then(() => setLoading(false));
     }
   };
 
   // Submit OTP
-  const onSubmitOTP = (e) => {
+  const onSubmitOTP = async (e) => {
     e.preventDefault();
 
     if (loading) return; // prevent multiple clicks
@@ -96,18 +115,65 @@ const ResetPassword = () => {
 
     const otpArray = inputRefs.current.map((input) => input.value);
     const otpValue = otpArray.join('');
-    if (otpValue.length !== 6) {
-      toast.error('Please enter the full 6-digit OTP.'), {
-      onClose: () => setLoading(false) // reset loading after toast closes
-    };
+
+    const userId = localStorage.getItem('verifyUserId'); 
+
+    // Check User ID
+    if (!userId) {
+      Swal.fire({
+        icon: 'error',
+        title: 'User Not Found',
+        text: 'Verification failed. Unable to reset new password.',
+        showConfirmButton: false,
+        timer: 3000,
+      }).then(() => setLoading(false));
       return;
     }
-    setOtp(otpValue);
-    setIsOtpSubmitted(true);
-    toast.success('OTP verified! Please enter your new password.', {
-      onClose: () => setLoading(false) // unlock button after toast
-    });
-  };
+
+    if (otpValue.length !== 6) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Invalid OTP',
+        text: 'Please enter the full 6-digit OTP.',
+        showConfirmButton: false,
+        timer: 3000
+      }).then(() => setLoading(false));
+      return;
+    }
+
+    try {
+        const { data } = await axios.post(`${backendUrl}/api/auth/verify-reset-otp`, { otp: otpValue, userId });
+
+        if (data.success) {
+          setOtp(otpValue);
+          setIsOtpSubmitted(true);
+          Swal.fire({
+            icon: 'success',
+            text: 'OTP verified! Please enter your new password.',
+            showConfirmButton: false,
+            timer: 3000
+          }).then(() => {
+            setLoading(false);
+            getUserData();
+            localStorage.removeItem('verifyUserId'); // clean up
+          });
+        } else {
+          Swal.fire({
+            icon: 'error',
+            text: data.message || 'OTP verification failed',
+            showConfirmButton: false,
+            timer: 3000
+          }).then(() => setLoading(false));
+        }
+      } catch (err) {
+        Swal.fire({
+          icon: 'error',
+          text: err.response?.data?.message || 'Verification failed',
+          showConfirmButton: false,
+          timer: 3000
+        }).then(() => setLoading(false));
+      }
+    };
 
   // Submit new password with validation
   const onSubmitNewPassword = async (data) => {
@@ -119,15 +185,29 @@ const ResetPassword = () => {
         newPassword,
       });
       if (res.success) {
-        toast.success('Password reset successful! You can now log in with your new password.');
-        setTimeout(() => {
+        Swal.fire({
+          icon: 'success',
+          text: 'Password reset successful! You can now log in with your new password.',
+          showConfirmButton: false,
+          timer: 3000,
+        }).then(() => {
           navigate('/login');
-        }, 1000);
+        });
       } else {
-        toast.error(res.message);
+        Swal.fire({
+          icon: 'error',
+          text: res.message,
+          showConfirmButton: false,
+          timer: 3000,
+        });
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || error.message);
+      Swal.fire({
+        icon: 'error',
+        text: error.response?.data?.message || error.message,
+        showConfirmButton: false,
+        timer: 2000,
+      });
     }
   };
 
