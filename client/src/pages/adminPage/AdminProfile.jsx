@@ -55,6 +55,8 @@ const AdminProfile = () => {
             Swal.fire({
                 icon: 'info',
                 text: 'No changes made',
+                showConfirmButton: false,
+                timer: 1500,
             });
             return;
         }
@@ -75,6 +77,8 @@ const AdminProfile = () => {
                 Swal.fire({
                     icon: 'success',
                     text: 'Email changed successfully! Please verify again.',
+                    showConfirmButton: false,
+                    timer: 2000,
                 });
                 localStorage.setItem("verifyUserId", res.data.userId);
                 navigate('/verify-account', { state: { email: formData.email } });
@@ -82,18 +86,24 @@ const AdminProfile = () => {
                 Swal.fire({
                     icon: 'success',
                     text: 'Profile updated successfully!',
+                    showConfirmButton: false,
+                    timer: 2000,
                 });
             }
         } else {
             Swal.fire({
                 icon: 'error',
                 text: res.data.message || "Update failed",
+                showConfirmButton: false,
+                timer: 2000,
             });
         }
     } catch (err) {
         Swal.fire({
             icon: 'error',
             text: err.response?.data?.message || "An error occurred",
+            showConfirmButton: false,
+            timer: 2000,
         });
     }
     };
@@ -117,18 +127,32 @@ const AdminProfile = () => {
             axios.defaults.withCredentials = true;
             const res = await axios.delete(`${backendUrl}/api/user/delete-account`);
             if (res.data.success) {
-            Swal.fire(
-                'Deleted!',
-                'Your account has been deleted.',
-                'success'
-            );
+            Swal.fire({
+                icon: 'success',
+                title: 'Deleted!',
+                text: 'Your account has been deleted.',
+                showConfirmButton: false,
+                timer: 2000,              
+            });
             localStorage.clear();
             navigate('/');
             } else {
-            Swal.fire('Failed', res.data.message || 'Deletion failed', 'error');
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Failed',
+                    text: res.data.message || 'Deletion failed',
+                    showConfirmButton: false,
+                    timer: 2000,
+                });
             }
         } catch (err) {
-            Swal.fire('Error', err.response?.data?.message || 'An error occurred', 'error');
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: err.response?.data?.message || 'An error occurred',
+                showConfirmButton: false,
+                timer: 2000,
+            });
         }
     };
 
