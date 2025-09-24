@@ -185,30 +185,11 @@ export const previewDataset = async (req, res) => {
     const dataset = await datasetModel.findOne({ _id: datasetId, user: userId });
     if (!dataset) return res.status(404).json({ success: false, message: 'Dataset not found' });
 
-    // const filePath = path.join(__dirname, '..', 'datasets', userId, dataset.type, dataset.filename);
-    // if (!fs.existsSync(filePath)) {
-    //   return res.status(404).json({ success: false, message: 'File not found' });
-    // }
     const bucket = getGridFSBucket();
     const stream = bucket.openDownloadStreamByName(dataset.filename);
 
     const rows = [];
     let rowIndex = 0;
-
-    // await new Promise((resolve, reject) => {
-    //   fs.createReadStream(filePath)
-    //     .pipe(csvParser())
-    //     .on('data', (row) => {
-    //       if (rowIndex === 0) {
-    //         // Skip the 2nd line (which will be read as first row of data)
-    //         rowIndex++;
-    //         return;
-    //       }
-    //       rows.push(row);
-    //     })
-    //     .on('end', resolve)
-    //     .on('error', reject);
-    // });
 
     await new Promise((resolve, reject) => {
       stream
