@@ -1,4 +1,5 @@
 import userModel from '../models/userModel.js';
+import DatasetTemplate from '../models/datasetTemplateModel.js';
 import feedbackModel from '../models/feedbackModel.js';
 import datasetModel from '../models/datasetModel.js';
 import { getGridFSBucket } from '../utils/gridfs.js'; 
@@ -21,6 +22,7 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
+// delete user account and all associated data if user deleted by admin
 export const adminDeleteUserAccount = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -125,6 +127,7 @@ export const markFeedbackAsCompleted = async (req, res) => {
   }
 };
 
+// get Home card info
 export const getHomeCardsInfo = async (req, res) => {
   try {
     const userCount = await userModel.countDocuments({ role: 'user' });
@@ -143,3 +146,32 @@ export const getHomeCardsInfo = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 }
+
+// upload dataset template
+export const uploadTemplate = async (req, res) => {
+  try {
+    const { type } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+
+    // Remove old template of this type
+    await DatasetTemplate.findOneAndDelete({ type });
+
+    // Save new one
+    const newTemplate = new DatasetTemplate({
+      type,
+      fileName: req.file.originalname,
+      mimetype: req.file.mimetype,
+      data: req.file.buffer,   
+    });
+
+    await newTemplate.save();
+
+    res.json({ success: true, message: `${type} template uploaded successfully` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

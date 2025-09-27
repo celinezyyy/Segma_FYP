@@ -40,6 +40,50 @@ const UserHome = () => {
     fetchMetrics();
   }, [backendUrl]);
   
+  const [selectedFiles, setSelectedFiles] = useState({
+    customer: null,
+    order: null,
+  });
+
+  const handleFileUpload = (e, type) => {
+    setSelectedFiles((prev) => ({ ...prev, [type]: e.target.files[0] }));
+  };
+
+  const uploadTemplate = async (type) => {
+    if (!selectedFiles[type]) 
+      return;
+
+    const formData = new FormData();
+    formData.append('file', selectedFiles[type]);
+
+    try {
+      const res = await axios.post(`${backendUrl}/api/admin/upload-dataset-template/${type}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      if (res.data.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Uploaded!',
+          text: `${type} dataset template uploaded successfully.`,
+        });
+        setSelectedFiles((prev) => ({ ...prev, [type]: null }));
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Oops...',
+          text: res.data.message || 'Upload failed.',
+        });
+      }
+    } catch (err) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: err.response?.data?.message || 'Server error while uploading.',
+      });
+    }
+  };
+
   return (
     <div>
       {/* Navbar and Sidebar outside main content */}
@@ -87,10 +131,58 @@ const UserHome = () => {
             Manage Feedback
           </button>
         </div>
+
+        {/* Dataset Template Upload Section */}
+        <div className="max-w-4xl mx-auto bg-white shadow-md rounded-lg p-8 border-2 border-[#C3E5F1] mb-12">
+          <h2 className="text-2xl font-bold mb-6 text-center text-[#2C3E50]">
+            Dataset Template Management
+          </h2>
+          <p className="text-center text-gray-600 mb-8">
+            Upload the latest dataset template. Each type only keeps <b>one active template</b>. Uploading a new one will replace the old.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Customer Dataset Template */}
+            <div className="flex flex-col items-center justify-center border rounded-lg p-6">
+              <h3 className="text-lg font-semibold mb-4 text-[#2C3E50]">Customer Dataset Template</h3>
+              <input
+                type="file"
+                accept=".csv,.xlsx"
+                onChange={(e) => handleFileUpload(e, 'customer')}
+                className="mb-4"
+              />
+              <button
+                onClick={() => uploadTemplate('customer')}
+                disabled={!selectedFiles.customer}
+                className="py-2 px-4 rounded-lg bg-[#C3E5F1] text-black font-semibold border border-black hover:brightness-90 disabled:opacity-50"
+              >
+                Upload
+              </button>
+            </div>
+
+            {/* Order Dataset Template */}
+            <div className="flex flex-col items-center justify-center border rounded-lg p-6">
+              <h3 className="text-lg font-semibold mb-4 text-[#2C3E50]">Order Dataset Template</h3>
+              <input
+                type="file"
+                accept=".csv,.xlsx"
+                onChange={(e) => handleFileUpload(e, 'order')}
+                className="mb-4"
+              />
+              <button
+                onClick={() => uploadTemplate('order')}
+                disabled={!selectedFiles.order}
+                className="py-2 px-4 rounded-lg bg-[#C3E5F1] text-black font-semibold border border-black hover:brightness-90 disabled:opacity-50"
+              >
+                Upload
+              </button>
+            </div>
+          </div>
+        </div>
       </main>
       </div>
       {/* Footer */}
-          <Footer />
+      <Footer />
     </div>
   );
 };

@@ -219,8 +219,8 @@ const DatasetTab = () => {
 
             <a
               href={activeTab === 'customer'
-                ? '/template/customer_data_template.csv'
-                : '/template/order_data_template.csv'}
+                ? `${backendUrl}/api/dataset/template/customer`
+                : `${backendUrl}/api/dataset/template/order`}
               download
               className="inline-block bg-[#F1F8E9] border border-green-400 text-green-700 font-medium py-2 px-4 rounded hover:bg-[#E6F4D7] transition"
             >
