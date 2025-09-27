@@ -1,4 +1,5 @@
 import datasetModel from '../models/datasetModel.js';
+import datasetTemplate from '../models/datasetTemplateModel.js';
 import path from 'path';
 import csvParser from 'csv-parser';
 import { fileURLToPath } from 'url';
@@ -210,5 +211,24 @@ export const previewDataset = async (req, res) => {
   } catch (error) {
     console.error('🔥 Error in previewDataset:', error);
     return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Get template by type
+export const getDatasetTemplate = async (req, res) => {
+  try {
+    const { type } = req.params; // "customer" or "order"
+    const template = await datasetTemplate.findOne({ type });
+
+    if (!template) {
+      return res.status(404).json({ success: false, message: 'Template not found' });
+    }
+
+    res.setHeader('Content-Disposition', `attachment; filename="${template.fileName}"`);
+    res.setHeader('Content-Type', template.mimetype);
+    res.send(template.data); // send raw buffer
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
   }
 };

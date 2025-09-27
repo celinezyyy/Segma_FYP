@@ -4,7 +4,8 @@ import {
   getUserDatasets,
   deleteDataset,
   previewDataset, 
-  getDatasetCounts
+  getDatasetCounts,
+  getDatasetTemplate
 } from '../controllers/datasetController.js';
 import userAuth from '../middleware/userAuth.js';
 import datasetUpload from '../middleware/multerMiddleware.js';
@@ -15,10 +16,6 @@ datasetRouter.get('/', userAuth, getUserDatasets);
 datasetRouter.get('/preview/:id', userAuth, previewDataset);
 datasetRouter.delete('/delete-dataset/:id', userAuth, deleteDataset);
 datasetRouter.get('/dataset-counts', userAuth, getDatasetCounts);
-
+datasetRouter.get('/template/:type', userAuth, getDatasetTemplate);
 
 export default datasetRouter;
-
-//-------------------------------------------
-// import pandas as pd
-// df = pd.read_csv('uploads/filename.csv')
