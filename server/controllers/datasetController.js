@@ -24,15 +24,8 @@ export const uploadDataset = async (req, res) => {
     const formattedType = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
 
     const expectedHeaders = {
-      Customer: [
-        'Customer_ID', 'Age', 'Gender', 'Income', 'Marital Status',
-        'Occupation', 'Educational Level', 'Family Size', 'Nationality',
-        'Zipcode', 'City', 'State', 'Country', 'Location'
-      ],
-      Order: [
-        'Order_ID', 'Customer_ID', 'Purchase Item', 'Purchase Date', 'Purchase Time',
-        'Purchase Channel', 'Total Spend', 'PurchaseQuantity', 'Transaction Method'
-      ]
+      Customer: ['CustomerID', 'Date of Birth', 'Gender', 'Income Level', 'City', 'State', 'Country'],
+      Order: ['OrderID', 'CustomerID', 'Purchase Item', 'Purchase Date', 'Purchase Time', 'Purchase Quantity', 'Total Spend','Transaction Method']
     };
 
     const required = expectedHeaders[formattedType];
