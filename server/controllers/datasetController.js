@@ -189,16 +189,11 @@ export const previewDataset = async (req, res) => {
       stream
         .pipe(csvParser())
         .on('data', (row) => {
-          if (rowIndex === 0) {
-            rowIndex++;
-            return;
-          }
           rows.push(row);
         })
         .on('end', resolve)
         .on('error', reject);
     });
-
 
     return res.status(200).json({ success: true, preview: rows.slice(0, 100) }); // send up to 100 rows
   } catch (error) {
