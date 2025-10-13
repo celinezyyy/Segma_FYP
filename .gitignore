@@ -5,6 +5,9 @@
 /client/node_modules
 /server/node_modules
 
+# Python virtual environments
+/venv_fyp_new
+
 # Build outputs
 /client/dist
 /server/dist
