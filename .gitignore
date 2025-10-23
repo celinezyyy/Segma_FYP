@@ -20,10 +20,9 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Env files
-.env
+# .env
 .env.local
 .env.*.local
-/server/.env
 /server/.env.*.local
 
 # OS / editor junk
