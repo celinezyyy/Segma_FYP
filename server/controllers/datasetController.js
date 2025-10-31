@@ -9,11 +9,11 @@ import { getGridFSBucket } from '../utils/gridfs.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// UPDATE THE COLUMN HERE(only customer column need to modify), OPTIONAL & MANDATORY COLUMNS
 export const uploadDataset = async (req, res) => {
   try {
-    const bucket = getGridFSBucket(); 
+    const bucket = getGridFSBucket();
     if (!req.file) {
-      console.log('No file found in request');
       return res.status(400).json({ success: false, message: 'No file uploaded' });
     }
 
@@ -24,8 +24,17 @@ export const uploadDataset = async (req, res) => {
     const formattedType = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
 
     const expectedHeaders = {
-      Customer: ['CustomerID', 'Date of Birth', 'Gender', 'Income Level', 'City', 'State', 'Country'],
-      Order: ['OrderID', 'CustomerID', 'Purchase Item', 'Purchase Date', 'Purchase Time', 'Purchase Quantity', 'Total Spend','Transaction Method']
+      Customer: ['CustomerID', 'Date of Birth', 'Gender', 'City', 'State'],
+      Order: [
+        'OrderID',
+        'CustomerID',
+        'Purchase Item',
+        'Purchase Date',
+        'Item Price',
+        'Purchase Quantity',
+        'Total Spend',
+        'Transaction Method'
+      ]
     };
 
     const required = expectedHeaders[formattedType];
@@ -34,40 +43,50 @@ export const uploadDataset = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid dataset type' });
     }
 
-    // Convert buffer to stream for csv-parser
+    // --- Parse CSV headers ---
     const stream = Readable.from(req.file.buffer);
-
     const headers = await new Promise((resolve, reject) => {
       stream
         .pipe(csvParser())
         .on('headers', (headers) => {
-          console.log('Headers received:', headers);
-          resolve(headers);
+          // Remove BOM and trim
+          const cleaned = headers.map(h => h.trim().replace(/^\uFEFF/, ''));
+          console.log('Headers received:', cleaned);
+          resolve(cleaned); // ✅ Use cleaned headers
         })
-        .on('error', (err) => {
-          console.error('CSV parse error:', err);
-          reject(err);
-        });
+        .on('error', reject);
     });
 
-    const missing = required.filter((col) => !headers.includes(col));
-    if (missing.length > 0) {
+    // --- Compare headers ---
+    const missing = required.filter(col => !headers.includes(col));
+    const extra = headers.filter(col => !required.includes(col));
+
+    if (missing.length > 0 || extra.length > 0) {
       console.log('Missing columns:', missing);
+      console.log('Extra columns:', extra);
+
+      let htmlMsg = '<div style="text-align:left;">';
+
+      if (missing.length > 0) {
+        htmlMsg += `<p><b>Missing required columns:</b></p><ul>${missing.map(c => `<li>${c}</li>`).join('')}</ul>`;
+      }
+
+      if (extra.length > 0) {
+        htmlMsg += `<p><b>Unexpected extra columns found:</b></p><ul>${extra.map(c => `<li>${c}</li>`).join('')}</ul>`;
+      }
+
+      htmlMsg += '</div>';
+
       return res.status(400).json({
         success: false,
-        message: `Missing required columns: ${missing.join(', ')}`,
+        message: htmlMsg, // return ready-to-render HTML
       });
     }
 
-    // Save to gridfs AFTER validation
-    const filename = Date.now() + '-' + Math.round(Math.random() * 1e9) + '.csv';
-
+    // --- Save valid dataset ---
+    const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}.csv`;
     const uploadStream = bucket.openUploadStream(filename, {
-      metadata: {
-        user: userId,
-        type: formattedType,
-        originalname
-      }
+      metadata: { user: userId, type: formattedType, originalname }
     });
 
     await new Promise((resolve, reject) => {
@@ -96,10 +115,14 @@ export const uploadDataset = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('🔥 Unexpected error in uploadDataset:', error);
-    return res.status(500).json({ success: false, message: 'Server error during dataset upload' });
+    console.error('Error in uploadDataset:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error during dataset upload',
+    });
   }
 };
+
 
 export const getUserDatasets = async (req, res) => {
   try {

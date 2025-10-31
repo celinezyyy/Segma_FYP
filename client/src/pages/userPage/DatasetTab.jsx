@@ -42,7 +42,8 @@ const DatasetTab = () => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const res = await axios.post(`${backendUrl}/api/dataset/upload/${activeTab}`,
+      const res = await axios.post(
+        `${backendUrl}/api/dataset/upload/${activeTab}`,
         formData,
         {
           headers: { 'Content-Type': 'multipart/form-data' },
@@ -60,37 +61,30 @@ const DatasetTab = () => {
           showConfirmButton: false,
           timer: 2000,
         });
-      } else {
-        Swal.fire({
-          icon: 'error',
-          text: res.data.message || 'Upload failed',
-          showConfirmButton: false,
-          timer: 2000,
-        });
       }
     } catch (err) {
       console.error('Upload error:', err);
       const backendMsg = err?.response?.data?.message;
-      if (backendMsg?.includes('Missing required columns')) {
-        const missingList = backendMsg
-          .replace('Missing required columns: ', '')
-          .split(',')
-          .map(col => `<li>${col.trim()}</li>`)
-          .join('');
 
+      // If backend sends HTML (missing/extra columns)
+      if (backendMsg && backendMsg.includes('<ul')) {
         Swal.fire({
           icon: 'error',
           title: 'Upload Failed',
-          html: `
-            <p><b>Please upload correct dataset format.</b><br>
-            The following required columns are missing:</p>
-            <ul style="text-align:center; list-style: none; padding: 0;">
-              ${missingList}
-            </ul>`,
+          html: backendMsg,
           confirmButtonText: 'Fix Dataset',
           confirmButtonColor: '#3b82f6',
         });
+        return;
       }
+
+      // Generic fallback
+      Swal.fire({
+        icon: 'error',
+        text: backendMsg || 'Upload failed',
+        showConfirmButton: false,
+        timer: 2000,
+      });
     }
   };
 
