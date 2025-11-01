@@ -5,6 +5,9 @@ import csvParser from 'csv-parser';
 import { fileURLToPath } from 'url';
 import { Readable } from 'stream';
 import { getGridFSBucket } from '../utils/gridfs.js';
+import { spawn } from 'child_process';
+import fs from 'fs';
+import os from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -260,5 +263,103 @@ export const getDatasetCleanStatus = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+export const startDatasetCleaning = async (req, res) => {
+  try {
+    const datasetId = req.params.datasetId;
+    const userId = req.userId;
+
+    const dataset = await datasetModel.findOne({ _id: datasetId, user: userId });
+    if (!dataset) return res.status(404).json({ success:false, message: 'Dataset not found' });
+    if (dataset.isCleaning) return res.status(400).json({ success:false, message: 'Cleaning already in progress' });
+
+    // Mark as cleaning
+    dataset.isCleaning = true;
+    await dataset.save();
+
+    // 1) Download the file from GridFS to temp file
+    const bucket = getGridFSBucket();
+    const tempDir = path.join(os.tmpdir(), `dataset-${datasetId}`);
+    fs.mkdirSync(tempDir, { recursive: true });
+    const localInputPath = path.join(tempDir, dataset.filename);
+
+    const downloadStream = bucket.openDownloadStreamByName(dataset.filename);
+    const writeStream = fs.createWriteStream(localInputPath);
+
+    downloadStream.pipe(writeStream);
+
+    writeStream.on('finish', () => {
+      // 2) Spawn python cleaning script
+      // Assumes you have a python CLI script 'data_clean.py' that accepts --input --output --type
+      const cleanedFilename = dataset.filename.replace('.csv', '_cleaned.csv');
+      const localOutputPath = path.join(tempDir, cleanedFilename);
+
+      const py = spawn('python', [
+        'server/python/dataCleaning/data_clean.py',
+        '--input', localInputPath,
+        '--output', localOutputPath,
+        '--type', dataset.type.toLowerCase()
+      ], { stdio: 'inherit' });
+
+      py.on('error', async (err) => {
+        console.error('Failed to start python cleaning process', err);
+        dataset.isCleaning = false;
+        dataset.cleanError = err.message;
+        await dataset.save();
+      });
+
+      py.on('close', async (code) => {
+        try {
+          if (code !== 0) {
+            dataset.isCleaning = false;
+            dataset.cleanError = `Python process exited with ${code}`;
+            await dataset.save();
+            return;
+          }
+
+          // 3) Upload cleaned file back to GridFS
+          const uploadStream = bucket.openUploadStream(cleanedFilename, {
+            metadata: { user: userId, type: dataset.type, originalname: cleanedFilename }
+          });
+
+          const rs = fs.createReadStream(localOutputPath);
+          rs.pipe(uploadStream)
+            .on('error', async (err) => {
+              console.error('Upload to GridFS failed', err);
+              dataset.isCleaning = false;
+              dataset.cleanError = err.message;
+              await dataset.save();
+            })
+            .on('finish', async () => {
+              dataset.isCleaning = false;
+              dataset.isClean = true;
+              dataset.cleanFilename = cleanedFilename;
+              dataset.cleanFileId = uploadStream.id;
+              dataset.cleanedAt = new Date();
+              await dataset.save();
+              // optional: cleanup temp files
+            });
+        } catch (err) {
+          console.error('Error post-processing cleaned file', err);
+          dataset.isCleaning = false;
+          dataset.cleanError = err.message;
+          await dataset.save();
+        }
+      });
+    });
+
+    writeStream.on('error', async (err) => {
+      console.error('Failed to write temp input file', err);
+      dataset.isCleaning = false;
+      dataset.cleanError = err.message;
+      await dataset.save();
+    });
+
+    return res.status(202).json({ success:true, message: 'Cleaning started' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success:false, message: 'Server error' });
   }
 };

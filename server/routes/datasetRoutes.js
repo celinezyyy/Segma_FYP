@@ -19,5 +19,6 @@ datasetRouter.delete('/delete-dataset/:id', userAuth, deleteDataset);
 datasetRouter.get('/dataset-counts', userAuth, getDatasetCounts);
 datasetRouter.get('/template/:type', userAuth, getDatasetTemplate);
 datasetRouter.get('/status/:datasetId', userAuth, getDatasetCleanStatus); 
+// datasetRouter.post('/clean/:datasetId', userAuth, startDatasetCleaning);
 
 export default datasetRouter;
