@@ -225,7 +225,6 @@ export const previewDataset = async (req, res) => {
   }
 };
 
-// Get template by type
 export const getDatasetTemplate = async (req, res) => {
   try {
     const { type } = req.params; // "customer" or "order"
@@ -241,5 +240,25 @@ export const getDatasetTemplate = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const getDatasetCleanStatus = async (req, res) => {
+  try {
+    if (!req.params.datasetId) {
+      return res.status(400).json({ success: false, message: 'Dataset ID is required' });
+    }
+    
+    const dataset = await datasetModel.findById(req.params.datasetId);
+    if (!dataset) 
+      return res.status(404).json({ success: false, message: 'Dataset not found' });
+
+    res.json({
+      success: true,
+      isClean: dataset.isClean,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
