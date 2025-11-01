@@ -12,6 +12,7 @@ import MyProfile from './pages/userPage/MyProfile';
 import SubmitFeedback from './pages/userPage/SubmitFeedback';
 import ViewFeedbackStatus from './pages/userPage/ViewFeedbackStatus';
 import DatasetSelection from './pages/userPage/DatasetSelection';
+import ConfirmSelectedDataset from './pages/userPage/ConfirmSelectedDataset';
 
 import AdminHome from './pages/adminPage/AdminHome';
 import UserList from './pages/adminPage/UserList';
@@ -38,6 +39,7 @@ const App = () => {
         <Route path='/admin-profile' element={<AdminProfile />}/>
         <Route path='/admin-feedback-list' element={<FeedbackList />}/>
         <Route path='/dataset-selection' element={<DatasetSelection />}/>
+        <Route path='/confirm-selected-dataset' element={<ConfirmSelectedDataset />}/>
         <Route></Route>
       </Routes>
     </div>

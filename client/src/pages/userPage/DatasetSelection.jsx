@@ -83,7 +83,10 @@ const DatasetSelection = () => {
       });
       return;
     }
-    navigate('/segmentation');
+
+    navigate('/confirm-selected-dataset', {
+      state: { selectedCustomer, selectedOrder },
+    });
   };
 
   const allDatasets = activeTab === 'customer' ? customerDatasets : orderDatasets;
