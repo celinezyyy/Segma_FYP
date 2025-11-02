@@ -126,7 +126,6 @@ export const uploadDataset = async (req, res) => {
   }
 };
 
-
 export const getUserDatasets = async (req, res) => {
   try {
     const userId = req.userId;
@@ -266,100 +265,96 @@ export const getDatasetCleanStatus = async (req, res) => {
   }
 };
 
+// Handle dataset cleaning process
 export const startDatasetCleaning = async (req, res) => {
   try {
-    const datasetId = req.params.datasetId;
+    const { customerDatasetId, orderDatasetId } = req.body;
     const userId = req.userId;
+    const bucket = getGridFSBucket();
+
+    const datasetId = customerDatasetId || orderDatasetId;
+    const type = customerDatasetId ? 'Customer' : 'Order';
+
+    if (!datasetId) {
+      return res.status(400).json({ success: false, message: 'No dataset ID provided.' });
+    }
 
     const dataset = await datasetModel.findOne({ _id: datasetId, user: userId });
-    if (!dataset) return res.status(404).json({ success:false, message: 'Dataset not found' });
-    if (dataset.isCleaning) return res.status(400).json({ success:false, message: 'Cleaning already in progress' });
+    if (!dataset) {
+      return res.status(404).json({ success: false, message: `${type} dataset not found.` });
+    }
 
-    // Mark as cleaning
-    dataset.isCleaning = true;
-    await dataset.save();
+    const tempDir = path.join(__dirname, '../temp');
+    if (!fs.existsSync(tempDir)) 
+      fs.mkdirSync(tempDir);
 
-    // 1) Download the file from GridFS to temp file
-    const bucket = getGridFSBucket();
-    const tempDir = path.join(os.tmpdir(), `dataset-${datasetId}`);
-    fs.mkdirSync(tempDir, { recursive: true });
-    const localInputPath = path.join(tempDir, dataset.filename);
+    const tempFilePath = path.join(tempDir, dataset.filename);
 
-    const downloadStream = bucket.openDownloadStreamByName(dataset.filename);
-    const writeStream = fs.createWriteStream(localInputPath);
+    // Step 1: Download dataset from GridFS
+    await new Promise((resolve, reject) => {
+      const downloadStream = bucket.openDownloadStream(dataset.fileId);
+      const writeStream = fs.createWriteStream(tempFilePath);
+      downloadStream.pipe(writeStream)
+        .on('error', reject)
+        .on('finish', resolve);
+    });
 
-    downloadStream.pipe(writeStream);
-
-    writeStream.on('finish', () => {
-      // 2) Spawn python cleaning script
-      // Assumes you have a python CLI script 'data_clean.py' that accepts --input --output --type
-      const cleanedFilename = dataset.filename.replace('.csv', '_cleaned.csv');
-      const localOutputPath = path.join(tempDir, cleanedFilename);
-
+    // Step 2: Run Python cleaning script
+    const pythonScript = path.join(__dirname, '../python/cleaningPipeline/cleaning_main.py');
+    await new Promise((resolve, reject) => {
       const py = spawn('python', [
-        'server/python/dataCleaning/data_clean.py',
-        '--input', localInputPath,
-        '--output', localOutputPath,
-        '--type', dataset.type.toLowerCase()
-      ], { stdio: 'inherit' });
-
-      py.on('error', async (err) => {
-        console.error('Failed to start python cleaning process', err);
-        dataset.isCleaning = false;
-        dataset.cleanError = err.message;
-        await dataset.save();
+        pythonScript,
+        '--type', type.toLowerCase(),
+        '--temp_file_path_with_filename', tempFilePath,
+        '--original_file_name', dataset.originalname
+      ], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
       });
 
-      py.on('close', async (code) => {
-        try {
-          if (code !== 0) {
-            dataset.isCleaning = false;
-            dataset.cleanError = `Python process exited with ${code}`;
-            await dataset.save();
-            return;
-          }
+      let errorOutput = '';
 
-          // 3) Upload cleaned file back to GridFS
-          const uploadStream = bucket.openUploadStream(cleanedFilename, {
-            metadata: { user: userId, type: dataset.type, originalname: cleanedFilename }
-          });
+      py.stdout.on('data', (data) => console.log(`[${type} Cleaning] ${data.toString()}`));
+      py.stderr.on('data', (data) => {
+        errorOutput += data.toString();
+        console.error(`[${type} Cleaning Error] ${data.toString()}`);
+      });
 
-          const rs = fs.createReadStream(localOutputPath);
-          rs.pipe(uploadStream)
-            .on('error', async (err) => {
-              console.error('Upload to GridFS failed', err);
-              dataset.isCleaning = false;
-              dataset.cleanError = err.message;
-              await dataset.save();
-            })
-            .on('finish', async () => {
-              dataset.isCleaning = false;
-              dataset.isClean = true;
-              dataset.cleanFilename = cleanedFilename;
-              dataset.cleanFileId = uploadStream.id;
-              dataset.cleanedAt = new Date();
-              await dataset.save();
-              // optional: cleanup temp files
-            });
-        } catch (err) {
-          console.error('Error post-processing cleaned file', err);
-          dataset.isCleaning = false;
-          dataset.cleanError = err.message;
-          await dataset.save();
-        }
+      py.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`${type} cleaning failed: ${errorOutput}`));
       });
     });
 
-    writeStream.on('error', async (err) => {
-      console.error('Failed to write temp input file', err);
-      dataset.isCleaning = false;
-      dataset.cleanError = err.message;
-      await dataset.save();
+    // Step 3: Upload cleaned dataset to GridFS
+    const baseName = path.parse(dataset.originalname).name;
+    const ext = path.parse(dataset.originalname).ext;
+    const cleanedFilePath = path.join(tempDir, `${baseName}_cleaned${ext}`);
+
+    const uploadStream = bucket.openUploadStream(`${baseName}_cleaned${ext}`, {
+      metadata: { user: userId, type: dataset.type, isClean: true },
     });
 
-    return res.status(202).json({ success:true, message: 'Cleaning started' });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ success:false, message: 'Server error' });
+    await new Promise((resolve, reject) => {
+      fs.createReadStream(cleanedFilePath)
+        .pipe(uploadStream)
+        .on('error', reject)
+        .on('finish', resolve);
+    });
+
+    await datasetModel.findByIdAndUpdate(datasetId, {
+      isClean: true,
+      cleanFileId: uploadStream.id,
+      cleanFilename: `${baseName}_cleaned${ext}`,
+    });
+
+    fs.unlinkSync(tempFilePath);
+    fs.unlinkSync(cleanedFilePath);
+
+    res.json({ success: true, message: `${type} dataset cleaned successfully.` });
+
+  } catch (error) {
+    console.error('Error in startDatasetCleaning:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };

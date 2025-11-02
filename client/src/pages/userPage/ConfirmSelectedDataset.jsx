@@ -16,6 +16,9 @@ const ConfirmSelectedDataset = () => {
     const [customerDataset, setCustomerDataset] = useState(null);
     const [orderDataset, setOrderDataset] = useState(null);
     const [loading, setLoading] = useState(true);
+    // For spinner & dynamic message
+    const [isCleaning, setIsCleaning] = useState(false);
+    const [cleanMessage, setCleanMessage] = useState("");
 
     useEffect(() => {
         if (!location.state || !selectedCustomer || !selectedOrder) {
@@ -47,90 +50,83 @@ const ConfirmSelectedDataset = () => {
         setLoading(false);
         }
     };
-
+    
     const handlePerformDataCheck = async () => {
-        console.log('Customer Dataset:', customerDataset);
-        console.log('Order Dataset:', orderDataset);
+        console.log('Customer Dataset:', customerDataset); 
+        console.log('Order Dataset:', orderDataset); 
 
-        if (!customerDataset || !orderDataset) {
-            Swal.fire({
-            icon: 'error',
-            title: 'Error',
-            text: 'Both datasets must be selected before performing data checking.',
-            });
-            return;
-        }
+        if (!customerDataset || !orderDataset) { 
+            Swal.fire({ 
+            icon: 'error', 
+            title: 'Error', 
+            text: 'Both datasets must be selected before performing data checking.', 
+            }); 
+            return; 
+        } 
 
-        Swal.fire({
-            title: 'Perform Data Checking?',
-            text: 'We will clean and validate both datasets. This may take a few moments depending on size.',
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonColor: '#66a868ff',
-            confirmButtonText: 'Yes, proceed',
-        }).then(async (result) => {
-            
-            if (result.isConfirmed) {
-            try {
-                // Step 1: Check both clean statuses in parallel
-                const [customerRes, orderRes] = await Promise.all([
-                axios.get(`${backendUrl}/api/dataset/status/${customerDataset._id}`, { withCredentials: true }),
-                axios.get(`${backendUrl}/api/dataset/status/${orderDataset._id}`, { withCredentials: true }),
-                ]);
+        Swal.fire({ 
+            title: 'Perform Data Checking?', 
+            text: 'We will clean and validate both datasets. This may take a few moments depending on size.', 
+            icon: 'question', 
+            showCancelButton: true, 
+            confirmButtonColor: '#66a868ff', 
+            confirmButtonText: 'Yes, proceed', 
+        }).then(async (result) => { 
+            if (result.isConfirmed) { 
+                try {
+                    // Step 1: Check both clean statuses in parallel
+                    const [customerRes, orderRes] = await Promise.all([
+                        axios.get(`${backendUrl}/api/dataset/status/${customerDataset._id}`, { withCredentials: true }),
+                        axios.get(`${backendUrl}/api/dataset/status/${orderDataset._id}`, { withCredentials: true }),
+                    ]);
 
-                const isCustomerClean = customerRes.data?.isClean;
-                const isOrderClean = orderRes.data?.isClean;
+                    const isCustomerClean = customerRes.data?.isClean;
+                    const isOrderClean = orderRes.data?.isClean;
 
-                if (isCustomerClean && isOrderClean) {
+                     // Step 2: Start cleaning in sequence
+                    if (!isCustomerClean) {
+                        Swal.fire({
+                        title: 'Cleaning Customer Dataset',
+                        text: 'Please wait while we clean your customer data...',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                        didOpen: () => Swal.showLoading(),
+                        });
+
+                        await axios.post(`${backendUrl}/api/dataset/clean`, { customerDatasetId: customerDataset._id }, { withCredentials: true });
+                        Swal.close();
+                    }
+
+                    if (!isOrderClean) {
+                        Swal.fire({
+                        title: 'Cleaning Order Dataset',
+                        text: 'Please wait while we clean your order data...',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                        didOpen: () => Swal.showLoading(),
+                        });
+
+                        await axios.post(`${backendUrl}/api/dataset/clean`, { orderDatasetId: orderDataset._id }, { withCredentials: true });
+                        Swal.close();
+                    }
+
                     Swal.fire({
                         icon: 'success',
-                        title: 'Both Datasets Already Clean',
-                        text: 'Skipping cleaning process and proceeding to segmentation.',
-                        timer: 3000,
+                        title: 'Cleaning Complete',
+                        text: 'All datasets are now clean! Proceeding to segmentation...',
+                        timer: 2500,
                         showConfirmButton: false,
                     });
 
-                    navigate('/segmentation', {
-                        state: { selectedCustomer, selectedOrder },
+                    navigate('/segmentation', { state: { selectedCustomer, selectedOrder }});
+                } catch (err) {
+                    console.error("Error during cleaning process:", err);
+                    Swal.fire({
+                    icon: "error",
+                    title: "Cleaning Failed",
+                    text: "An unexpected error occurred during cleaning. Please try again.",
                     });
-                    return;
                 }
-
-                // Step 2: At least one dataset is not clean
-                Swal.fire({
-                    icon: 'info',
-                    title: 'Processing...',
-                    text: 'Performing data checking and cleaning, please wait...',
-                    showConfirmButton: false,
-                });
-
-                // Call cleaning APIs separately for each
-                if (!isCustomerClean) {
-                    await axios.post(`${backendUrl}/api/dataset/clean/${customerDataset._id}`, {}, { withCredentials: true });
-                }
-                if (!isOrderClean) {
-                    await axios.post(`${backendUrl}/api/dataset/clean/${orderDataset._id}`, {}, { withCredentials: true });
-                }
-
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Cleaning Complete',
-                    text: 'Both datasets cleaned and validated successfully!',
-                    timer: 2500,
-                    showConfirmButton: false,
-                });
-
-                navigate('/segmentation', {
-                state: { selectedCustomer, selectedOrder },
-                });
-            } catch (err) {
-                console.error('Error details:', err);
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: err.response?.data?.message || 'Failed to check dataset status. Please try again.',
-                });
-            }
             }
         });
     };
