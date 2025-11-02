@@ -318,7 +318,7 @@ const DatasetTab = () => {
 
         {previewData && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-            <div className="bg-white rounded-xl p-6 max-w-4xl w-full max-h-[80vh] overflow-auto shadow-xl relative">
+            <div className="bg-white rounded-xl p-6 max-w-6xl w-full max-h-[85vh] overflow-hidden shadow-xl relative flex flex-col">
               <button
                 className="absolute top-2 right-3 text-gray-500 hover:text-black text-xl font-bold"
                 onClick={() => {
@@ -330,18 +330,26 @@ const DatasetTab = () => {
               >
                 &times;
               </button>
-              <h2 className="text-lg font-semibold mb-4 text-[#2C3E50]">
-                Preview: {previewingDataset?.originalname}
-              </h2>
-              <p className="text-sm text-gray-500 mb-4 italic">
-                (Only the first 100 rows are shown in this preview)
-              </p>
-              <div className="overflow-x-auto">
-                <table className="w-full border border-gray-300 text-sm">
-                  <thead>
-                    <tr className="bg-gray-100">
+
+              <div className="sticky top-0 z-20 bg-white pb-2">
+                <h2 className="text-lg font-semibold mb-1 text-[#2C3E50]">
+                  Preview: {previewingDataset?.originalname}
+                </h2>
+                <p className="text-sm text-gray-500 italic">
+                  (Only the first 100 rows are shown in this preview)
+                </p>
+                <div className="border-b mt-2"></div>
+              </div>
+
+              <div className="overflow-x-auto relative">
+                <table className="min-w-max border-collapse border border-gray-300 text-sm w-full">
+                  <thead className="sticky top-0 z-20 bg-gray-100">
+                    <tr className="border-b border-gray-300">
                       {previewHeaders.map((header, index) => (
-                        <th key={index} className="px-2 py-1 border">
+                        <th
+                          key={index}
+                          className="px-3 py-2 border whitespace-nowrap text-left text-[#2C3E50] font-medium bg-gray-100"
+                        >
                           {header}
                         </th>
                       ))}
@@ -349,9 +357,12 @@ const DatasetTab = () => {
                   </thead>
                   <tbody>
                     {previewRows.map((row, rowIndex) => (
-                      <tr key={rowIndex}>
+                      <tr key={rowIndex} className="hover:bg-gray-50">
                         {row.map((cell, cellIndex) => (
-                          <td key={cellIndex} className="px-2 py-1 border">
+                          <td
+                            key={cellIndex}
+                            className="px-3 py-2 border whitespace-nowrap"
+                          >
                             {cell}
                           </td>
                         ))}
