@@ -74,6 +74,7 @@ const ConfirmSelectedDataset = () => {
         }).then(async (result) => { 
             if (result.isConfirmed) { 
                 try {
+                    await new Promise((resolve) => setTimeout(resolve, 500));
                     // Step 1: Check both clean statuses in parallel
                     const [customerRes, orderRes] = await Promise.all([
                         axios.get(`${backendUrl}/api/dataset/status/${customerDataset._id}`, { withCredentials: true }),
@@ -83,7 +84,7 @@ const ConfirmSelectedDataset = () => {
                     const isCustomerClean = customerRes.data?.isClean;
                     const isOrderClean = orderRes.data?.isClean;
 
-                     // Step 2: Start cleaning in sequence
+                    // Step 2: Start cleaning in sequence
                     if (!isCustomerClean) {
                         Swal.fire({
                         title: 'Cleaning Customer Dataset',
@@ -95,6 +96,7 @@ const ConfirmSelectedDataset = () => {
 
                         await axios.post(`${backendUrl}/api/dataset/clean`, { customerDatasetId: customerDataset._id }, { withCredentials: true });
                         Swal.close();
+                        await new Promise((resolve) => setTimeout(resolve, 1000));
                     }
 
                     if (!isOrderClean) {
@@ -109,7 +111,7 @@ const ConfirmSelectedDataset = () => {
                         await axios.post(`${backendUrl}/api/dataset/clean`, { orderDatasetId: orderDataset._id }, { withCredentials: true });
                         Swal.close();
                     }
-
+                    await new Promise((resolve) => setTimeout(resolve, 800));
                     Swal.fire({
                         icon: 'success',
                         title: 'Cleaning Complete',
@@ -118,7 +120,10 @@ const ConfirmSelectedDataset = () => {
                         showConfirmButton: false,
                     });
 
-                    navigate('/segmentation', { state: { selectedCustomer, selectedOrder }});
+                    setTimeout(() => {
+                        navigate('/segmentation', { state: { selectedCustomer, selectedOrder } });
+                    }, 2500);
+        
                 } catch (err) {
                     console.error("Error during cleaning process:", err);
                     Swal.fire({

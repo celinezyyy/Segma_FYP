@@ -350,7 +350,6 @@ export const startDatasetCleaning = async (req, res) => {
     await datasetModel.findByIdAndUpdate(datasetId, {
       isClean: true,
       fileId: uploadStream.id,
-      cleanFilename: dataset.filename,
     });
 
     // Cleanup temp files

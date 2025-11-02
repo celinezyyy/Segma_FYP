@@ -7,7 +7,6 @@ const datasetSchema = new mongoose.Schema({
   uploadedAt: { type: Date, default: Date.now },
   type: { type: String, enum: ['Customer', 'Order'], required: true },
   isClean: { type: Boolean, default: false },
-  cleanFilename: { type: String, default: null },
   cleanFileId: { type: mongoose.Schema.Types.ObjectId, default: null },
   fileId: { type: mongoose.Schema.Types.ObjectId, required: true },    
 });
