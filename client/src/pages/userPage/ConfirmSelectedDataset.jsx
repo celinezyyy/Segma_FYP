@@ -74,7 +74,7 @@ const ConfirmSelectedDataset = () => {
         }).then(async (result) => { 
             if (result.isConfirmed) { 
                 try {
-                    await new Promise((resolve) => setTimeout(resolve, 500));
+                    await new Promise((resolve) => setTimeout(resolve, 300));
                     // Step 1: Check both clean statuses in parallel
                     const [customerRes, orderRes] = await Promise.all([
                         axios.get(`${backendUrl}/api/dataset/status/${customerDataset._id}`, { withCredentials: true }),
