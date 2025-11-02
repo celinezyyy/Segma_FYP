@@ -279,18 +279,22 @@ export const startDatasetCleaning = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No dataset ID provided.' });
     }
 
+    // Fetch dataset document
     const dataset = await datasetModel.findOne({ _id: datasetId, user: userId });
     if (!dataset) {
       return res.status(404).json({ success: false, message: `${type} dataset not found.` });
     }
 
+    // Prepare temp directory & file paths
     const tempDir = path.join(__dirname, '../temp');
-    if (!fs.existsSync(tempDir)) 
-      fs.mkdirSync(tempDir);
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
 
     const tempFilePath = path.join(tempDir, dataset.filename);
+    const baseName = path.parse(dataset.originalname).name;
+    const ext = path.parse(dataset.originalname).ext;
+    const cleanedFilePath = path.join(tempDir, `${baseName}_cleaned${ext}`);
 
-    // Step 1: Download dataset from GridFS
+    // Download original dataset from GridFS
     await new Promise((resolve, reject) => {
       const downloadStream = bucket.openDownloadStream(dataset.fileId);
       const writeStream = fs.createWriteStream(tempFilePath);
@@ -299,7 +303,7 @@ export const startDatasetCleaning = async (req, res) => {
         .on('finish', resolve);
     });
 
-    // Step 2: Run Python cleaning script
+    // Run Python cleaning script
     const pythonScript = path.join(__dirname, '../python/cleaningPipeline/cleaning_main.py');
     await new Promise((resolve, reject) => {
       const py = spawn('python', [
@@ -326,12 +330,12 @@ export const startDatasetCleaning = async (req, res) => {
       });
     });
 
-    // Step 3: Upload cleaned dataset to GridFS
-    const baseName = path.parse(dataset.originalname).name;
-    const ext = path.parse(dataset.originalname).ext;
-    const cleanedFilePath = path.join(tempDir, `${baseName}_cleaned${ext}`);
+    // Delete original file from GridFS
+    await bucket.delete(dataset.fileId);
+    console.log(`[INFO] Original dataset file ${dataset.filename} deleted from GridFS`);
 
-    const uploadStream = bucket.openUploadStream(`${baseName}_cleaned${ext}`, {
+    // Upload cleaned dataset back to GridFS using the original filename
+    const uploadStream = bucket.openUploadStream(dataset.filename, {
       metadata: { user: userId, type: dataset.type, isClean: true },
     });
 
@@ -342,16 +346,18 @@ export const startDatasetCleaning = async (req, res) => {
         .on('finish', resolve);
     });
 
+    // Update dataset document with new fileId
     await datasetModel.findByIdAndUpdate(datasetId, {
       isClean: true,
-      cleanFileId: uploadStream.id,
-      cleanFilename: `${baseName}_cleaned${ext}`,
+      fileId: uploadStream.id,
+      cleanFilename: dataset.filename,
     });
 
+    // Cleanup temp files
     fs.unlinkSync(tempFilePath);
     fs.unlinkSync(cleanedFilePath);
 
-    res.json({ success: true, message: `${type} dataset cleaned successfully.` });
+    res.json({ success: true, message: `${type} dataset cleaned and replaced successfully.` });
 
   } catch (error) {
     console.error('Error in startDatasetCleaning:', error);
