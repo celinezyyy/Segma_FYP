@@ -268,6 +268,7 @@ export const getDatasetCleanStatus = async (req, res) => {
 // Handle dataset cleaning process
 export const startDatasetCleaning = async (req, res) => {
   try {
+    const io = req.app.get('io');
     const { customerDatasetId, orderDatasetId } = req.body;
     const userId = req.userId;
     const bucket = getGridFSBucket();
@@ -287,48 +288,81 @@ export const startDatasetCleaning = async (req, res) => {
 
     // Prepare temp directory & file paths
     const tempDir = path.join(__dirname, '../temp');
-    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
     const tempFilePath = path.join(tempDir, dataset.filename);
-    const baseName = path.parse(dataset.originalname).name;
-    const ext = path.parse(dataset.originalname).ext;
-    const cleanedFilePath = path.join(tempDir, `${baseName}_cleaned${ext}`);
-
-    // Download original dataset from GridFS
+     // Step A: Download dataset from GridFS (emit progress)
+    io?.to(userId).emit('cleaning-progress', { progress: 5, message: 'Downloading dataset...' });
     await new Promise((resolve, reject) => {
       const downloadStream = bucket.openDownloadStream(dataset.fileId);
       const writeStream = fs.createWriteStream(tempFilePath);
       downloadStream.pipe(writeStream)
-        .on('error', reject)
-        .on('finish', resolve);
+        .on('error', (err) => reject(err))
+        .on('finish', () => resolve());
     });
 
-    // Run Python cleaning script
+    // Step B: Spawn Python cleaning process (emit stage updates according to stdout or custom mapping)
     const pythonScript = path.join(__dirname, '../python/cleaningPipeline/cleaning_main.py');
-    await new Promise((resolve, reject) => {
-      const py = spawn('python', [
-        pythonScript,
-        '--type', type.toLowerCase(),
-        '--temp_file_path_with_filename', tempFilePath,
-        '--original_file_name', dataset.originalname
-      ], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
-      });
 
-      let errorOutput = '';
+    // Emit: start
+    io?.to(userId).emit('cleaning-progress', { progress: 10, message: 'Starting cleaning pipeline...' });
 
-      py.stdout.on('data', (data) => console.log(`[${type} Cleaning] ${data.toString()}`));
-      py.stderr.on('data', (data) => {
-        errorOutput += data.toString();
-        console.error(`[${type} Cleaning Error] ${data.toString()}`);
-      });
+    const py = spawn('python', [
+      pythonScript,
+      '--type', type.toLowerCase(),
+      '--temp_file_path_with_filename', tempFilePath,
+      '--original_file_name', dataset.originalname
+    ], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' }
+    });
 
+    let stderr = '';
+    py.stdout.on('data', (data) => {
+      const text = data.toString();
+      console.log(`[PYOUT] ${text}`);
+      // map textual progress updates to percentages (customize mapping as needed)
+      if (text.includes('Read file')) {
+        io?.to(userId).emit('cleaning-progress', { progress: 15, message: 'File loaded in Python' });
+      } else if (text.includes('Normalize Column Names') || text.includes('Stage 1')) {
+        io?.to(userId).emit('cleaning-progress', { progress: 30, message: 'Validating and normalizing data' });
+      } else if (text.includes('dedup')) {
+        io?.to(userId).emit('cleaning-progress', { progress: 55, message: 'Deduplicating records' });
+      } else if (text.includes('Missing Value') || text.includes('outlier')) {
+        io?.to(userId).emit('cleaning-progress', { progress: 75, message: 'Handling missing values & outliers (flagging)' });
+      } else if (text.includes('Cleaned dataset saved')) {
+        io?.to(userId).emit('cleaning-progress', { progress: 90, message: 'Finalizing cleaned file' });
+      }
+    });
+
+    py.stderr.on('data', (data) => {
+      const t = data.toString();
+      stderr += t;
+      console.error(`[PYERR] ${t}`);
+    });
+
+    // wait for python to exit
+    const exitCode = await new Promise((resolve, reject) => {
       py.on('close', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`${type} cleaning failed: ${errorOutput}`));
+        if (code === 0) resolve(0);
+        else reject(new Error(`Python cleaning failed with code ${code}: ${stderr}`));
       });
     });
+
+    // Step C: After python success, upload cleaned csv and report
+    // derive base names
+    const baseName = path.parse(dataset.originalname).name;
+    const ext = path.parse(dataset.originalname).ext;
+    const cleanedFilename = `${baseName}_cleaned${ext}`;
+    const cleanedFilePath = path.join(tempDir, cleanedFilename);
+    const reportFilePath = path.join(tempDir, `${baseName}_report.json`);
+
+    // ensure files exist
+    if (!fs.existsSync(cleanedFilePath)) throw new Error('Cleaned file not found after Python run');
+    if (!fs.existsSync(reportFilePath)) throw new Error('Report file not found after Python run');
+
+    io?.to(userId).emit('cleaning-progress', { progress: 92, message: 'Uploading cleaned file...' });
+
 
     // Delete original file from GridFS
     await bucket.delete(dataset.fileId);
@@ -342,24 +376,47 @@ export const startDatasetCleaning = async (req, res) => {
     await new Promise((resolve, reject) => {
       fs.createReadStream(cleanedFilePath)
         .pipe(uploadStream)
-        .on('error', reject)
-        .on('finish', resolve);
+        .on('error', (err) => reject(err))
+        .on('finish', () => resolve());
     });
+
+    // read the report JSON and parse it
+    const reportRaw = fs.readFileSync(reportFilePath, 'utf-8');
+    let report;
+    try {
+      report = JSON.parse(reportRaw);
+    } catch (err) {
+      report = { parseError: String(err), raw: reportRaw };
+    }
 
     // Update dataset document with new fileId
     await datasetModel.findByIdAndUpdate(datasetId, {
       isClean: true,
       fileId: uploadStream.id,
+      metadata: {
+        ...(dataset.metadata || {}),
+        data_quality_report: report
+      }
     });
 
-    // Cleanup temp files
-    fs.unlinkSync(tempFilePath);
-    fs.unlinkSync(cleanedFilePath);
-
-    res.json({ success: true, message: `${type} dataset cleaned and replaced successfully.` });
+    // cleanup temp files
+    try {
+      fs.unlinkSync(tempFilePath);
+      fs.unlinkSync(cleanedFilePath);
+      fs.unlinkSync(reportFilePath);
+    } catch (e) {
+      console.warn('Temp cleanup warning', e);
+    }
+    io?.to(userId).emit('cleaning-progress', { progress: 100, message: 'Cleaning finished', reportSaved: true });
+    return res.json({ success: true, message: `${type} dataset cleaned successfully.`, report });
+    // res.json({ success: true, message: `${type} dataset cleaned and replaced successfully.` });
 
   } catch (error) {
     console.error('Error in startDatasetCleaning:', error);
-    res.status(500).json({ success: false, message: error.message });
+    // try to emit failed progress
+    const io = req.app.get('io');
+    io?.to(req.userId).emit('cleaning-progress', { progress: 0, message: 'Cleaning failed', error: error.message });
+    return res.status(500).json({ success: false, message: error.message });
+    // res.status(500).json({ success: false, message: error.message });
   }
 };

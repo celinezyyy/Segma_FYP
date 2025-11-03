@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import 'dotenv/config';
+import { createServer } from "http";     // ✅ Required for Socket.IO
+import { Server } from "socket.io";  
 import cookieParser from "cookie-parser";
 import connectDB from "./config/mongodb.js";
 import authRouter from "./routes/authRoutes.js";
@@ -14,7 +16,43 @@ import { initGridFS } from "./utils/gridfs.js";
 
 const app  = express();
 const port = process.env.PORT;
-// connectDB();
+
+// Create HTTP server (so we can attach Socket.IO)
+const server = createServer(app);
+
+// Setup Socket.IO
+const io = new Server(server, {
+  cors: {
+    origin: 'http://localhost:5173', // Your frontend URL
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
+
+// Make io accessible inside routes/controllers
+app.set('io', io);
+
+// Optional: Handle client connection
+io.on("connection", (socket) => {
+  console.log("🟢 User connected:", socket.id);
+
+  // Optional — you can associate the socket with user later if needed
+  // Allow the client to register its userId so the server can emit to that user's room
+  socket.on('register', (payload) => {
+    try {
+      const userId = (payload && payload.userId) ? payload.userId : payload;
+      if (userId) {
+        socket.join(userId);
+        console.log(`Socket ${socket.id} joined room for user ${userId}`);
+      }
+    } catch (e) {
+      console.warn('Error during socket register:', e);
+    }
+  });
+  socket.on("disconnect", () => {
+    console.log("🔴 User disconnected:", socket.id);
+  });
+});
 
 const allowedOrigins = 'http://localhost:5173'
 app.use(express.json());
@@ -35,4 +73,4 @@ app.use('/api/admin', adminRouter);
 app.use('/api/dataset', datasetRouter);
 // app.use('/api/segment', segmentRouter);
 
-app.listen(port, () => console.log(`Server started on PORT: ${port}`));
+server.listen(port, () => console.log(`Server started on PORT: ${port}`));

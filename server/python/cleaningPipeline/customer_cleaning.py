@@ -15,7 +15,7 @@ from fuzzywuzzy import process, fuzz
 
 # ============================================= (CUSTOMER DATASET) STAGE 1: SCHEMA & COLUMN VALIDATION =============================================
 # Optional columns & Mandatory columns(FROM GENERIC FUNCTION - check_mandatory_columns)
-def customer_check_optional_columns(df, threshold=0.8):
+def customer_check_optional_columns(df, threshold=0.9):
     """
     Check optional columns for fill percentage and drop columns that are mostly empty.
     Returns the modified DataFrame and a friendly message.
@@ -112,7 +112,8 @@ def standardize_dob(df):
             return pd.NaT  # If no valid format found
         df['dob'] = df['dob'].apply(parse_date)
         df['dob'] = pd.to_datetime(df['dob'])
-        print("[LOG] DOB parsing complete. Invalid dates marked as NaT")
+        df['dob'] = df['dob'].fillna("Unknown")
+        print("[LOG] DOB parsing complete. Invalid dates marked as Unknown")
         message = (
             "Since your dataset includes a Date of Birth information, we derived two useful fields — "
             "'age' and 'age_group' — for segmentation purposes, and the original 'dob' column will be remove."
@@ -139,7 +140,8 @@ def derive_age_features(df):
             if pd.notnull(x) else None
         )
         df['age'] = pd.to_numeric(df['age'], errors='coerce')
-        print("[LOG] Age derived from DOB")
+        df['age'] = df['age'].fillna("Unknown")
+        print("[LOG] Age derived from DOB, null age marked as Unknown")
     else:
         print("[LOG] DOB column not found, skipping")
     return df
@@ -167,7 +169,8 @@ def derive_age_group(df):
             elif 55 <= age <= 64: return '55-64'
             else: return 'Above 65'
         df['age_group'] = df['age'].apply(categorize_age)
-        print("[LOG] Age groups derived")
+        df['age_group'] = df['age_group'].fillna("Unknown") 
+        print("[LOG] Age groups derived, null age_group marked as Unknown")
     else:
         print("[LOG] Age column not found, skipping")
     return df
@@ -184,6 +187,11 @@ def drop_dob_after_age_derived(df):
         print("[LOG] DOB column not found, skipping")
     return df
 
+# Column	    Value when original DOB is null
+# =============================================
+# dob	        "Unknown" 
+# age	        "Unknown" 
+# age_group	    "Unknown" 
 # =================================================================================
 
 def standardize_gender(df):
@@ -284,6 +292,7 @@ def standardize_location(df):
     return df
 
 # ============================================= (CUSTOMER DATASET) STAGE 5: MISSING VALUE HANDLING =============================================
+# Only handle for customerid and location fields
 def handle_missing_values_customer(df):
     print("[LOG] Running handle_missing_values...")
 
@@ -300,45 +309,6 @@ def handle_missing_values_customer(df):
     else:
         print("[LOG] 'customerid' column missing, skipping drop")
 
-    # ----- Age -----
-    if 'age' in df.columns:
-        missing_ratio = df['age'].isna().mean()
-        print(f"[LOG] Age missing ratio: {missing_ratio:.2%}")
-        if missing_ratio > 0:
-            if 'gender' in df.columns and df['gender'].nunique() > 1:
-                # Group by gender if available
-                df['age'] = df.groupby('gender')['age'].transform(
-                    lambda x: x.fillna(x.median())
-                )
-                print("[LOG] Applied gender-based median imputation for missing age")
-                
-                # Always fill any remaining missing values with overall median 
-                df['age'] = df['age'].fillna(df['age'].median())
-                
-                # Update derived column if needed
-                df = derive_age_group(df)
-        else:
-            print("[LOG] No missing values for age")
-    else:
-        print("[LOG] 'age' column missing, skipping age imputation")
-
-    # --- Gender mode imputation ---
-    if 'gender' in df.columns:
-        mode_series = df.loc[df['gender'].isin(['Male', 'Female']), 'gender'].mode()
-
-        if not mode_series.empty:
-            mode = mode_series[0]
-            unknown_mask = df['gender'] == 'Unknown'
-            count = unknown_mask.sum()
-            if count > 0:
-                df.loc[unknown_mask, 'gender'] = mode
-                print(f"[LOG] Replaced {count} 'Unknown' gender values with mode: {mode}")
-        else:
-            print("[WARN] No valid gender mode found (only 'Unknown' present) — skipping imputation.")
-    else:
-        print("[LOG] 'gender' column missing, skipping gender imputation")
-
-   
     # --- City & State handling ---
     if {'city', 'state'}.issubset(df.columns):
         print("\n🔍 Handling missing city/state values...")
@@ -430,14 +400,17 @@ def handle_missing_values_customer(df):
 
 # ============================================= (CUSTOMER DATASET) STAGE 6: OUTLIER DETECTION =============================================
 def customer_detect_outliers(df):
-    """Adaptive outlier handling based on dataset size."""
+    """Adaptive outlier detection (flag instead of replace)."""
     print("[LOG] Running detect_outliers...")
+
     if 'age' in df.columns:
         df['age'] = pd.to_numeric(df['age'], errors='coerce')
-        # df['age_original'] = df['age']  # ✅ Keep a copy of original age values (for comparison or re-deriving age_group)
-
         n = len(df)
         print(f"[LOG] Dataset has {n} rows")
+
+        # Initialize flag column
+        df['is_age_outlier'] = False
+
         if n < 500:
             # IQR method
             Q1 = df['age'].quantile(0.25)
@@ -445,17 +418,29 @@ def customer_detect_outliers(df):
             IQR = Q3 - Q1
             lower_bound = Q1 - 1.5 * IQR
             upper_bound = Q3 + 1.5 * IQR
-            outliers = df[(df['age'] <  Q1) | (df['age'] > Q3)].shape[0]
-            df.loc[(df['age'] < lower_bound) | (df['age'] > upper_bound), 'age'] = np.nan
-            print(f"[LOG] IQR Applied for {n} rows. Range: [{lower_bound:.1f}, {upper_bound:.1f}] Outliers set to NaN: {outliers}")
+
+            # Flag outliers
+            outlier_mask = (df['age'] < lower_bound) | (df['age'] > upper_bound)
+            df.loc[outlier_mask, 'is_age_outlier'] = True
+
+            print(f"[LOG] IQR Applied for {n} rows. Range: [{lower_bound:.1f}, {upper_bound:.1f}] "
+                  f"Outliers flagged: {outlier_mask.sum()}")
+
         else:
-            # Percentile capping
+            # Percentile method
             lower_bound = df['age'].quantile(0.01)
             upper_bound = df['age'].quantile(0.99)
-            df['age'] = df['age'].clip(lower=lower_bound, upper=upper_bound)
-            print(f"[LOG] Percentile capping  applied for {n} rows. Capped to [{lower_bound:.1f}, {upper_bound:.1f}]")
+
+            # Flag outliers instead of capping
+            outlier_mask = (df['age'] < lower_bound) | (df['age'] > upper_bound)
+            df.loc[outlier_mask, 'is_age_outlier'] = True
+
+            print(f"[LOG] Percentile method applied for {n} rows. Range: [{lower_bound:.1f}, {upper_bound:.1f}] "
+                  f"Outliers flagged: {outlier_mask.sum()}")
+
     else:
         print("[LOG] 'age' column missing, skipping outlier detection")
+
     return df
 
 # ============================================= (CUSTOMER DATASET) DATASET CLEANING PIPELINE =============================================
@@ -474,6 +459,7 @@ def clean_customer_dataset(df, cleaned_output_path):
     """
     print("🚀 Starting customer data cleaning pipeline...\n")
     messages = [] 
+    report = {"summary": {}, "detailed_messages": {}}
     # =======================================================
     # STAGE 0: NORMALIZE COLUMN NAMES (FROM GENERIC FUNCTION)
     # =======================================================
@@ -487,11 +473,13 @@ def clean_customer_dataset(df, cleaned_output_path):
     print("========== [STAGE 1 START] Schema & Column Validation ==========")
     df, optional_msg = customer_check_optional_columns(df)
     messages.append(optional_msg)
+    report["detailed_messages"]["customer_check_optional_columns"] = optional_msg
     
     # (FROM GENERIC FUNCTION)
     customer_mandatory = ["customerid", "city", "state"]
     df, mandatory_msg = check_mandatory_columns(df,dataset_type="customer", mandatory_columns=customer_mandatory)
     messages.append(mandatory_msg)
+    report["detailed_messages"]["check_mandatory_columns"] = mandatory_msg
     
     print(optional_msg)
     print(mandatory_msg)
@@ -501,8 +489,11 @@ def clean_customer_dataset(df, cleaned_output_path):
     # STAGE 2: REMOVE DUPLICATE ENTRY ROWS (FROM GENERIC FUNCTION)
     # ============================================================
     print("========== [STAGE 2 START] Remove Duplicate Entry Rows ==========")
+    initial_rows = len(df)
     df, message = remove_duplicate_entries(df)
     messages.append(message)
+    report["detailed_messages"]["remove_duplicate_entries"] = message
+    report["summary"]["duplicates_removed_rows"] = initial_rows - len(df)
     print("✅ [STAGE 2 COMPLETE] Duplicate entries removed.\n")
 
     # =============================================
@@ -511,6 +502,8 @@ def clean_customer_dataset(df, cleaned_output_path):
     print("========== [STAGE 3 START] Deduplication ==========")
     df, message = deduplicate_customers(df)
     messages.append(message)
+    report["detailed_messages"]["deduplicate_customers"] = message
+    report["summary"]["rows_after_deduplication"] = len(df)
     print("✅ [STAGE 3 COMPLETE] Duplicate CustomerIDs deduplicated.\n")
 
     # =============================================
@@ -520,6 +513,7 @@ def clean_customer_dataset(df, cleaned_output_path):
     df = standardize_customer_id(df)
     df, dob_msg = standardize_dob(df)
     messages.append(dob_msg)
+    report["detailed_messages"]["standardize_dob"] = dob_msg
     df = derive_age_features(df)
     df = derive_age_group(df)
     df = drop_dob_after_age_derived(df)
@@ -539,8 +533,14 @@ def clean_customer_dataset(df, cleaned_output_path):
     # =============================================
     print("========== [STAGE 6 START] Outlier Detection ==========")
     df = customer_detect_outliers(df)   # make sure detect_outliers returns df
+    report["summary"]["outliers_flagged"] = int(df['is_age_outlier'].sum()) if 'is_age_outlier' in df.columns else 0
     print("✅ [STAGE 6 COMPLETE] Outliers handled.\n")
 
+    # final profiling summary
+    report["summary"].update({
+        "total_rows_final": len(df),
+        "total_columns_final": len(df.columns),
+    })
     # =============================================
     # SAVE CLEANED DATASET
     # =============================================
@@ -550,4 +550,4 @@ def clean_customer_dataset(df, cleaned_output_path):
     print("==========================================================")
     print("🎉 Data cleaning pipeline completed successfully!\n")
     
-    return df, messages # the messages can modify later if needed (now only handle neccessary part)
+    return df, report # the messages can modify later if needed (now only handle neccessary part), but no return for now, we try return report first

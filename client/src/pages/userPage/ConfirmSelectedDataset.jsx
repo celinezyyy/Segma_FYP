@@ -4,9 +4,10 @@ import { AppContext } from '../../context/AppContext';
 import Swal from 'sweetalert2';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { io } from "socket.io-client";
 
 const ConfirmSelectedDataset = () => {
-    const { backendUrl } = useContext(AppContext);
+    const { backendUrl, userData } = useContext(AppContext);
     const location = useLocation();
     const navigate = useNavigate();
 
@@ -19,6 +20,54 @@ const ConfirmSelectedDataset = () => {
     // For spinner & dynamic message
     const [isCleaning, setIsCleaning] = useState(false);
     const [cleanMessage, setCleanMessage] = useState("");
+    // ✅ For live cleaning progress
+    const [progress, setProgress] = useState(0);
+    const [statusMessage, setStatusMessage] = useState("Preparing cleaning process...");
+
+    // 🔌 Connect to socket once
+    useEffect(() => {
+        const socket = io(backendUrl, { withCredentials: true });
+
+        socket.on('connect', () => {
+        console.log("🟢 Connected to cleaning socket:", socket.id);
+        // register this socket with server so server can emit to the user's room
+        if (userData && userData._id) {
+            socket.emit('register', { userId: userData._id });
+        }
+        });
+
+        socket.on('cleaning-progress', ({ progress, message, reportSaved }) => {
+        console.log(`Progress: ${progress}% - ${message}`);
+        setProgress(progress);
+        setStatusMessage(message);
+
+        if (reportSaved) {
+            setIsCleaning(false);
+            Swal.fire({
+            icon: 'success',
+            title: 'Cleaning Complete',
+            text: 'Your dataset cleaning report is ready!',
+            timer: 2500,
+            showConfirmButton: false
+            });
+
+            // Redirect to cleaning report page after short delay
+            setTimeout(() => {
+            navigate('/summarize-cleaning-report', {
+                state: { datasetId: customerDataset?._id },
+            });
+            }, 2500);
+        }
+        });
+
+        socket.on('disconnect', () => {
+        console.log("🔴 Disconnected from socket");
+        });
+
+        return () => socket.disconnect();
+    }, [backendUrl, navigate, customerDataset, userData]);
+    // note: include userData so we register the socket once the user is available
+    // (keep customerDataset in deps to ensure dataset-specific navigation still works)
 
     useEffect(() => {
         if (!location.state || !selectedCustomer || !selectedOrder) {
@@ -73,6 +122,9 @@ const ConfirmSelectedDataset = () => {
             confirmButtonText: 'Yes, proceed', 
         }).then(async (result) => { 
             if (result.isConfirmed) { 
+                setIsCleaning(true);
+                setProgress(0);
+                setStatusMessage("Initializing cleaning process...");
                 try {
                     await new Promise((resolve) => setTimeout(resolve, 300));
                     // Step 1: Check both clean statuses in parallel
@@ -84,45 +136,48 @@ const ConfirmSelectedDataset = () => {
                     const isCustomerClean = customerRes.data?.isClean;
                     const isOrderClean = orderRes.data?.isClean;
 
-                    // Step 2: Start cleaning in sequence
                     if (!isCustomerClean) {
-                        Swal.fire({
-                        title: 'Cleaning Customer Dataset',
-                        text: 'Please wait while we clean your customer data...',
-                        allowOutsideClick: false,
-                        allowEscapeKey: false,
-                        didOpen: () => Swal.showLoading(),
-                        });
-
                         await axios.post(`${backendUrl}/api/dataset/clean`, { customerDatasetId: customerDataset._id }, { withCredentials: true });
-                        Swal.close();
-                        await new Promise((resolve) => setTimeout(resolve, 1000));
                     }
+                    // // Step 2: Start cleaning in sequence
+                    // if (!isCustomerClean) {
+                    //     Swal.fire({
+                    //     title: 'Cleaning Customer Dataset',
+                    //     text: 'Please wait while we clean your customer data...',
+                    //     allowOutsideClick: false,
+                    //     allowEscapeKey: false,
+                    //     didOpen: () => Swal.showLoading(),
+                    //     });
 
-                    if (!isOrderClean) {
-                        Swal.fire({
-                        title: 'Cleaning Order Dataset',
-                        text: 'Please wait while we clean your order data...',
-                        allowOutsideClick: false,
-                        allowEscapeKey: false,
-                        didOpen: () => Swal.showLoading(),
-                        });
+                    //     await axios.post(`${backendUrl}/api/dataset/clean`, { customerDatasetId: customerDataset._id }, { withCredentials: true });
+                    //     Swal.close();
+                    //     await new Promise((resolve) => setTimeout(resolve, 1000));
+                    // }
 
-                        await axios.post(`${backendUrl}/api/dataset/clean`, { orderDatasetId: orderDataset._id }, { withCredentials: true });
-                        Swal.close();
-                    }
-                    await new Promise((resolve) => setTimeout(resolve, 800));
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Cleaning Complete',
-                        text: 'All datasets are now clean! Proceeding to segmentation...',
-                        timer: 2500,
-                        showConfirmButton: false,
-                    });
+                    // if (!isOrderClean) {
+                    //     Swal.fire({
+                    //     title: 'Cleaning Order Dataset',
+                    //     text: 'Please wait while we clean your order data...',
+                    //     allowOutsideClick: false,
+                    //     allowEscapeKey: false,
+                    //     didOpen: () => Swal.showLoading(),
+                    //     });
 
-                    setTimeout(() => {
-                        navigate('/segmentation', { state: { selectedCustomer, selectedOrder } });
-                    }, 2500);
+                    //     await axios.post(`${backendUrl}/api/dataset/clean`, { orderDatasetId: orderDataset._id }, { withCredentials: true });
+                    //     Swal.close();
+                    // }
+                    // await new Promise((resolve) => setTimeout(resolve, 800));
+                    // Swal.fire({
+                    //     icon: 'success',
+                    //     title: 'Cleaning Complete',
+                    //     text: 'All datasets are now clean! Proceeding to segmentation...',
+                    //     timer: 2500,
+                    //     showConfirmButton: false,
+                    // });
+
+                    // setTimeout(() => {
+                    //     navigate('/segmentation', { state: { selectedCustomer, selectedOrder } });
+                    // }, 2500);
         
                 } catch (err) {
                     console.error("Error during cleaning process:", err);
@@ -140,6 +195,19 @@ const ConfirmSelectedDataset = () => {
         return (
         <div className="flex justify-center items-center h-screen text-gray-500">
             Loading dataset details...
+        </div>
+        );
+    }
+
+    // Show progress UI while cleaning
+    if (isCleaning) {
+        return (
+        <div className="flex flex-col items-center justify-center h-screen">
+            <div className="loader mb-6"></div>
+            <h2 className="text-lg font-semibold text-gray-700 mb-2">
+            Cleaning Progress: {progress}%
+            </h2>
+            <p className="text-sm text-gray-500 italic">{statusMessage}</p>
         </div>
         );
     }

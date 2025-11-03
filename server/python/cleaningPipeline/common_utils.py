@@ -18,7 +18,7 @@ def normalize_columns_name(df):
     print(f"[LOG] Columns after normalization: {list(df.columns)}")
     return df
 
-def check_mandatory_columns(df, dataset_type, mandatory_columns, threshold=0.8):
+def check_mandatory_columns(df, dataset_type, mandatory_columns, threshold=0.9):
     """
     Generic function to check mandatory columns for both Customer and Order datasets.
     - dataset_type: 'customer' or 'order'
@@ -70,7 +70,7 @@ def remove_duplicate_entries(df):
     removed_dup = initial_len - len(df)
     message = None
     if removed_dup > 0:
-        message = (f"{removed_dup} duplicate rows have found, we have removed it.")
+        message = (f"{removed_dup} duplicate records have found, we have removed it.")
     print(f"[LOG] Removed {initial_len - len(df)} duplicate rows.")
     return df, message
 
