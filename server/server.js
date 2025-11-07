@@ -60,9 +60,11 @@ app.use(cookieParser());
 app.use(cors({origin: allowedOrigins, credentials: true}));
 
 // Connect DB and Init GridFS
-connectDB().then((conn) => {
-  initGridFS(conn.connection); // Initialize GridFS with Mongoose connection
+connectDB().then(async (conn) => {
+  await initGridFS(conn.connection); // Initialize GridFS with Mongoose connection
   console.log("GridFS initialized");
+
+  server.listen(port, () => console.log(`Server started on PORT: ${port}`));
 });
 
 // API Endpoints
@@ -73,4 +75,4 @@ app.use('/api/admin', adminRouter);
 app.use('/api/dataset', datasetRouter);
 // app.use('/api/segment', segmentRouter);
 
-server.listen(port, () => console.log(`Server started on PORT: ${port}`));
+// server.listen(port, () => console.log(`Server started on PORT: ${port}`));
