@@ -7,13 +7,11 @@ const datasetSchema = new mongoose.Schema({
   uploadedAt: { type: Date, default: Date.now },
   type: { type: String, enum: ['Customer', 'Order'], required: true },
   isClean: { type: Boolean, default: false },
-  cleanFileId: { type: mongoose.Schema.Types.ObjectId, default: null },
   fileId: { type: mongoose.Schema.Types.ObjectId, required: true },    
 
   // ✅ Store data quality and summary messages from cleaning
   metadata: {
     data_quality_report: { type: Object, default: {} }, // full JSON report
-    summary_messages: { type: [String], default: [] },  // for 5 main methods' messages
   },
 });
 
