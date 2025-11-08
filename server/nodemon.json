@@ -1,0 +1,11 @@
+{
+  "watch": ["./server"], 
+  "ext": "js,json",
+  "ignore": [
+    "node_modules",
+    "temp/**",  
+    "venv_fyp_new",
+    "**/__pycache__"
+  ],
+  "exec": "node server.js" 
+}
