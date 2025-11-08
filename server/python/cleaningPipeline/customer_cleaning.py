@@ -20,7 +20,7 @@ def customer_check_optional_columns(df, threshold=0.9):
     Check optional columns for fill percentage and drop columns that are mostly empty.
     Returns the modified DataFrame and a friendly message.
     """
-    print("[LOG] Running customer_check_optional_columns...")
+    print("[LOG - STAGE 1] Running customer_check_optional_columns...")
     optional_columns = ["date of birth", "gender"]
     dropped_columns = []
     missing_report = []
@@ -30,16 +30,16 @@ def customer_check_optional_columns(df, threshold=0.9):
             fill_ratio = df[col].notna().mean()
             missing_percent = (1 - fill_ratio) * 100
             missing_report.append(f"{col}: {missing_percent:.1f}% missing")
-            print(f"[LOG] Optional column '{col}' fill ratio: {fill_ratio:.2f}")
+            print(f"[LOG - STAGE 1] Optional column '{col}' fill ratio: {fill_ratio:.2f}")
             if fill_ratio < threshold:
                 dropped_columns.append(col)
                 df.drop(columns=[col], inplace=True)  # Drop the column immediately
                 # df[col].count(): This counts the number of non-missing (non-null/non-NaN) values in the current column (col).
                 # len(df): This gives the total number of rows in the DataFrame.
                 # fill_ratio: The division calculates the proportion of filled (non-missing) values in that column. A ratio of 1.0 means the column is entirely filled; a ratio of 0.1 means 90% of the values are missing.
-                print(f"[LOG] Dropped optional column '{col}' due to too many missing values")
+                print(f"[LOG - STAGE 1] Dropped optional column '{col}' due to too many missing values")
         else:
-            print(f"[LOG] Optional column '{col}' not found")
+            print(f"[LOG - STAGE 1] Optional column '{col}' not found")
             missing_report.append(f"{col}: column not found (100% missing)")
             dropped_columns.append(col)
 
@@ -66,9 +66,9 @@ def customer_check_optional_columns(df, threshold=0.9):
 
 # ============================================= (CUSTOMER DATASET) STAGE 3: DEDUPLICATE =================================================
 def deduplicate_customers(df):
-    print("[LOG] Running deduplicate_customers...")
+    print("[LOG - STAGE 3] Running deduplicate_customers...")
     if 'customerid' not in df.columns:
-        print("[LOG] 'customerid' column missing, skipping deduplication")
+        print("[LOG - STAGE 3] 'customerid' column missing, skipping deduplication")
         return df
 
     before_dup_id = len(df)
@@ -87,7 +87,7 @@ def deduplicate_customers(df):
     removed_dup_id = before_dup_id - len(df)
     if removed_dup_id > 0:
         message = (f"{removed_dup_id} duplicate CustomerIDs removed.")
-    print("[LOG] Deduplication complete (vectorized)")
+    print("[LOG - STAGE 3] Deduplication complete (vectorized)")
     return df, message
 
 # ============================================= (CUSTOMER DATASET) STAGE 4: STANDARDIZATION & NORMALIZATION =============================================
@@ -95,12 +95,12 @@ def deduplicate_customers(df):
 
 def standardize_dob(df):
     """Standardize Date of Birth column and convert to YYYY-MM-DD"""
-    print("[LOG] Running standardize_dob...")
+    print("[LOG - STAGE 4] Running standardize_dob...")
     # Rename only 'date of birth' to 'dob'
     message = None
     df = df.rename(columns={'date of birth': 'dob'})  
     if 'dob' in df.columns:
-        print("[LOG] DOB column found, parsing dates...")
+        print("[LOG - STAGE 4] DOB column found, parsing dates...")
         def parse_date(x):
             if pd.isnull(x):
                 return pd.NaT
@@ -113,13 +113,13 @@ def standardize_dob(df):
         df['dob'] = df['dob'].apply(parse_date)
         df['dob'] = pd.to_datetime(df['dob'])
         df['dob'] = df['dob'].fillna("Unknown")
-        print("[LOG] DOB parsing complete. Invalid dates marked as Unknown")
+        print("[LOG - STAGE 4] DOB parsing complete. Invalid dates marked as Unknown")
         message = (
             "Since your dataset includes a Date of Birth information, we derived two useful fields — "
             "'age' and 'age_group' — for segmentation purposes, and the original 'dob' column will be remove."
         )
     else:
-        print("[LOG] DOB column not found, skipping")
+        print("[LOG - STAGE 4] DOB column not found, skipping")
     return df, message
 
     # %d/%m/%Y → 12/05/2000
@@ -132,7 +132,7 @@ def standardize_dob(df):
 
 def derive_age_features(df):
     """Derive Age from DOB"""
-    print("[LOG] Running derive_age_features...")
+    print("[LOG - STAGE 4] Running derive_age_features...")
     if 'dob' in df.columns:
         today = date.today()
         df['age'] = df['dob'].apply(
@@ -141,9 +141,9 @@ def derive_age_features(df):
         )
         df['age'] = pd.to_numeric(df['age'], errors='coerce')
         df['age'] = df['age'].fillna("Unknown")
-        print("[LOG] Age derived from DOB, null age marked as Unknown")
+        print("[LOG - STAGE 4] Age derived from DOB, null age marked as Unknown")
     else:
-        print("[LOG] DOB column not found, skipping")
+        print("[LOG - STAGE 4] DOB column not found, skipping")
     return df
     # Example: ((today.month, today.day) < (x.month, x.day))
     # (10,15) < (12,1) → True (birthday in Dec is after Oct 15)
@@ -156,7 +156,7 @@ def derive_age_features(df):
 
 def derive_age_group(df):
     """Derive Age Group based on defined buckets"""
-    print("[LOG] Running derive_age_group...")
+    print("[LOG - STAGE 4] Running derive_age_group...")
     if 'age' in df.columns:
         def categorize_age(age):
             if pd.isnull(age):
@@ -170,21 +170,21 @@ def derive_age_group(df):
             else: return 'Above 65'
         df['age_group'] = df['age'].apply(categorize_age)
         df['age_group'] = df['age_group'].fillna("Unknown") 
-        print("[LOG] Age groups derived, null age_group marked as Unknown")
+        print("[LOG - STAGE 4] Age groups derived, null age_group marked as Unknown")
     else:
-        print("[LOG] Age column not found, skipping")
+        print("[LOG - STAGE 4] Age column not found, skipping")
     return df
 
 # ===============================================================================
 
 def drop_dob_after_age_derived(df):
     """Drop DOB column after deriving age and age_group"""
-    print("[LOG] Running drop_dob_after_age_derived...")
+    print("[LOG - STAGE 4] Running drop_dob_after_age_derived...")
     if 'dob' in df.columns:
         df = df.drop(columns=['dob'])
-        print("[LOG] Dropped DOB column")
+        print("[LOG - STAGE 4] Dropped DOB column")
     else:
-        print("[LOG] DOB column not found, skipping")
+        print("[LOG - STAGE 4] DOB column not found, skipping")
     return df
 
 # Column	    Value when original DOB is null
@@ -196,7 +196,7 @@ def drop_dob_after_age_derived(df):
 
 def standardize_gender(df):
     """Clean and standardize gender values"""
-    print("[LOG] Running standardize_gender...")
+    print("[LOG - STAGE 4] Running standardize_gender...")
     if 'gender' in df.columns:
         df['gender'] = (
             df['gender']
@@ -209,16 +209,16 @@ def standardize_gender(df):
             })
         )
         df.loc[~df['gender'].isin(['Male', 'Female']), 'gender'] = 'Unknown'
-        print("[LOG] Gender standardized (vectorized)")
+        print("[LOG - STAGE 4] Gender standardized (vectorized)")
     else:
-        print("[LOG] Gender column not found, skipping")
+        print("[LOG - STAGE 4] Gender column not found, skipping")
     return df
 
 # ==================================================================================
 
 def standardize_location(df):
     """Standardize City, and State fields"""
-    print("[LOG] Running standardize_location...")
+    print("[LOG - STAGE 4] Running standardize_location...")
         
     # Helper function: detect suspicious city names
     def is_suspicious_city(name):
@@ -251,9 +251,9 @@ def standardize_location(df):
         suspicious_count = suspicious_mask.sum()
         df.loc[suspicious_mask, 'city'] = 'Unknown'
         
-        print(f"[LOG] Standardized 'city'. Suspicious/unknown entries set to 'Unknown': {suspicious_count}")
+        print(f"[LOG - STAGE 4] Standardized 'city'. Suspicious/unknown entries set to 'Unknown': {suspicious_count}")
     else:
-        print("[LOG] 'city' column not found, skipping city standardization")
+        print("[LOG - STAGE 4] 'city' column not found, skipping city standardization")
     
     # --- State ---
     if 'state' in df.columns:
@@ -285,16 +285,16 @@ def standardize_location(df):
 
         # Apply mapping to the dataframe
         df['state'] = df['state'].map(state_map)
-        print("[LOG] State standardized (cached fuzzy matching)")
+        print("[LOG - STAGE 4] State standardized (cached fuzzy matching)")
     else:
-        print("[LOG] 'state' column not found, skipping state standardization")
+        print("[LOG - STAGE 4] 'state' column not found, skipping state standardization")
 
     return df
 
 # ============================================= (CUSTOMER DATASET) STAGE 5: MISSING VALUE HANDLING =============================================
 # Only handle for customerid and location fields
 def handle_missing_values_customer(df):
-    print("[LOG] Running handle_missing_values...")
+    print("[LOG - STAGE 5] Running handle_missing_values...")
 
     API_KEY = "68f8ce9a38c3f632237334dyiedb96e"
     GEOCODE_URL = "https://geocode.maps.co/search"
@@ -305,24 +305,24 @@ def handle_missing_values_customer(df):
     if 'customerid' in df.columns:
         before_drop = len(df)
         df = df[df['customerid'].notna()].copy()
-        print(f"[LOG] Dropped {before_drop - len(df)} rows without CustomerID")
+        print(f"[LOG - STAGE 5] Dropped {before_drop - len(df)} rows without CustomerID")
     else:
-        print("[LOG] 'customerid' column missing, skipping drop")
+        print("[LOG - STAGE 5] 'customerid' column missing, skipping drop")
 
     # --- City & State handling ---
     if {'city', 'state'}.issubset(df.columns):
-        print("\n🔍 Handling missing city/state values...")
+        print("\n[LOG - STAGE 5] 🔍 Handling missing city/state values...")
         malaysia_states = [sub.name for sub in pycountry.subdivisions if sub.country_code == 'MY']
         cache = {}  # city -> validated state
         SLEEP_TIME = 1.2
         
         # Case 1: missing state but city known → fill via geocoding API
-        print("\n[LOG] Case 1: Filling missing state where city is known...")
+        print("\n[LOG - STAGE 5] Case 1: Filling missing state where city is known...")
         # Get rows needing state fill (city known, state unknown)
         mask_case1 = (df['city'] != 'Unknown') & (df['state'] == 'Unknown')
         cities_to_query = df.loc[mask_case1, 'city'].unique().tolist()
 
-        print(f"[LOG] {len(cities_to_query)} unique cities need state lookup")
+        print(f"[LOG - STAGE 5] {len(cities_to_query)} unique cities need state lookup")
         
         for city in cities_to_query:
             if city not in cache:
@@ -343,14 +343,14 @@ def handle_missing_values_customer(df):
                         cache[city] = None
                     time.sleep(SLEEP_TIME)
                 except Exception as e:
-                    print(f"[WARN] Failed to get state for city '{city}': {e}")
+                    print(f"[WARN - STAGE 5] Failed to get state for city '{city}': {e}")
                     cache[city] = None
 
             # Fill values
             fill_state = cache.get(city)
             if fill_state:
                 df.loc[(df['city'] == city) & (df['state'] == 'Unknown'), 'state'] = fill_state
-                print(f"[TRACE] Filled {city} → state='{fill_state}' (API valid)")
+                print(f"[TRACE - STAGE 5] Filled {city} → state='{fill_state}' (API valid)")
             else:
                 # Fallback: use mode state & mode city for that state
                 # The API fails to find the city || The response doesn’t contain a valid "state" field || Or the returned "state" isn’t in the official Malaysia subdivision list.
@@ -368,10 +368,10 @@ def handle_missing_values_customer(df):
                 mask_fill = (df['city'] == city) & (df['state'] == 'Unknown')
                 df.loc[mask_fill, 'state'] = mode_state
                 df.loc[mask_fill, 'city'] = mode_city
-                print(f"[TRACE] Filled {mask_fill.sum()} row(s) → city='{mode_city}', state='{mode_state}' (Fallback)")
+                print(f"[TRACE - STAGE 5] Filled {mask_fill.sum()} row(s) → city='{mode_city}', state='{mode_state}' (Fallback)")
 
         # Case 2: missing city but state known → fill with mode city per state
-        print("\n[LOG] Case 2: Filling missing city where state is known...")
+        print("\n[LOG - STAGE 5] Case 2: Filling missing city where state is known...")
         mask_case2 = (df['city'] == 'Unknown') & (df['state'] != 'Unknown')
         if mask_case2.any():
             mode_city_per_state = (
@@ -382,31 +382,31 @@ def handle_missing_values_customer(df):
             for state, city_mode in mode_city_per_state.items():
                 mask_fill = mask_case2 & (df['state'] == state)
                 df.loc[mask_fill, 'city'] = city_mode
-                print(f"[TRACE] Filled {mask_fill.sum()} row(s) → missing city for state='{state}' → city='{city_mode}'")
+                print(f"[TRACE - STAGE 5] Filled {mask_fill.sum()} row(s) → missing city for state='{state}' → city='{city_mode}'")
 
         # Case 3: both missing → fill with most frequent pair
-        print("\n[LOG] Case 3: Filling missing city and state...")
+        print("\n[LOG - STAGE 5] Case 3: Filling missing city and state...")
         mask_case3 = (df['city'] == 'Unknown') & (df['state'] == 'Unknown')
         if mask_case3.any():
             valid_pairs = df[(df['city'] != 'Unknown') & (df['state'] != 'Unknown')]
             if not valid_pairs.empty:
                 city_mode, state_mode = valid_pairs.groupby(['city', 'state']).size().idxmax()
                 df.loc[mask_case3, ['city', 'state']] = [city_mode, state_mode]
-                print(f"[TRACE] Filled {mask_case3.sum()} row(s) → missing city/state → City='{city_mode}', State='{state_mode}'")
+                print(f"[TRACE - STAGE 5] Filled {mask_case3.sum()} row(s) → missing city/state → City='{city_mode}', State='{state_mode}'")
             else:
-                print("[WARN] No valid city/state pairs to fill missing both values")
+                print("[WARN - STAGE 5] No valid city/state pairs to fill missing both values")
 
     return df
 
 # ============================================= (CUSTOMER DATASET) STAGE 6: OUTLIER DETECTION =============================================
 def customer_detect_outliers(df):
     """Adaptive outlier detection (flag instead of replace)."""
-    print("[LOG] Running detect_outliers...")
+    print("[LOG - STAGE 6] Running detect_outliers...")
 
     if 'age' in df.columns:
         df['age'] = pd.to_numeric(df['age'], errors='coerce')
         n = len(df)
-        print(f"[LOG] Dataset has {n} rows")
+        print(f"[LOG - STAGE 6] Dataset has {n} rows")
 
         # Initialize flag column
         df['is_age_outlier'] = False
@@ -423,7 +423,7 @@ def customer_detect_outliers(df):
             outlier_mask = (df['age'] < lower_bound) | (df['age'] > upper_bound)
             df.loc[outlier_mask, 'is_age_outlier'] = True
 
-            print(f"[LOG] IQR Applied for {n} rows. Range: [{lower_bound:.1f}, {upper_bound:.1f}] "
+            print(f"[LOG - STAGE 6] IQR Applied for {n} rows. Range: [{lower_bound:.1f}, {upper_bound:.1f}] "
                   f"Outliers flagged: {outlier_mask.sum()}")
 
         else:
@@ -435,11 +435,11 @@ def customer_detect_outliers(df):
             outlier_mask = (df['age'] < lower_bound) | (df['age'] > upper_bound)
             df.loc[outlier_mask, 'is_age_outlier'] = True
 
-            print(f"[LOG] Percentile method applied for {n} rows. Range: [{lower_bound:.1f}, {upper_bound:.1f}] "
+            print(f"[LOG - STAGE 6] Percentile method applied for {n} rows. Range: [{lower_bound:.1f}, {upper_bound:.1f}] "
                   f"Outliers flagged: {outlier_mask.sum()}")
 
     else:
-        print("[LOG] 'age' column missing, skipping outlier detection")
+        print("[LOG - STAGE 6] 'age' column missing, skipping outlier detection")
 
     return df
 
@@ -457,20 +457,20 @@ def clean_customer_dataset(df, cleaned_output_path):
     6. Deduplication
     Finally, saves the cleaned dataset to the specified path and returns it.
     """
-    print("🚀 Starting customer data cleaning pipeline...\n")
+    print("🚀 Starting customer data cleaning pipeline...\n", flush=True)
     messages = [] 
     report = {"summary": {}, "detailed_messages": {}}
     # =======================================================
     # STAGE 0: NORMALIZE COLUMN NAMES (FROM GENERIC FUNCTION)
     # =======================================================
-    print("========== [STAGE 0 START] Normalize Column Names ==========")
+    print("=============== [STAGE 0 START] Normalize Column Names ===============")
     df = normalize_columns_name(df)
     print("✅ [STAGE 0 COMPLETE] Column names normalized.\n")
 
     # =============================================
     # STAGE 1: SCHEMA & COLUMN VALIDATION
     # =============================================
-    print("========== [STAGE 1 START] Schema & Column Validation ==========")
+    print("=============== [STAGE 1 START] Schema & Column Validation ===============")
     df, optional_msg = customer_check_optional_columns(df)
     messages.append(optional_msg)
     report["detailed_messages"]["customer_check_optional_columns"] = optional_msg

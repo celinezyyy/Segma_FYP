@@ -13,9 +13,9 @@
 
 def normalize_columns_name(df):
     """Normalize column names: lowercase, strip spaces"""
-    print("[LOG] Running normalize_columns_name...")
+    print("[LOG - STAGE 0] Running normalize_columns_name...")
     df.columns = df.columns.str.strip().str.lower()
-    print(f"[LOG] Columns after normalization: {list(df.columns)}")
+    print(f"[LOG - STAGE 0] Columns after normalization: {list(df.columns)}")
     return df
 
 def check_mandatory_columns(df, dataset_type, mandatory_columns, threshold=0.9):
@@ -25,7 +25,7 @@ def check_mandatory_columns(df, dataset_type, mandatory_columns, threshold=0.9):
     - mandatory_columns: list of required columns for that dataset
     - threshold: minimum acceptable fill ratio (default 0.8)
     """
-    print(f"[LOG] Running check_mandatory_columns for {dataset_type} dataset...")
+    print(f"[LOG - STAGE 1] Running check_mandatory_columns for {dataset_type} dataset...")
 
     missing_report = []
     warning_columns = []
@@ -34,14 +34,14 @@ def check_mandatory_columns(df, dataset_type, mandatory_columns, threshold=0.9):
     for col in mandatory_columns:
         if col in df.columns:
             fill_ratio = df[col].notna().mean()
-            print(f"[LOG] Mandatory column '{col}' fill ratio: {fill_ratio:.2f}")
+            print(f"[LOG - STAGE 1] Mandatory column '{col}' fill ratio: {fill_ratio:.2f}")
             missing_percent = (1 - fill_ratio) * 100
             missing_report.append(f"{col}: {missing_percent:.1f}% missing")
 
             if fill_ratio < threshold:
                 warning_columns.append(col)
         else:
-            print(f"[LOG] Mandatory column '{col}' not found")
+            print(f"[LOG - STAGE 1] Mandatory column '{col}' not found")
             missing_report.append(f"{col}: column not found (100% missing)")
             warning_columns.append(col)
 
@@ -64,25 +64,25 @@ def check_mandatory_columns(df, dataset_type, mandatory_columns, threshold=0.9):
 
 def remove_duplicate_entries(df):
     """Remove duplicate rows, keeping the first occurrence"""
-    print("[LOG] Running remove_duplicate_entries...")
+    print("[LOG - STAGE 2] Running remove_duplicate_entries...")
     initial_len = len(df)
     df = df.drop_duplicates(keep='first', ignore_index=True)
     removed_dup = initial_len - len(df)
     message = None
     if removed_dup > 0:
         message = (f"{removed_dup} duplicate records have found, we have removed it.")
-    print(f"[LOG] Removed {initial_len - len(df)} duplicate rows.")
+    print(f"[LOG - STAGE 2] Removed {initial_len - len(df)} duplicate rows.")
     return df, message
 
 def standardize_customer_id(df):
     """Standardize CustomerID format (null value is '')"""
-    print("[LOG] Running standardize_customer_id...")
+    print("[LOG - STAGE 4] Running standardize_customer_id...")
     if 'customerid' in df.columns:
         # Fill NaN with empty string before converting to string
         df.loc[:, 'customerid'] = df['customerid'].fillna('').astype(str).str.strip().str.upper()
-        print("[LOG] CustomerID column standardized")
+        print("[LOG - STAGE 4] CustomerID column standardized")
     else:
-        print("[LOG] CustomerID column not found, skipping")
+        print("[LOG - STAGE 4] CustomerID column not found, skipping")
     return df
     # Might have special case of dirty data exist such as "****", "1234....", "annbwbciwbciowb"
     # not sure how to handle it (Currently will say bcs we focus on small business enterprise that have use digital system, so normally customerID will not have inconsistent format issue, even the inconsistant format exist, at the end this row will not be use as when we merge we cant found that customerID)

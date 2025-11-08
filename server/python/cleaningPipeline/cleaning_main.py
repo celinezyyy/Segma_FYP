@@ -5,7 +5,7 @@ import os
 import json
 from customer_cleaning import clean_customer_dataset
 from order_cleaning import clean_order_dataset
-
+    
 def main():
     parser = argparse.ArgumentParser(description="Data cleaning pipeline for customer and order datasets")
     parser.add_argument("--type", choices=["customer", "order"], required=True, help="Dataset type (customer or order)")
@@ -28,9 +28,6 @@ def main():
         cleaned_path = os.path.join(temp_dir, f"{base_name}_cleaned{ext}")
         report_path = os.path.join(temp_dir, f"{base_name}_report.json")
         
-        print(f"[1/5] Read file: {args.temp_file_path_with_filename}")
-        sys.stdout.flush()
-        # Run appropriate cleaning function and receive (df, messages)
         if args.type == "customer":
             cleaned_df, report = clean_customer_dataset(df, cleaned_path)
         else:
@@ -45,13 +42,15 @@ def main():
         with open(report_path, "w", encoding="utf-8") as f:
             json.dump(report, f, indent=4, default=str)
 
-        print(f"[DONE] Cleaned saved: {cleaned_path}")
-        print(f"[DONE] Report saved: {report_path}")
+        print(f"[COMPLETED] Cleaning pipeline run successfully")
+        print(f"[COMPLETED] Cleaned saved: {cleaned_path}")
+        print(f"[COMPLETED] Report saved: {report_path}")
         sys.stdout.flush()
         sys.exit(0)
 
     except Exception as e:
         print(f"❌ Error during cleaning: {str(e)}", file=sys.stderr)
+        print(f"[STAGE] done::Cleaning failed: {str(e)}")
         sys.stderr.flush()
         sys.exit(1)
 
