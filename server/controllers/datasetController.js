@@ -88,9 +88,7 @@ export const uploadDataset = async (req, res) => {
 
     // --- Save valid dataset ---
     const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}.csv`;
-    const uploadStream = bucket.openUploadStream(filename, {
-      metadata: { user: userId, type: formattedType, originalname }
-    });
+    const uploadStream = bucket.openUploadStream(filename);
 
     await new Promise((resolve, reject) => {
       Readable.from(req.file.buffer)
@@ -147,10 +145,7 @@ export const deleteDataset = async (req, res) => {
     if (!dataset)
       return res.status(404).json({ success: false, message: 'Dataset not found' });
 
-    const filePath = path.join(__dirname, '..', 'datasets', dataset.user.toString(), dataset.type, dataset.filename);
-
     try {
-      // await fsp.unlink(filePath);
       const bucket = getGridFSBucket();
       const file = await bucket.find({ filename: dataset.filename }).toArray();
 
@@ -288,11 +283,12 @@ export const startDatasetCleaning = async (req, res) => {
 
     // Prepare temp directory & file paths
     const tempDir = path.join(__dirname, '../temp');
-    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+    if (!fs.existsSync(tempDir)) 
+      fs.mkdirSync(tempDir, { recursive: true });
 
     const tempFilePath = path.join(tempDir, dataset.filename);
-     // Step A: Download dataset from GridFS (emit progress)
-    io?.to(userId).emit('cleaning-progress', { progress: 5, message: 'Downloading dataset...' });
+    // Step A: Download dataset from GridFS (emit progress)
+    io?.to(userId).emit("cleaning-progress", { stage: "read", message: "Downloading dataset..." , progress:5 });
     await new Promise((resolve, reject) => {
       const downloadStream = bucket.openDownloadStream(dataset.fileId);
       const writeStream = fs.createWriteStream(tempFilePath);
@@ -305,40 +301,17 @@ export const startDatasetCleaning = async (req, res) => {
     const pythonScript = path.join(__dirname, '../python/cleaningPipeline/cleaning_main.py');
 
     // Emit: start
-    io?.to(userId).emit('cleaning-progress', { progress: 10, message: 'Starting cleaning pipeline...' });
+    io?.to(userId).emit("cleaning-progress", { stage: "analyze", message: "Analyzing and clean your dataset", progress: 85});
 
     const py = spawn('python', [
+      '-u',
       pythonScript,
       '--type', type.toLowerCase(),
       '--temp_file_path_with_filename', tempFilePath,
       '--original_file_name', dataset.originalname
     ], {
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: 'inherit',
       env: { ...process.env, PYTHONIOENCODING: 'utf-8' }
-    });
-
-    let stderr = '';
-    py.stdout.on('data', (data) => {
-      const text = data.toString();
-      console.log(`[PYOUT] ${text}`);
-      // map textual progress updates to percentages (customize mapping as needed)
-      if (text.includes('Read file')) {
-        io?.to(userId).emit('cleaning-progress', { progress: 15, message: 'File loaded in Python' });
-      } else if (text.includes('Normalize Column Names') || text.includes('Stage 1')) {
-        io?.to(userId).emit('cleaning-progress', { progress: 30, message: 'Validating and normalizing data' });
-      } else if (text.includes('dedup')) {
-        io?.to(userId).emit('cleaning-progress', { progress: 55, message: 'Deduplicating records' });
-      } else if (text.includes('Missing Value') || text.includes('outlier')) {
-        io?.to(userId).emit('cleaning-progress', { progress: 75, message: 'Handling missing values & outliers (flagging)' });
-      } else if (text.includes('Cleaned dataset saved')) {
-        io?.to(userId).emit('cleaning-progress', { progress: 90, message: 'Finalizing cleaned file' });
-      }
-    });
-
-    py.stderr.on('data', (data) => {
-      const t = data.toString();
-      stderr += t;
-      console.error(`[PYERR] ${t}`);
     });
 
     // wait for python to exit
@@ -353,25 +326,19 @@ export const startDatasetCleaning = async (req, res) => {
     // derive base names
     const baseName = path.parse(dataset.originalname).name;
     const ext = path.parse(dataset.originalname).ext;
-    const cleanedFilename = `${baseName}_cleaned${ext}`;
-    const cleanedFilePath = path.join(tempDir, cleanedFilename);
+    const cleanedOriFilename = `${baseName}_cleaned${ext}`;
+    const cleanedFilePath = path.join(tempDir, cleanedOriFilename);
     const reportFilePath = path.join(tempDir, `${baseName}_report.json`);
+
+    io?.to(userId).emit("cleaning-progress", { stage: "upload", message: "Uploading cleaned file...", progress: 95 });
 
     // ensure files exist
     if (!fs.existsSync(cleanedFilePath)) throw new Error('Cleaned file not found after Python run');
     if (!fs.existsSync(reportFilePath)) throw new Error('Report file not found after Python run');
 
-    io?.to(userId).emit('cleaning-progress', { progress: 92, message: 'Uploading cleaned file...' });
-
-
-    // Delete original file from GridFS
-    await bucket.delete(dataset.fileId);
-    console.log(`[INFO] Original dataset file ${dataset.filename} deleted from GridFS`);
-
+    const cleanedFileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}.csv`;
     // Upload cleaned dataset back to GridFS using the original filename
-    const uploadStream = bucket.openUploadStream(dataset.filename, {
-      metadata: { user: userId, type: dataset.type, isClean: true },
-    });
+    const uploadStream = bucket.openUploadStream(cleanedFileName);
 
     await new Promise((resolve, reject) => {
       fs.createReadStream(cleanedFilePath)
@@ -391,6 +358,10 @@ export const startDatasetCleaning = async (req, res) => {
 
     // Update dataset document with new fileId
     await datasetModel.findByIdAndUpdate(datasetId, {
+      filename: cleanedFileName,
+      originalname: cleanedOriFilename,
+      user: userId,
+      type: type,
       isClean: true,
       fileId: uploadStream.id,
       metadata: {
@@ -399,15 +370,21 @@ export const startDatasetCleaning = async (req, res) => {
       }
     });
 
+    // Delete original file from GridFS
+    await bucket.delete(dataset.fileId);
+    console.log(`[INFO] Original dataset file ${dataset.filename} deleted from GridFS`);
+
+    io?.to(userId).emit("cleaning-progress", { stage: "done", message: "Cleaning complete!", progress: 100, reportSaved: true });
+
     // cleanup temp files
     try {
       fs.unlinkSync(tempFilePath);
       fs.unlinkSync(cleanedFilePath);
       fs.unlinkSync(reportFilePath);
+      console.log('[INFO] Temp files cleaned up');
     } catch (e) {
       console.warn('Temp cleanup warning', e);
     }
-    io?.to(userId).emit('cleaning-progress', { progress: 100, message: 'Cleaning finished', reportSaved: true });
     return res.json({ success: true, message: `${type} dataset cleaned successfully.`, report });
     // res.json({ success: true, message: `${type} dataset cleaned and replaced successfully.` });
 
