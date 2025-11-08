@@ -7,7 +7,8 @@
 
 # Python virtual environments
 /venv_fyp_new
-
+/server/temp
+/server/python/cleaningPipeline/__pycache__
 # Build outputs
 /client/dist
 /server/dist
