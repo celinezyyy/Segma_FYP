@@ -135,9 +135,6 @@ const ConfirmSelectedDataset = () => {
             confirmButtonText: 'Yes, proceed', 
         }).then(async (result) => { 
             if (result.isConfirmed) { 
-                // setIsCleaning(true);
-                // setProgress(0);
-                // setStatusMessage("Initializing cleaning process...");
                 try {
                     // Step 1: Check both clean statuses in parallel
                     const [customerRes, orderRes] = await Promise.all([
@@ -151,7 +148,7 @@ const ConfirmSelectedDataset = () => {
                     if (!isCustomerClean) {
                         // Show progress modal
                         Swal.fire({
-                            title: "Cleaning in Progress",
+                            title: "Customer Dataset Cleaning in Progress",
                             html: `
                             <div style="width:100%; text-align:left;">
                                 <div style="margin-bottom:10px; font-weight:500; color:#444;">
@@ -171,33 +168,38 @@ const ConfirmSelectedDataset = () => {
                         await axios.post(`${backendUrl}/api/dataset/clean`, { customerDatasetId: customerDataset._id }, { withCredentials: true });
                         Swal.close();
                     }
-                    // // Step 2: Start cleaning in sequence
-                    // if (!isCustomerClean) {
-                    //     Swal.fire({
-                    //     title: 'Cleaning Customer Dataset',
-                    //     text: 'Please wait while we clean your customer data...',
-                    //     allowOutsideClick: false,
-                    //     allowEscapeKey: false,
-                    //     didOpen: () => Swal.showLoading(),
-                    //     });
 
-                    //     await axios.post(`${backendUrl}/api/dataset/clean`, { customerDatasetId: customerDataset._id }, { withCredentials: true });
-                    //     Swal.close();
-                    //     await new Promise((resolve) => setTimeout(resolve, 1000));
-                    // }
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Customer Dataset Cleaned!',
+                        text: 'We are now checking for Order dataset...',
+                        timer: 3000,
+                        showConfirmButton: false,
+                    });
 
-                    // if (!isOrderClean) {
-                    //     Swal.fire({
-                    //     title: 'Cleaning Order Dataset',
-                    //     text: 'Please wait while we clean your order data...',
-                    //     allowOutsideClick: false,
-                    //     allowEscapeKey: false,
-                    //     didOpen: () => Swal.showLoading(),
-                    //     });
-
-                    //     await axios.post(`${backendUrl}/api/dataset/clean`, { orderDatasetId: orderDataset._id }, { withCredentials: true });
-                    //     Swal.close();
-                    // }
+                    if (!isOrderClean) {
+                        Swal.fire({
+                            title: "Order dataset Cleaning in Progress",
+                            html: `
+                            <div style="width:100%; text-align:left;">
+                                <div style="margin-bottom:10px; font-weight:500; color:#444;">
+                                <span id="swal-progress-message">${statusMessage}</span>
+                                </div>
+                                <div style="background:#e0e0e0; border-radius:8px; height:18px; width:100%;">
+                                <div id="swal-progress-bar" style="height:18px; width:${currentProgress}%; background:#66a868; border-radius:8px; transition: width 0.3s;"></div>
+                                </div>
+                                <div style="margin-top:5px; font-size:12px; color:#666;"><span id="swal-progress-text">${currentProgress}</span>%</div>
+                            </div>
+                            `,
+                            allowOutsideClick: false,
+                            allowEscapeKey: false,
+                            showConfirmButton: false,
+                            didOpen: () => Swal.showLoading(),
+                        });
+                        await axios.post(`${backendUrl}/api/dataset/clean`, { orderDatasetId: orderDataset._id }, { withCredentials: true });
+                        Swal.close();
+                    }
+                    
                     Swal.fire({
                         icon: 'success',
                         title: 'Cleaned!',
