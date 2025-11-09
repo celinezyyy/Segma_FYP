@@ -47,7 +47,7 @@ def customer_check_optional_columns(df, threshold=0.9):
     if dropped_columns:
         dropped_str = ", ".join(dropped_columns)
         message = (
-            f"We noticed that very few entries were provided for {dropped_str}. "
+            f"\nWe noticed that very few entries were provided for {dropped_str}. "
             "These columns have been removed. "
             "Segmentation will still be performed using geographic (City, State) "
             "and behavioral data (e.g., orders, purchase items, total spend).\n\n"
@@ -55,7 +55,7 @@ def customer_check_optional_columns(df, threshold=0.9):
         )
     else:
         message = (
-            "All optional columns have enough data and are kept for analysis.\n\n"
+            "\nAll optional columns have enough data and are kept for analysis.\n\n"
             "Missing Data Summary:\n" + "\n".join(missing_report)
         )
     
@@ -81,7 +81,7 @@ def deduplicate_customers(df):
         else:
             return series.mode().iloc[0]
 
-    # ⚡ Vectorized groupby instead of per-group loop
+    # Vectorized groupby instead of per-group loop
     df = df.groupby('customerid', as_index=False).agg(resolve_conflict)
     
     removed_dup_id = before_dup_id - len(df)
@@ -104,7 +104,7 @@ def standardize_dob(df):
         def parse_date(x):
             if pd.isnull(x):
                 return pd.NaT
-            for format in ("%d/%m/%Y", "%m-%d-%y", "%Y-%m-%d", "%d-%b-%Y", "%d-%m-%Y"):    
+            for format in ("%d/%m/%Y", "%m-%d-%y", "%Y-%m-%d", "%d-%b-%Y", "%d-%m-%Y", "%d %B %Y", "%B %d, %Y", "%b %d %Y"):    
                 try:
                     return datetime.strptime(str(x), format).date() # Final format: YYYY-MM-DD | 2025-10-15
                 except Exception:
@@ -127,6 +127,9 @@ def standardize_dob(df):
     # %Y-%m-%d → 2000-05-12
     # %d-%b-%Y → 12-May-2000
     # %d-%m-%Y → 12-5-2000
+    # "%d %B %Y" → 15 October 1998
+    # "%B %d, %Y" → October 15, 1998
+    # "%b %d %Y" → Oct 15 1998
 
 # ===============================================================================
 
@@ -204,8 +207,12 @@ def standardize_gender(df):
             .str.strip()
             .str.lower()
             .replace({
-                'm': 'Male', 'male': 'Male', 'man': 'Male', 'boy': 'Male',
-                'f': 'Female', 'female': 'Female', 'woman': 'Female', 'girl': 'Female'
+                 'm': 'Male',
+                'man': 'Male',
+                'boy': 'Male',
+                'f': 'Female',
+                'woman': 'Female',
+                'girl': 'Female'
             })
         )
         df.loc[~df['gender'].isin(['Male', 'Female']), 'gender'] = 'Unknown'
@@ -267,7 +274,7 @@ def standardize_location(df):
         }
 
         df['state'] = df['state'].fillna('').astype(str).str.title().str.strip()
-        # ⚡ Match only unique states once
+        # Match only unique states once
         unique_states = df['state'].unique()
         state_map = {}
         for s in unique_states:
@@ -311,7 +318,7 @@ def handle_missing_values_customer(df):
 
     # --- City & State handling ---
     if {'city', 'state'}.issubset(df.columns):
-        print("\n[LOG - STAGE 5] 🔍 Handling missing city/state values...")
+        print("\n[LOG - STAGE 5] Handling missing city/state values...")
         malaysia_states = [sub.name for sub in pycountry.subdivisions if sub.country_code == 'MY']
         cache = {}  # city -> validated state
         SLEEP_TIME = 1.2

@@ -2,11 +2,6 @@
 from common_utils import normalize_columns_name, check_mandatory_columns, remove_duplicate_entries, standardize_customer_id;
 import pandas as pd
 import numpy as np
-import os
-import pycountry
-import re
-import requests
-import time
 from datetime import datetime, date
 from fuzzywuzzy import process, fuzz
 
@@ -24,18 +19,18 @@ from fuzzywuzzy import process, fuzz
 
 def standardized_order_id(df):
     """Standardize OrderID format (null is '')"""
-    print("[LOG] Running standardize_order_id...")
+    print("[LOG - STAGE 3] Running standardize_order_id...")
     if 'orderid' in df.columns:
-        # Fill NaN with empty string before converting to string
+        # Fill '' with empty string before converting to string
         df.loc[:, 'orderid'] = df['orderid'].fillna('').astype(str).str.strip().str.upper()
-        print("[LOG] OrderID column standardized")
+        print("[LOG - STAGE 3] OrderID column standardized")
     else:
-        print("[LOG] OrderID column not found, skipping")
+        print("[LOG - STAGE 3] OrderID column not found, skipping")
     return df
 
 def standardize_purchase_item(df):
     """"Standardize Purchase Item names (NaN preserved)"""
-    print("[LOG] Running standardized_purchase_item...")
+    print("[LOG - STAGE 3] Running standardized_purchase_item...")
     if "purchase item" in df.columns:
         df.loc[:, "purchase item"] = (
             df["purchase item"]
@@ -43,12 +38,12 @@ def standardize_purchase_item(df):
             .str.strip()
             .str.title()
         )
-        print("[LOG] Purchase item standardized")
+        print("[LOG - STAGE 3] Purchase item standardized")
     return df
 
 def standardize_purchase_date(df):
     """Standardize Purchase Date into separate date and time columns(NaT preserved)"""
-    print("[LOG] Running standardize_purchase_date...")
+    print("[LOG - STAGE 3] Running standardize_purchase_date...")
     message = None
     if "purchase date" in df.columns:
         # Ensure df is a deep copy (prevents SettingWithCopyWarning)
@@ -81,18 +76,24 @@ def standardize_purchase_date(df):
                 "so a separate 'purchase time' column has been derived to be used for segmentation later."
             )
     else:
-        print("[WARN] 'purchase date' column not found, skipping.")
-    print("[LOG] Purchase date standardization complete.")
+        print("[WARN - STAGE 3] 'purchase date' column not found, skipping.")
+    print("[LOG - STAGE 3] Purchase date standardization complete.")
     return df, message
 
 def standardized_item_price_and_total_spend(df):
     """
-    Standardize 'item price' and 'total spend' columns:
-    - Remove currency symbols/text (RM, $, MYR, etc.)
-    - Convert to numeric (invalid entries → NaN)
-    - Round to 2 decimal places
+    Standardize 'item price' and 'total spend' columns in the dataset.
+
+    Steps performed for each column:
+    1. Remove all non-numeric characters except digits, decimal points, and negative signs
+    (e.g., currency symbols like RM, $, MYR are removed)
+    2. Convert the resulting strings to numeric values; invalid or non-convertible entries are set to NaN
+    3. Round numeric values to 2 decimal places
+
+    This ensures the columns are clean, numeric, and ready for analysis.
     """
-    print("[LOG] Running standardized_item_price_and_total_spend...")
+
+    print("[LOG - STAGE 3] Running standardized_item_price_and_total_spend...")
 
     for col in ["item price", "total spend"]:
         if col in df.columns:
@@ -109,15 +110,15 @@ def standardized_item_price_and_total_spend(df):
             # Step 3: Round to 2 decimal places
             df[col] = df[col].round(2)
 
-            print(f"[LOG] {col} standardized: numeric, 2 decimal places")
+            print(f"[LOG - STAGE 3] {col} standardized: numeric, 2 decimal places")
         else:
-            print(f"[LOG] '{col}' column not found, skipping")
+            print(f"[LOG - STAGE 3] '{col}' column not found, skipping")
 
     return df
 
 def standardize_purchase_quantity(df):
     """Standardize Purchase Quantity to integer (NaN preserved)"""
-    print("[LOG] Running standardize_purchase_quantity...")
+    print("[LOG - STAGE 3] Running standardize_purchase_quantity...")
 
     if "purchase quantity" in df.columns:
         # Remove non-numeric characters (like pcs, x, units, etc.)
@@ -133,9 +134,9 @@ def standardize_purchase_quantity(df):
         # Round any decimals (e.g. 2.5 → 2)
         df["purchase quantity"] = df["purchase quantity"].round(0).astype("Int64")
 
-        print("[LOG] Purchase quantity standardized to integer format")
+        print("[LOG - STAGE 3] Purchase quantity standardized to integer format")
     else:
-        print("[LOG] 'purchase quantity' column not found, skipping")
+        print("[LOG - STAGE 3] 'purchase quantity' column not found, skipping")
 
     return df
 
@@ -147,19 +148,14 @@ def standardize_transaction_method(df):
     """
     import re
 
-    print("[LOG] Running standardize_transaction_method...")
+    print("[LOG - STAGE 3] Running standardize_transaction_method...")
 
     if "transaction method" not in df.columns:
-        print("[LOG] 'transaction method' column not found, skipping.")
+        print("[LOG - STAGE 3] 'transaction method' column not found, skipping.")
         return df
 
     # Step 1: Normalize text
-    df["transaction method"] = (
-        df["transaction method"]
-        .astype(str)
-        .str.lower()
-        .str.strip()
-    )
+    df["transaction method"] = (df["transaction method"].astype(str).str.lower().str.strip())
 
     # Step 2: Define patterns (non-capturing groups)
     patterns = {
@@ -180,7 +176,7 @@ def standardize_transaction_method(df):
     valid_categories = list(patterns.keys())
     df.loc[~df["transaction method"].isin(valid_categories), "transaction method"] = "Unknown"
 
-    print("[LOG] Transaction method standardized successfully.")
+    print("[LOG - STAGE 3] Transaction method standardized successfully.")
     return df
 
 # ============================================= (ORDER DATASET) STAGE 4: MISSING VALUE HANDLING =============================================
@@ -204,12 +200,12 @@ def handle_missing_values_order(df):
     critical_cols = ["orderid", "customerid", "purchase date"]
     existing_critical = [c for c in critical_cols if c in df.columns]
     df = df.dropna(subset=existing_critical)
-    print(f"[LOG] Dropped rows with missing critical identifiers: {initial_count - len(df)}")
+    print(f"[LOG - STAGE 4] Dropped rows with missing critical identifiers: {initial_count - len(df)}")
 
     # Drop rows missing both financial info
     before_financial = len(df)
     df = df.dropna(subset=["item price", "total spend"], how="all")
-    print(f"[LOG] Dropped {before_financial - len(df)} rows with no financial info")
+    print(f"[LOG - STAGE 4] Dropped {before_financial - len(df)} rows with no financial info")
 
     # Fill non-critical fields
     if "purchase item" in df.columns:
@@ -244,9 +240,8 @@ def handle_missing_values_order(df):
 
     # Final summary
     dropped_total = initial_count - len(df)
-    print(f"[LOG] Dropped total {dropped_total} rows ({dropped_total/initial_count:.2%}) due to missing critical data")
-    print(f"[LOG] Dataset now has {len(df)} rows after missing value handling")
-    print("========== [STAGE 4 COMPLETE] ==========")
+    print(f"[LOG - STAGE 4] Dropped total {dropped_total} rows ({dropped_total/initial_count:.2%}) due to missing critical data")
+    print(f"[LOG - STAGE 4] Dataset now has {len(df)} rows after missing value handling")
 
     return df
 
@@ -258,7 +253,7 @@ def order_detect_outliers(df):
     - Apply percentile capping (1st–99th) if dataset >= 500 rows.
     - Columns: item price, purchase quantity, total spend.
     """
-    print(f"[LOG] Dataset has {len(df)} rows")
+    print(f"[LOG - STAGE 5] Dataset has {len(df)} rows")
 
     numeric_cols = ["purchase quantity", "total spend"]
     df = df.copy()
@@ -268,7 +263,7 @@ def order_detect_outliers(df):
             continue
 
         if df[col].dropna().empty:
-            print(f"[WARN] {col} is empty or missing, skipping.")
+            print(f"[WARN - STAGE 5] {col} is empty or missing, skipping.")
             continue
 
         if len(df) < 500:
@@ -287,7 +282,7 @@ def order_detect_outliers(df):
 
         # Apply capping
         df[col] = df[col].clip(lower, upper)
-        print(f"[LOG] {method} applied on '{col}', capped between [{lower:.2f}, {upper:.2f}]")
+        print(f"[LOG - STAGE 5] {method} applied on '{col}', capped between [{lower:.2f}, {upper:.2f}]")
 
     print("✅ [STAGE 5 COMPLETE] Outliers handled successfully.")
     return df
