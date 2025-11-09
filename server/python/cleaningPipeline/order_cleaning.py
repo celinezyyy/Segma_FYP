@@ -22,8 +22,12 @@ def standardized_order_id(df):
     print("[LOG - STAGE 3] Running standardize_order_id...")
     if 'orderid' in df.columns:
         # Fill '' with empty string before converting to string
-        df.loc[:, 'orderid'] = df['orderid'].fillna('').astype(str).str.strip().str.upper()
-        print("[LOG - STAGE 3] OrderID column standardized")
+        df.loc[:, 'orderid'] = df['orderid'].astype(str).str.strip().str.upper()
+        
+        # Convert empty string back to NaN
+        df.loc[df['orderid'] == '', 'orderid'] = np.nan
+        
+        print("[LOG - STAGE 3] OrderID column standardized (empty -> NaN)")
     else:
         print("[LOG - STAGE 3] OrderID column not found, skipping")
     return df
@@ -32,13 +36,17 @@ def standardize_purchase_item(df):
     """"Standardize Purchase Item names (NaN preserved)"""
     print("[LOG - STAGE 3] Running standardized_purchase_item...")
     if "purchase item" in df.columns:
-        df.loc[:, "purchase item"] = (
-            df["purchase item"]
+        mask = df["purchase item"].notna()
+        df.loc[mask, "purchase item"] = (
+            df.loc[mask, "purchase item"]
             .astype(str)
             .str.strip()
             .str.title()
         )
-        print("[LOG - STAGE 3] Purchase item standardized")
+        df.loc[df["purchase item"].str.strip() == "", "purchase item"] = np.nan
+        print("[LOG - STAGE 3] Purchase Item standardized, NaN preserved")
+    else:
+        print("[LOG - STAGE 3] 'purchase item' column not found, skipping")
     return df
 
 def standardize_purchase_date(df):
@@ -50,7 +58,7 @@ def standardize_purchase_date(df):
         df = df.copy()
         
         # Clean values
-        df.loc[:, "purchase date"] = df["purchase date"].astype(str).str.strip()
+        df.loc[df["purchase date"].notna(), "purchase date"] = df.loc[df["purchase date"].notna(), "purchase date"].astype(str).str.strip()
 
         # Convert to datetime
         df.loc[:, "purchase datetime"] = pd.to_datetime(
@@ -58,10 +66,11 @@ def standardize_purchase_date(df):
         )
 
         # Detect which rows have time info
-        has_time_mask = df["purchase date"].str.contains(":", regex=False)
-
+        has_time_mask = df["purchase date"].notna() & df["purchase date"].str.contains(":", regex=False)
+        
         # Create standardized columns
         df.loc[:, "purchase date"] = df["purchase datetime"].dt.strftime("%Y-%m-%d")
+        df.loc[:, "purchase date"] = df["purchase date"].replace("NaT", pd.NA)
         df.loc[:, "purchase time"] = None
         df.loc[has_time_mask, "purchase time"] = (
             df.loc[has_time_mask, "purchase datetime"].dt.strftime("%H:%M:%S")
@@ -77,7 +86,7 @@ def standardize_purchase_date(df):
             )
     else:
         print("[WARN - STAGE 3] 'purchase date' column not found, skipping.")
-    print("[LOG - STAGE 3] Purchase date standardization complete.")
+    print("[LOG - STAGE 3] Purchase date standardization complete, NaN preserved.")
     return df, message
 
 def standardized_item_price_and_total_spend(df):
@@ -110,7 +119,7 @@ def standardized_item_price_and_total_spend(df):
             # Step 3: Round to 2 decimal places
             df[col] = df[col].round(2)
 
-            print(f"[LOG - STAGE 3] {col} standardized: numeric, 2 decimal places")
+            print(f"[LOG - STAGE 3] {col} standardized: numeric, 2 decimal places, NaN preserved")
         else:
             print(f"[LOG - STAGE 3] '{col}' column not found, skipping")
 
@@ -134,7 +143,7 @@ def standardize_purchase_quantity(df):
         # Round any decimals (e.g. 2.5 → 2)
         df["purchase quantity"] = df["purchase quantity"].round(0).astype("Int64")
 
-        print("[LOG - STAGE 3] Purchase quantity standardized to integer format")
+        print("[LOG - STAGE 3] Purchase quantity standardized to integer format, NaN preserved")
     else:
         print("[LOG - STAGE 3] 'purchase quantity' column not found, skipping")
 
@@ -153,10 +162,13 @@ def standardize_transaction_method(df):
     if "transaction method" not in df.columns:
         print("[LOG - STAGE 3] 'transaction method' column not found, skipping.")
         return df
-
-    # Step 1: Normalize text
-    df["transaction method"] = (df["transaction method"].astype(str).str.lower().str.strip())
-
+    
+    # Step1: Only process non-null values
+    mask_notna = df["transaction method"].notna()
+    df.loc[mask_notna, "transaction method"] = (
+        df.loc[mask_notna, "transaction method"].astype(str).str.lower().str.strip()
+    )
+    
     # Step 2: Define patterns (non-capturing groups)
     patterns = {
         "Cash": r"\b(?:cash|tunai|otc|counter)\b",
@@ -171,12 +183,11 @@ def standardize_transaction_method(df):
     for category, pattern in patterns.items():
         mask = df["transaction method"].str.contains(pattern, flags=re.IGNORECASE, na=False, regex=True)
         df.loc[mask, "transaction method"] = category
-    
-    # Step 5: Replace values that didn’t match anything
-    valid_categories = list(patterns.keys())
-    df.loc[~df["transaction method"].isin(valid_categories), "transaction method"] = "Unknown"
 
-    print("[LOG - STAGE 3] Transaction method standardized successfully.")
+    mask_unmatched = mask_notna & ~df["transaction method"].isin(patterns.keys())
+    df.loc[mask_unmatched, "transaction method"] = pd.NA
+
+    print("[LOG - STAGE 3] Transaction method standardized successfully, NaN preserved.")
     return df
 
 # ============================================= (ORDER DATASET) STAGE 4: MISSING VALUE HANDLING =============================================
@@ -201,42 +212,57 @@ def handle_missing_values_order(df):
     existing_critical = [c for c in critical_cols if c in df.columns]
     df = df.dropna(subset=existing_critical)
     print(f"[LOG - STAGE 4] Dropped rows with missing critical identifiers: {initial_count - len(df)}")
+    
+    if "purchase time" in df.columns:
+        # Drop rows where purchase time is null
+        before_drop = len(df)
+        df = df.dropna(subset=["purchase time"])
+        print(f"[LOG - STAGE 4] Dropped {before_drop - len(df)} rows with missing purchase time")
 
     # Drop rows missing both financial info
     before_financial = len(df)
     df = df.dropna(subset=["item price", "total spend"], how="all")
     print(f"[LOG - STAGE 4] Dropped {before_financial - len(df)} rows with no financial info")
 
-    # Fill non-critical fields
-    if "purchase item" in df.columns:
-        df["purchase item"] = df["purchase item"].fillna("Unknown Item")
+    for col in ["item price", "total spend"]:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.replace(r"[^\d\.\-]", "", regex=True)
+            df[col] = pd.to_numeric(df[col], errors="coerce").round(2)
+            
+            # Remove zero or negative values that are logically impossible
+            df.loc[df[col] <= 0, col] = np.nan
+            zero_count = df[col].isna().sum()
+            if zero_count > 0:
+                print(f"[WARN - STAGE 4] {zero_count} rows in '{col}' are zero or invalid and set to NaN")
 
+    # Handle purchase quantity: calculate if possible
     if "purchase quantity" in df.columns:
-        df["purchase quantity"] = df["purchase quantity"].fillna(1)
+        mask_missing_qty = df['purchase quantity'].isna() & df['total spend'].notna() & df['item price'].notna()
+        df.loc[mask_missing_qty, 'purchase quantity'] = (df.loc[mask_missing_qty, 'total spend'] / df.loc[mask_missing_qty, 'item price']).round(0).astype('Int64')
+        # Remaining missing → 1 as fallback
+        df['purchase quantity'] = df['purchase quantity'].fillna(1)
 
-    # Handle item price (replace with median)
+    # Handle item price - but very rare happened so I decided to simply drop that row
     if "item price" in df.columns:
-        median_price = df["item price"].median(skipna=True)
-        df["item price"] = df["item price"].fillna(median_price)
+        before_drop = len(df)
+        df = df.dropna(subset=["item price"])
+        print(f"[LOG - STAGE 4] Dropped {before_drop - len(df)} rows with missing 'item price' (critical for calculations)")
 
-    # Handle total spend (calculate or fallback)
+    # Handle total spend
     if {"item price", "purchase quantity", "total spend"}.issubset(df.columns):
-        mask_missing_total = df["total spend"].isna()
+        mask_missing_total = df["total spend"].isna() & df["item price"].notna() & df["purchase quantity"].notna()
         df.loc[mask_missing_total, "total spend"] = (
             df.loc[mask_missing_total, "item price"] * df.loc[mask_missing_total, "purchase quantity"]
         )
-        # Fill any still missing values with median
-        median_total = df["total spend"].median(skipna=True)
-        df["total spend"] = df["total spend"].fillna(median_total)
+        # Any remaining missing → drop (very rare)
+        before_drop = len(df)
+        df = df.dropna(subset=["total spend"])
+        print(f"[LOG - STAGE 4] Dropped {before_drop - len(df)} rows with missing 'total spend' after calculation")
 
     # Transaction method → Unknown
     if "transaction method" in df.columns:
         df["transaction method"] = df["transaction method"].replace(["", "NaN", None], np.nan)
         df["transaction method"] = df["transaction method"].fillna("Unknown")
-
-    # Purchase time → Unknown
-    if "purchase time" in df.columns:
-        df["purchase time"] = df["purchase time"].fillna("Unknown")
 
     # Final summary
     dropped_total = initial_count - len(df)
@@ -290,7 +316,8 @@ def order_detect_outliers(df):
 # ============================================= (ORDER DATASET) DATASET CLEANING PIPELINE =============================================
 def clean_order_dataset(df, cleaned_output_path):
     print("🚀 Starting order data cleaning pipeline...\n")
-    messages = []
+    messages = [] 
+    report = {"summary": {}, "detailed_messages": {}}
     # =======================================================
     # STAGE 0: NORMALIZE COLUMN NAMES (FROM GENERIC FUNCTION)
     # =======================================================
@@ -303,17 +330,21 @@ def clean_order_dataset(df, cleaned_output_path):
     # =============================================
     print("========== [STAGE 1 START] Schema & Column Validation ==========")
     order_mandatory = ["orderid", "customerid", "purchase item", "purchase date", "item price", "purchase quantity", "total spend", "transaction method"]
-    df, message = check_mandatory_columns(df, dataset_type="order", mandatory_columns=order_mandatory)
-    messages.append(message)
-    print(message)
+    df, mandatory_msg = check_mandatory_columns(df, dataset_type="order", mandatory_columns=order_mandatory)
+    messages.append(mandatory_msg)
+    report["detailed_messages"]["check_mandatory_columns"] = mandatory_msg
+    print(mandatory_msg)
     print("✅ [STAGE 1 COMPLETE] Schema validation done.\n")
     
     # ============================================================
     # STAGE 2: REMOVE DUPLICATE ENTRY ROWS (FROM GENERIC FUNCTION)
     # ============================================================
     print("========== [STAGE 2 START] Remove Duplicate Entry Rows ==========")
+    initial_rows = len(df)
     df, message = remove_duplicate_entries(df)
     messages.append(message)
+    report["detailed_messages"]["remove_duplicate_entries"] = message
+    report["summary"]["duplicates_removed_rows"] = initial_rows - len(df)
     print("✅ [STAGE 2 COMPLETE] Duplicate entries removed.\n")
     
     # =============================================
@@ -323,8 +354,9 @@ def clean_order_dataset(df, cleaned_output_path):
     df = standardized_order_id(df)
     df = standardize_customer_id(df)
     df = standardize_purchase_item(df)
-    df, message = standardize_purchase_date(df)
-    messages.append(message)
+    df, standardize_purchaseDateMessage = standardize_purchase_date(df)
+    messages.append(standardize_purchaseDateMessage)
+    report["detailed_messages"]["standardize_purchase_date"] = standardize_purchaseDateMessage
     df = standardized_item_price_and_total_spend(df)
     df = standardize_purchase_quantity(df)
     df = standardize_transaction_method(df)
@@ -344,6 +376,11 @@ def clean_order_dataset(df, cleaned_output_path):
     df = order_detect_outliers(df)   # make sure detect_outliers returns df
     print("✅ [STAGE 5 COMPLETE] Outliers handled.\n")
     
+    # final profiling summary
+    report["summary"].update({
+        "total_rows_final": len(df),
+        "total_columns_final": len(df.columns),
+    })
     # =============================================
     # SAVE CLEANED DATASET
     # =============================================
