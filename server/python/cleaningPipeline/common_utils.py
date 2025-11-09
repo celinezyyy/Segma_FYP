@@ -1,6 +1,6 @@
 # Step 1: Import libraries
 # import pandas as pd
-# import numpy as np
+import numpy as np
 # import os
 # import pycountry
 # import re
@@ -75,14 +75,20 @@ def remove_duplicate_entries(df):
     return df, message
 
 def standardize_customer_id(df):
-    """Standardize CustomerID format (null value is '')"""
+    """Standardize CustomerID format and keep null as NaN"""
     print("[LOG - STAGE 4] Running standardize_customer_id...")
+
     if 'customerid' in df.columns:
-        # Fill NaN with empty string before converting to string
-        df.loc[:, 'customerid'] = df['customerid'].fillna('').astype(str).str.strip().str.upper()
-        print("[LOG - STAGE 4] CustomerID column standardized")
+        # Convert to string, strip spaces
+        df.loc[:, 'customerid'] = df['customerid'].astype(str).str.strip().str.upper()
+
+        # Convert empty string back to NaN
+        df.loc[df['customerid'] == '', 'customerid'] = np.nan
+
+        print("[LOG - STAGE 4] CustomerID column standardized (empty -> NaN)")
     else:
         print("[LOG - STAGE 4] CustomerID column not found, skipping")
+
     return df
-    # Might have special case of dirty data exist such as "****", "1234....", "annbwbciwbciowb"
-    # not sure how to handle it (Currently will say bcs we focus on small business enterprise that have use digital system, so normally customerID will not have inconsistent format issue, even the inconsistant format exist, at the end this row will not be use as when we merge we cant found that customerID)
+# Might have special case of dirty data exist such as "****", "1234....", "annbwbciwbciowb"
+# not sure how to handle it (Currently will say bcs we focus on small business enterprise that have use digital system, so normally customerID will not have inconsistent format issue, even the inconsistant format exist, at the end this row will not be use as when we merge we cant found that customerID)
