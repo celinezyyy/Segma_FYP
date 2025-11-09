@@ -391,5 +391,5 @@ def clean_order_dataset(df, cleaned_output_path):
 
     print("==========================================================")
     print("🎉 Data cleaning pipeline completed successfully!\n")
-    return df, messages
+    return df, report
     # later add on return clean file name
