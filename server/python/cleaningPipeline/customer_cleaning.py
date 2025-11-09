@@ -540,7 +540,6 @@ def clean_customer_dataset(df, cleaned_output_path):
     # =============================================
     print("========== [STAGE 6 START] Outlier Detection ==========")
     df = customer_detect_outliers(df)   # make sure detect_outliers returns df
-    report["summary"]["outliers_flagged"] = int(df['is_age_outlier'].sum()) if 'is_age_outlier' in df.columns else 0
     print("✅ [STAGE 6 COMPLETE] Outliers handled.\n")
 
     # final profiling summary
