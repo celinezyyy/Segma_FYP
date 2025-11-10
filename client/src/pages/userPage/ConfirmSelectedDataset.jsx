@@ -145,6 +145,11 @@ const ConfirmSelectedDataset = () => {
                     const isCustomerClean = customerRes.data?.isClean;
                     const isOrderClean = orderRes.data?.isClean;
 
+                    let customerCleanRes = {};
+                    let orderCleanRes = {};
+                    let customerReport = {};
+                    let orderReport = {};
+
                     if (!isCustomerClean) {
                         // Show progress modal
                         Swal.fire({
@@ -203,13 +208,26 @@ const ConfirmSelectedDataset = () => {
                     Swal.fire({
                         icon: 'success',
                         title: 'Cleaned!',
-                        text: 'All datasets already clean! Proceeding to segmentation...',
+                        text: 'All datasets already clean! Check your summarize report...',
                         timer: 2500,
                         showConfirmButton: false,
                     });
 
+                    const customerReportRes = await axios.get(`${backendUrl}/api/dataset/dataset-report/${customerDataset._id}`, { withCredentials: true });
+                    const orderReportRes = await axios.get(`${backendUrl}/api/dataset/dataset-report/${orderDataset._id}`, { withCredentials: true });
+                    
+                    console.log("🧼 Customer Clean API Response:", customerReportRes);
+                    console.log("🧼 Order Clean API Response:", orderReportRes);
+
                     setTimeout(() => {
-                        navigate('/segmentation', { state: { selectedCustomer, selectedOrder } });
+                        navigate('/cleaning-summarize-report', { 
+                            state: { 
+                                selectedCustomer, 
+                                selectedOrder, 
+                                customerReport: customerReportRes.data.report, 
+                                orderReport: orderReportRes.data.report 
+                            } 
+                        });
                     }, 2500);
         
                 } catch (err) {

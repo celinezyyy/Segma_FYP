@@ -397,3 +397,22 @@ export const startDatasetCleaning = async (req, res) => {
     // res.status(500).json({ success: false, message: error.message });
   }
 };
+
+export const getDatasetReport = async (req, res) => {
+  try {
+    const { datasetId } = req.params;
+    if (!datasetId) {
+      return res.status(400).json({ success: false, message: 'Dataset ID not provided' });
+    }
+    
+    const dataset = await datasetModel.findOne({ _id: datasetId});
+
+    if (!dataset)
+      return res.status(404).json({ success: false, message: "Dataset not found" });
+
+    const report = dataset.metadata?.data_quality_report;
+    return res.json({ success: true, report });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
