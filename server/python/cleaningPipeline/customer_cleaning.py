@@ -307,12 +307,25 @@ def handle_missing_values_customer(df):
     GEOCODE_URL = "https://geocode.maps.co/search"
     SLEEP_TIME = 1.2
     cache = {}  # ⚡ moved outside loops
+    
+    messages = []
+    stats = {
+        "customerid_removed": 0,
+        "case1_api_filled": 0,
+        "case1_fallback_filled": 0,
+        "case2_filled": 0,
+        "case3_filled": 0
+    }
 
     # --- Drop rows without ID ---
     if 'customerid' in df.columns:
         before_drop = len(df)
         df = df[df['customerid'].notna()].copy()
-        print(f"[LOG - STAGE 5] Dropped {before_drop - len(df)} rows without CustomerID")
+        rows_removed = before_drop - len(df)
+        stats["customerid_removed"] = rows_removed
+        print(f"[LOG - STAGE 5] Dropped {rows_removed} rows without CustomerID")
+        if rows_removed > 0:
+            messages.append(f" Removed {rows_removed} record(s) with missing CustomerID as we cannot predict valid customer identifiers.")
     else:
         print("[LOG - STAGE 5] 'customerid' column missing, skipping drop")
 
@@ -356,8 +369,10 @@ def handle_missing_values_customer(df):
             # Fill values
             fill_state = cache.get(city)
             if fill_state:
+                filled_count = ((df['city'] == city) & (df['state'] == 'Unknown')).sum()
                 df.loc[(df['city'] == city) & (df['state'] == 'Unknown'), 'state'] = fill_state
-                print(f"[TRACE - STAGE 5] Filled {city} → state='{fill_state}' (API valid)")
+                stats["case1_api_filled"] += filled_count
+                print(f"[TRACE - STAGE 5] Filled {filled_count} → {city} → state='{fill_state}' (API valid)")
             else:
                 # Fallback: use mode state & mode city for that state
                 # The API fails to find the city || The response doesn’t contain a valid "state" field || Or the returned "state" isn’t in the official Malaysia subdivision list.
@@ -373,9 +388,19 @@ def handle_missing_values_customer(df):
                 mode_city = mode_city_per_state.get(mode_state, 'Unknown')
 
                 mask_fill = (df['city'] == city) & (df['state'] == 'Unknown')
+                filled_count = mask_fill.sum()
                 df.loc[mask_fill, 'state'] = mode_state
                 df.loc[mask_fill, 'city'] = mode_city
-                print(f"[TRACE - STAGE 5] Filled {mask_fill.sum()} row(s) → city='{mode_city}', state='{mode_state}' (Fallback)")
+                stats["case1_fallback_filled"] += filled_count
+                print(f"[TRACE - STAGE 5] Filled {filled_count} row(s) → city='{mode_city}', state='{mode_state}' (Fallback)")
+
+        if stats["case1_api_filled"] > 0 or stats["case1_fallback_filled"] > 0:
+            msg = f"Location - Missing State (City Known): "
+            if stats["case1_api_filled"] > 0:
+                msg += f"Filled {stats['case1_api_filled']} record(s) using geocoding API to detect the correct state. "
+            if stats["case1_fallback_filled"] > 0:
+                msg += f"Filled {stats['case1_fallback_filled']} record(s) using statistical mode (most frequent city-state pair) when API couldn't determine location."
+            messages.append(msg)
 
         # Case 2: missing city but state known → fill with mode city per state
         print("\n[LOG - STAGE 5] Case 2: Filling missing city where state is known...")
@@ -388,8 +413,14 @@ def handle_missing_values_customer(df):
             )
             for state, city_mode in mode_city_per_state.items():
                 mask_fill = mask_case2 & (df['state'] == state)
-                df.loc[mask_fill, 'city'] = city_mode
-                print(f"[TRACE - STAGE 5] Filled {mask_fill.sum()} row(s) → missing city for state='{state}' → city='{city_mode}'")
+                filled_count = mask_fill.sum()
+                if filled_count > 0:
+                    df.loc[mask_fill, 'city'] = city_mode
+                    stats["case2_filled"] += filled_count
+                    print(f"[TRACE - STAGE 5] Filled {filled_count} row(s) → missing city for state='{state}' → city='{city_mode}'")
+        
+        if stats["case2_filled"] > 0:
+            messages.append(f"Location - Missing City (State Known): Filled {stats['case2_filled']} record(s) using the most frequent city for each known state.")
 
         # Case 3: both missing → fill with most frequent pair
         print("\n[LOG - STAGE 5] Case 3: Filling missing city and state...")
@@ -398,18 +429,29 @@ def handle_missing_values_customer(df):
             valid_pairs = df[(df['city'] != 'Unknown') & (df['state'] != 'Unknown')]
             if not valid_pairs.empty:
                 city_mode, state_mode = valid_pairs.groupby(['city', 'state']).size().idxmax()
+                filled_count = mask_case3.sum()
                 df.loc[mask_case3, ['city', 'state']] = [city_mode, state_mode]
-                print(f"[TRACE - STAGE 5] Filled {mask_case3.sum()} row(s) → missing city/state → City='{city_mode}', State='{state_mode}'")
+                stats["case3_filled"] = filled_count
+                print(f"[TRACE - STAGE 5] Filled {filled_count} row(s) → missing city/state → City='{city_mode}', State='{state_mode}'")
             else:
                 print("[WARN - STAGE 5] No valid city/state pairs to fill missing both values")
+        
+        if stats["case3_filled"] > 0:
+            messages.append(f"Location - Both City & State Missing: Filled {stats['case3_filled']} record(s) using the most frequent city-state pair in the dataset.")
 
-    return df
+    # Build final message
+    if not messages:
+        final_message = "No missing values found in critical fields (CustomerID, City, State)."
+    else:
+        final_message = "Missing Value Handling Summary:\n\n" + "\n\n".join(messages)
+
+    return df, final_message
 
 # ============================================= (CUSTOMER DATASET) STAGE 6: OUTLIER DETECTION =============================================
 def customer_detect_outliers(df):
     """Adaptive outlier detection (flag instead of replace)."""
     print("[LOG - STAGE 6] Running detect_outliers...")
-
+    message = None
     if 'age' in df.columns:
         df['age'] = pd.to_numeric(df['age'], errors='coerce')
         n = len(df)
@@ -417,6 +459,7 @@ def customer_detect_outliers(df):
 
         # Initialize flag column
         df['is_age_outlier'] = False
+        message = ""
 
         if n < 500:
             # IQR method
@@ -429,9 +472,27 @@ def customer_detect_outliers(df):
             # Flag outliers
             outlier_mask = (df['age'] < lower_bound) | (df['age'] > upper_bound)
             df.loc[outlier_mask, 'is_age_outlier'] = True
+            outlier_count = outlier_mask.sum()
 
             print(f"[LOG - STAGE 6] IQR Applied for {n} rows. Range: [{lower_bound:.1f}, {upper_bound:.1f}] "
-                  f"Outliers flagged: {outlier_mask.sum()}")
+                  f"Outliers flagged: {outlier_count}")
+            
+            if outlier_count > 0:
+                message = (
+                    f"Unusual Age Values Detected:\n\n"
+                    f"We found {outlier_count} customer(s) with ages that seem unusual (either very young or very old) compared to the rest of your data.\n\n"
+                    f"Normal age range in your data: {lower_bound:.0f} to {upper_bound:.0f} years old\n\n"
+                    f"What we did: These customers are marked with a special flag but kept in your dataset. They might be:\n"
+                    f"   - Real customers (e.g., teenagers or senior citizens)\n"
+                    f"   - Data entry mistakes\n\n"
+                    f"You can review them later if needed."
+                )
+            else:
+                message = (
+                    f"Age Data Looks Good:\n\n"
+                    f"All customer ages appear normal and consistent. No unusual values detected.\n\n"
+                    f"Typical age range: {lower_bound:.0f} to {upper_bound:.0f} years old"
+                )
 
         else:
             # Percentile method
@@ -441,14 +502,33 @@ def customer_detect_outliers(df):
             # Flag outliers instead of capping
             outlier_mask = (df['age'] < lower_bound) | (df['age'] > upper_bound)
             df.loc[outlier_mask, 'is_age_outlier'] = True
+            outlier_count = outlier_mask.sum()
 
             print(f"[LOG - STAGE 6] Percentile method applied for {n} rows. Range: [{lower_bound:.1f}, {upper_bound:.1f}] "
-                  f"Outliers flagged: {outlier_mask.sum()}")
+                  f"Outliers flagged: {outlier_count}")
+            
+            if outlier_count > 0:
+                message = (
+                    f"Unusual Age Values Detected:\n\n"
+                    f"We found {outlier_count} customer(s) with ages that seem unusual (either very young or very old) compared to the rest of your data.\n\n"
+                    f"Normal age range in your data: {lower_bound:.0f} to {upper_bound:.0f} years old\n\n"
+                    f"What we did: These customers are marked with a special flag but kept in your dataset. They might be:\n"
+                    f"   - Real customers (e.g., teenagers or senior citizens)\n"
+                    f"   - Data entry mistakes\n\n"
+                    f"You can review them later if needed."
+                )
+            else:
+                message = (
+                    f"Age Data Looks Good:\n\n"
+                    f"All customer ages appear normal and consistent. No unusual values detected.\n\n"
+                    f"Typical age range: {lower_bound:.0f} to {upper_bound:.0f} years old"
+                )
 
     else:
         print("[LOG - STAGE 6] 'age' column missing, skipping outlier detection")
+        message = "Age column not found. Outlier detection skipped."
 
-    return df
+    return df, message
 
 # ============================================= (CUSTOMER DATASET) DATASET CLEANING PIPELINE =============================================
 def clean_customer_dataset(df, cleaned_output_path):
@@ -532,14 +612,18 @@ def clean_customer_dataset(df, cleaned_output_path):
     # STAGE 5: MISSING VALUE HANDLING
     # =============================================
     print("========== [STAGE 5 START] Missing Value Handling ==========")
-    df = handle_missing_values_customer(df)
+    df, missing_value_msg = handle_missing_values_customer(df)
+    messages.append(missing_value_msg)
+    report["detailed_messages"]["handle_missing_values_customer"] = missing_value_msg
     print("✅ [STAGE 5 COMPLETE] Missing values handled.\n")
 
     # =============================================
     # STAGE 6: OUTLIER DETECTION
     # =============================================
     print("========== [STAGE 6 START] Outlier Detection ==========")
-    df = customer_detect_outliers(df)   # make sure detect_outliers returns df
+    df, outlier_msg = customer_detect_outliers(df)
+    messages.append(outlier_msg)
+    report["detailed_messages"]["customer_detect_outliers"] = outlier_msg
     print("✅ [STAGE 6 COMPLETE] Outliers handled.\n")
 
     # final profiling summary
