@@ -206,23 +206,38 @@ def handle_missing_values_order(df):
     """
 
     initial_count = len(df)
+    messages = []
+    stats = {
+        "critical_ids_removed": 0,
+        "purchase_time_removed": 0,
+        "no_financial_removed": 0,
+        "item_price_removed": 0,
+        "total_spend_removed": 0,
+        "qty_calculated": 0,
+        "total_spend_calculated": 0,
+        "transaction_method_filled": 0
+    }
 
     # Drop rows missing critical identifiers
     critical_cols = ["orderid", "customerid", "purchase date"]
     existing_critical = [c for c in critical_cols if c in df.columns]
+    before_critical = len(df)
     df = df.dropna(subset=existing_critical)
-    print(f"[LOG - STAGE 4] Dropped rows with missing critical identifiers: {initial_count - len(df)}")
+    stats["critical_ids_removed"] = before_critical - len(df)
+    print(f"[LOG - STAGE 4] Dropped rows with missing critical identifiers: {stats['critical_ids_removed']}")
     
     if "purchase time" in df.columns:
         # Drop rows where purchase time is null
         before_drop = len(df)
         df = df.dropna(subset=["purchase time"])
-        print(f"[LOG - STAGE 4] Dropped {before_drop - len(df)} rows with missing purchase time")
+        stats["purchase_time_removed"] = before_drop - len(df)
+        print(f"[LOG - STAGE 4] Dropped {stats['purchase_time_removed']} rows with missing purchase time")
 
     # Drop rows missing both financial info
     before_financial = len(df)
     df = df.dropna(subset=["item price", "total spend"], how="all")
-    print(f"[LOG - STAGE 4] Dropped {before_financial - len(df)} rows with no financial info")
+    stats["no_financial_removed"] = before_financial - len(df)
+    print(f"[LOG - STAGE 4] Dropped {stats['no_financial_removed']} rows with no financial info")
 
     for col in ["item price", "total spend"]:
         if col in df.columns:
@@ -238,7 +253,9 @@ def handle_missing_values_order(df):
     # Handle purchase quantity: calculate if possible
     if "purchase quantity" in df.columns:
         mask_missing_qty = df['purchase quantity'].isna() & df['total spend'].notna() & df['item price'].notna()
+        calculated_count = mask_missing_qty.sum()
         df.loc[mask_missing_qty, 'purchase quantity'] = (df.loc[mask_missing_qty, 'total spend'] / df.loc[mask_missing_qty, 'item price']).round(0).astype('Int64')
+        stats["qty_calculated"] = calculated_count
         # Remaining missing → 1 as fallback
         df['purchase quantity'] = df['purchase quantity'].fillna(1)
 
@@ -246,43 +263,90 @@ def handle_missing_values_order(df):
     if "item price" in df.columns:
         before_drop = len(df)
         df = df.dropna(subset=["item price"])
-        print(f"[LOG - STAGE 4] Dropped {before_drop - len(df)} rows with missing 'item price' (critical for calculations)")
+        stats["item_price_removed"] = before_drop - len(df)
+        print(f"[LOG - STAGE 4] Dropped {stats['item_price_removed']} rows with missing 'item price' (critical for calculations)")
 
     # Handle total spend
     if {"item price", "purchase quantity", "total spend"}.issubset(df.columns):
         mask_missing_total = df["total spend"].isna() & df["item price"].notna() & df["purchase quantity"].notna()
+        calculated_total_count = mask_missing_total.sum()
         df.loc[mask_missing_total, "total spend"] = (
             df.loc[mask_missing_total, "item price"] * df.loc[mask_missing_total, "purchase quantity"]
         )
+        stats["total_spend_calculated"] = calculated_total_count
         # Any remaining missing → drop (very rare)
         before_drop = len(df)
         df = df.dropna(subset=["total spend"])
-        print(f"[LOG - STAGE 4] Dropped {before_drop - len(df)} rows with missing 'total spend' after calculation")
+        stats["total_spend_removed"] = before_drop - len(df)
+        print(f"[LOG - STAGE 4] Dropped {stats['total_spend_removed']} rows with missing 'total spend' after calculation")
 
     # Transaction method → Unknown
     if "transaction method" in df.columns:
+        before_fill = df["transaction method"].isna().sum()
         df["transaction method"] = df["transaction method"].replace(["", "NaN", None], np.nan)
         df["transaction method"] = df["transaction method"].fillna("Unknown")
+        stats["transaction_method_filled"] = before_fill
 
-    # Final summary
+    # Build message
     dropped_total = initial_count - len(df)
+    
+    if dropped_total > 0:
+        messages.append(f"Records Removed: {dropped_total} order(s) removed due to missing critical information:")
+        if stats["critical_ids_removed"] > 0:
+            messages.append(f"  - {stats['critical_ids_removed']} order(s) without OrderID, CustomerID, or Purchase Date")
+        if stats["purchase_time_removed"] > 0:
+            messages.append(f"  - {stats['purchase_time_removed']} order(s) without Purchase Time")
+        if stats["no_financial_removed"] > 0:
+            messages.append(f"  - {stats['no_financial_removed']} order(s) without any price or total spend information")
+        if stats["item_price_removed"] > 0:
+            messages.append(f"  - {stats['item_price_removed']} order(s) without Item Price (needed for calculations)")
+        if stats["total_spend_removed"] > 0:
+            messages.append(f"  - {stats['total_spend_removed']} order(s) without Total Spend even after calculation")
+    
+    calculation_msgs = []
+    if stats["qty_calculated"] > 0:
+        calculation_msgs.append(f"  - Calculated Purchase Quantity for {stats['qty_calculated']} order(s) using Total Spend / Item Price")
+    if stats["total_spend_calculated"] > 0:
+        calculation_msgs.append(f"  - Calculated Total Spend for {stats['total_spend_calculated']} order(s) using Item Price x Quantity")
+    if stats["transaction_method_filled"] > 0:
+        calculation_msgs.append(f"  - Filled {stats['transaction_method_filled']} missing Transaction Method(s) with 'Unknown'")
+    
+    if calculation_msgs:
+        messages.append("\nData Filled/Calculated:")
+        messages.extend(calculation_msgs)
+    
+    if not messages:
+        final_message = "All order records have complete information. No missing values found."
+    else:
+        final_message = "Missing Value Handling Summary:\n\n" + "\n".join(messages)
+    
+    # Final summary
     print(f"[LOG - STAGE 4] Dropped total {dropped_total} rows ({dropped_total/initial_count:.2%}) due to missing critical data")
     print(f"[LOG - STAGE 4] Dataset now has {len(df)} rows after missing value handling")
 
-    return df
+    return df, final_message
 
 # ============================================= (ORDER DATASET) STAGE 5: OUTLIER DETECTION =============================================
 def order_detect_outliers(df):
     """
-    Stage 5: Handle outliers for order dataset.
+    Stage 5: Detect and flag outliers for order dataset (NO capping/replacement).
     - Apply IQR method if dataset < 500 rows.
-    - Apply percentile capping (1st–99th) if dataset >= 500 rows.
-    - Columns: item price, purchase quantity, total spend.
+    - Apply percentile method (1st–99th) if dataset >= 500 rows.
+    - Columns: purchase quantity, total spend.
+    - Outliers are FLAGGED only, original values preserved.
     """
     print(f"[LOG - STAGE 5] Dataset has {len(df)} rows")
 
     numeric_cols = ["purchase quantity", "total spend"]
     df = df.copy()
+    
+    messages = []
+    outlier_info = []
+    dataset_size = len(df)
+    
+    # Initialize flag columns
+    df['is_quantity_outlier'] = False
+    df['is_spend_outlier'] = False
     
     for col in numeric_cols:
         if col not in df.columns:
@@ -299,19 +363,45 @@ def order_detect_outliers(df):
             IQR = Q3 - Q1
             lower = Q1 - 1.5 * IQR
             upper = Q3 + 1.5 * IQR
-            method = "IQR"
+            method = "IQR method"
         else:
-            # Percentile Capping
+            # Percentile Method
             lower = df[col].quantile(0.01)
             upper = df[col].quantile(0.99)
-            method = "Percentile Capping"
+            method = "Percentile method"
 
-        # Apply capping
-        df[col] = df[col].clip(lower, upper)
-        print(f"[LOG - STAGE 5] {method} applied on '{col}', capped between [{lower:.2f}, {upper:.2f}]")
+        # Flag outliers (do NOT modify original values)
+        outlier_mask = (df[col] < lower) | (df[col] > upper)
+        outliers_count = outlier_mask.sum()
+        
+        # Set appropriate flag column
+        if col == "purchase quantity":
+            df.loc[outlier_mask, 'is_quantity_outlier'] = True
+        elif col == "total spend":
+            df.loc[outlier_mask, 'is_spend_outlier'] = True
+        
+        print(f"[LOG - STAGE 5] {method} applied on '{col}'. Range: [{lower:.2f}, {upper:.2f}]. Outliers flagged: {outliers_count}")
+        
+        if outliers_count > 0:
+            col_display = col.replace('_', ' ').title()
+            outlier_info.append(f"  - {col_display}: {outliers_count} unusual value(s) detected (may indicate high-value customers)")
 
-    print("✅ [STAGE 5 COMPLETE] Outliers handled successfully.")
-    return df
+    # Build message
+    if outlier_info:
+        messages.append("Unusual Values Detected:")
+        messages.append("\nWe found some extremely high or low values in your order data.")
+        messages.append("\nWhat we did: Flagged these values for your attention. Original values are preserved.")
+        messages.append("\nDetails:")
+        messages.extend(outlier_info)
+        messages.append("\nNote: These outliers might represent VIP customers or bulk buyers. They will be considered during segmentation to help identify high-value customer groups.")
+    else:
+        messages.append("Order Values Look Good:")
+        messages.append("\nAll order values (quantities and amounts) appear normal and consistent. No unusual values detected.")
+
+    final_message = "\n".join(messages)
+    
+    print("✅ [STAGE 5 COMPLETE] Outliers flagged successfully (values preserved).")
+    return df, final_message
 
 # ============================================= (ORDER DATASET) DATASET CLEANING PIPELINE =============================================
 def clean_order_dataset(df, cleaned_output_path):
@@ -366,14 +456,18 @@ def clean_order_dataset(df, cleaned_output_path):
     # STAGE 4: MISSING VALUE HANDLING
     # ===============================================
     print("========== [STAGE 4 START] Missing Value Handling ==========")
-    df = handle_missing_values_order(df)
+    df, missing_value_msg = handle_missing_values_order(df)
+    messages.append(missing_value_msg)
+    report["detailed_messages"]["handle_missing_values_order"] = missing_value_msg
     print("✅ [STAGE 4 COMPLETE] Missing values handled.\n")
     
     # =============================================
-    # STAGE 6: OUTLIER DETECTION
+    # STAGE 5: OUTLIER DETECTION
     # =============================================
     print("========== [STAGE 5 START] Outlier Detection ==========")
-    df = order_detect_outliers(df)   # make sure detect_outliers returns df
+    df, outlier_msg = order_detect_outliers(df)
+    messages.append(outlier_msg)
+    report["detailed_messages"]["order_detect_outliers"] = outlier_msg
     print("✅ [STAGE 5 COMPLETE] Outliers handled.\n")
     
     # final profiling summary
