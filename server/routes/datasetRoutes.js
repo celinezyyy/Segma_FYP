@@ -8,6 +8,7 @@ import {
   getDatasetTemplate,
   getDatasetCleanStatus,
   startDatasetCleaning,
+  getDatasetReport
 } from '../controllers/datasetController.js';
 import userAuth from '../middleware/userAuth.js';
 import datasetUpload from '../middleware/multerMiddleware.js';
@@ -21,5 +22,6 @@ datasetRouter.get('/dataset-counts', userAuth, getDatasetCounts);
 datasetRouter.get('/template/:type', userAuth, getDatasetTemplate);
 datasetRouter.get('/status/:datasetId', userAuth, getDatasetCleanStatus); 
 datasetRouter.post('/clean', userAuth, startDatasetCleaning);
+datasetRouter.get('/dataset-report/:datasetId', userAuth, getDatasetReport);
 
 export default datasetRouter;
