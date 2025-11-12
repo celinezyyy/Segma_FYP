@@ -272,7 +272,7 @@ def handle_missing_values_order(df):
         calculated_total_count = mask_missing_total.sum()
         df.loc[mask_missing_total, "total spend"] = (
             df.loc[mask_missing_total, "item price"] * df.loc[mask_missing_total, "purchase quantity"]
-        )
+        ).round(2)
         stats["total_spend_calculated"] = calculated_total_count
         # Any remaining missing → drop (very rare)
         before_drop = len(df)
@@ -291,7 +291,7 @@ def handle_missing_values_order(df):
     dropped_total = initial_count - len(df)
     
     if dropped_total > 0:
-        messages.append(f"Records Removed: {dropped_total} order(s) removed due to missing critical information:")
+        messages.append(f"{dropped_total} order(s) removed due to missing critical information:")
         if stats["critical_ids_removed"] > 0:
             messages.append(f"  - {stats['critical_ids_removed']} order(s) without OrderID, CustomerID, or Purchase Date")
         if stats["purchase_time_removed"] > 0:
@@ -408,6 +408,11 @@ def clean_order_dataset(df, cleaned_output_path):
     print("🚀 Starting order data cleaning pipeline...\n")
     messages = [] 
     report = {"summary": {}, "detailed_messages": {}}
+    
+    # Capture initial row count before cleaning
+    initial_row_count = len(df)
+    report["summary"]["initial_rows"] = initial_row_count
+    
     # =======================================================
     # STAGE 0: NORMALIZE COLUMN NAMES (FROM GENERIC FUNCTION)
     # =======================================================
@@ -474,6 +479,7 @@ def clean_order_dataset(df, cleaned_output_path):
     report["summary"].update({
         "total_rows_final": len(df),
         "total_columns_final": len(df.columns),
+        "final_columns": list(df.columns),  # Add list of remaining column names
     })
     # =============================================
     # SAVE CLEANED DATASET
