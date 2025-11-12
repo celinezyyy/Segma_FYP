@@ -183,6 +183,84 @@ const DatasetTab = () => {
     }
   };
 
+  const handleDownload = async (dataset, e) => {
+    e.stopPropagation();
+    
+    console.log('Download clicked for dataset:', dataset);
+    
+    if (!dataset.isClean) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Dataset Not Cleaned',
+        text: 'This dataset has not been cleaned yet. Please clean it first before downloading.',
+      });
+      return;
+    }
+
+    try {
+      console.log('Attempting to download:', `${backendUrl}/api/dataset/download/${dataset._id}`);
+      
+      const response = await axios.get(`${backendUrl}/api/dataset/download/${dataset._id}`, {
+        withCredentials: true,
+        responseType: 'blob'
+      });
+
+      console.log('Download response received:', response);
+
+      // Check if response is an error (sometimes API returns JSON error as blob)
+      if (response.data.type === 'application/json') {
+        const text = await response.data.text();
+        const errorData = JSON.parse(text);
+        throw new Error(errorData.message || 'Download failed');
+      }
+
+      // Create blob and download
+      const blob = new Blob([response.data], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = dataset.originalname || `cleaned_dataset.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Download Started',
+        text: `Downloading ${dataset.originalname}...`,
+        timer: 2000,
+        showConfirmButton: false
+      });
+    } catch (error) {
+      console.error('Download error:', error);
+      console.error('Error response:', error.response);
+      
+      let errorMessage = 'Failed to download the dataset. Please try again.';
+      
+      // Try to extract error message from blob response
+      if (error.response && error.response.data instanceof Blob) {
+        try {
+          const text = await error.response.data.text();
+          const errorData = JSON.parse(text);
+          errorMessage = errorData.message || errorMessage;
+        } catch (e) {
+          // If parsing fails, use default message
+        }
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Swal.fire({
+        icon: 'error',
+        title: 'Download Failed',
+        text: errorMessage,
+      });
+    }
+  };
+
   const rawDatasets = activeTab === 'customer' ? customerDatasets : orderDatasets;
   const datasets = rawDatasets.filter((d) =>
     d.originalname.toLowerCase().includes(searchQuery)
@@ -277,13 +355,14 @@ const DatasetTab = () => {
                     <span>Date Uploaded</span>
                   </div>
                 </th>
+                <th className="py-3 px-6 text-center">Status</th>
                 <th className="py-3 px-6 text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
               {datasets.length === 0 ? (
                 <tr>
-                  <td colSpan="4" className="py-6 text-center text-gray-500">
+                  <td colSpan="5" className="py-6 text-center text-gray-500">
                     No datasets uploaded yet.
                   </td>
                 </tr>
@@ -294,6 +373,17 @@ const DatasetTab = () => {
                     <td className="py-3 px-6 truncate max-w-xs">{dataset.originalname}</td>
                     <td className="py-3 px-6">{new Date(dataset.uploadedAt).toLocaleString()}</td>
                     <td className="py-3 px-6 text-center">
+                      {dataset.isClean ? (
+                        <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
+                          ✓ Cleaned
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-semibold">
+                          ○ Original
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-6 text-center">
                       <div className="flex justify-center gap-2">
                         <button
                           onClick={() => handlePreview(dataset._id)}
@@ -301,6 +391,14 @@ const DatasetTab = () => {
                         >
                           Preview
                         </button>
+                        {dataset.isClean && (
+                          <button
+                            onClick={(e) => handleDownload(dataset, e)}
+                            className="text-green-600 border border-green-600 px-3 py-1 rounded hover:bg-green-50 transition text-sm flex items-center gap-1"
+                          >
+                            <span>⬇</span> Download
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDelete(dataset._id)}
                           className="text-red-600 border border-red-600 px-3 py-1 rounded hover:bg-red-50 transition text-sm"

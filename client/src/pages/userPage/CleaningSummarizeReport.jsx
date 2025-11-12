@@ -1,15 +1,88 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import UserSidebar from '../../components/UserSidebar';
+import { AppContext } from '../../context/AppContext';
+import axios from 'axios';
+import Swal from 'sweetalert2';
 
 const DataQualityReport = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { backendUrl } = useContext(AppContext);
   const { selectedCustomer, selectedOrder, customerReport, orderReport } = location.state || {};
 
   console.log('📊 Location state:', location.state);
   console.log('📊 Customer Report:', customerReport);
   console.log('📊 Order Report:', orderReport);
+
+  const handleDownload = async (datasetId, datasetName, type) => {
+    try {
+      console.log('Downloading:', `${backendUrl}/api/dataset/download/${datasetId}`);
+      
+      const response = await axios.get(`${backendUrl}/api/dataset/download/${datasetId}`, {
+        withCredentials: true,
+        responseType: 'blob' // Important for file download
+      });
+
+      console.log('Download response:', response);
+
+      // Check if response is an error (sometimes API returns JSON error as blob)
+      if (response.data.type === 'application/json') {
+        const text = await response.data.text();
+        const errorData = JSON.parse(text);
+        throw new Error(errorData.message || 'Download failed');
+      }
+
+      // Create a blob from the response
+      const blob = new Blob([response.data], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      
+      // Create a temporary link and trigger download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = datasetName || `cleaned_${type}_dataset.csv`;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Download Started',
+        text: `Your cleaned ${type} dataset is being downloaded.`,
+        timer: 2000,
+        showConfirmButton: false
+      });
+    } catch (error) {
+      console.error('Download error:', error);
+      console.error('Error response:', error.response);
+      
+      let errorMessage = 'Failed to download the dataset. Please try again.';
+      
+      // Try to extract error message from blob response
+      if (error.response && error.response.data instanceof Blob) {
+        try {
+          const text = await error.response.data.text();
+          const errorData = JSON.parse(text);
+          errorMessage = errorData.message || errorMessage;
+        } catch (e) {
+          console.error('Error parsing blob:', e);
+        }
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Swal.fire({
+        icon: 'error',
+        title: 'Download Failed',
+        text: errorMessage,
+      });
+    }
+  };
 
   if (!customerReport || !orderReport) {
     return (
@@ -114,6 +187,9 @@ const DataQualityReport = () => {
     if (!report) return <p className="italic text-gray-500">No report available.</p>;
 
     const { summary, detailed_messages } = report;
+    
+    // Determine dataset ID and name for download
+    const datasetId = type === 'Customer' ? selectedCustomer : selectedOrder;
 
     // Section titles and icons mapping
     const sectionConfig = {
@@ -131,11 +207,18 @@ const DataQualityReport = () => {
 
     return (
       <div className="bg-white border-2 border-[#C3E5F1] shadow-lg rounded-lg p-6 mb-8">
-        <div className="border-b-2 border-gray-200 pb-4 mb-6">
+        <div className="border-b-2 border-gray-200 pb-4 mb-6 flex justify-between items-center">
           <h2 className="text-2xl font-bold text-[#2C3E50] flex items-center gap-3">
             <span className="text-3xl">{type === 'Customer' ? '👤' : '🛒'}</span>
             {type} Dataset Cleaning Report
           </h2>
+          <button
+            onClick={() => handleDownload(datasetId, `cleaned_${type.toLowerCase()}_data.csv`, type)}
+            className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg transition-all shadow-md hover:shadow-lg"
+          >
+            <span>⬇️</span>
+            Download Cleaned Data
+          </button>
         </div>
 
         {/* Summary Stats */}

@@ -144,13 +144,14 @@ const DatasetSelection = () => {
                 <th className="py-3 px-4 w-12">Select</th>
                 <th className="py-3 px-6">Dataset Name</th>
                 <th className="py-3 px-6">Date Uploaded</th>
+                <th className="py-3 px-6 text-center">Status</th>
                 <th className="py-3 px-6 text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredDatasets.length === 0 ? (
                 <tr>
-                  <td colSpan="4" className="py-6 text-center text-gray-500">
+                  <td colSpan="5" className="py-6 text-center text-gray-500">
                     No datasets found.
                   </td>
                 </tr>
@@ -166,6 +167,17 @@ const DatasetSelection = () => {
                     </td>
                     <td className="py-3 px-6 truncate max-w-xs">{dataset.originalname}</td>
                     <td className="py-3 px-6">{new Date(dataset.uploadedAt).toLocaleString()}</td>
+                    <td className="py-3 px-6 text-center">
+                      {dataset.isClean ? (
+                        <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
+                          ✓ Cleaned
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-semibold">
+                          ○ Original
+                        </span>
+                      )}
+                    </td>
                     <td className="py-3 px-6 text-center">
                       <button
                         onClick={() => handlePreview(dataset._id)}

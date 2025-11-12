@@ -416,3 +416,63 @@ export const getDatasetReport = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// Download cleaned dataset
+export const downloadCleanedDataset = async (req, res) => {
+  try {
+    const { datasetId } = req.params;
+    const userId = req.userId;
+
+    console.log('[DOWNLOAD] Request received for datasetId:', datasetId);
+    console.log('[DOWNLOAD] UserId:', userId);
+
+    if (!datasetId) {
+      return res.status(400).json({ success: false, message: 'Dataset ID not provided' });
+    }
+
+    // Find dataset and verify ownership
+    const dataset = await datasetModel.findOne({ _id: datasetId, user: userId });
+    console.log('[DOWNLOAD] Dataset found:', dataset ? 'Yes' : 'No');
+    
+    if (!dataset) {
+      return res.status(404).json({ success: false, message: "Dataset not found or unauthorized" });
+    }
+
+    // Check if dataset is cleaned
+    console.log('[DOWNLOAD] isClean:', dataset.isClean);
+    if (!dataset.isClean) {
+      return res.status(400).json({ success: false, message: "Dataset is not cleaned yet" });
+    }
+
+    // Stream file from GridFS
+    const bucket = getGridFSBucket();
+    console.log('[DOWNLOAD] Opening download stream for fileId:', dataset.fileId);
+    
+    const downloadStream = bucket.openDownloadStream(dataset.fileId);
+
+    // Set response headers for file download
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${dataset.originalname}"`);
+
+    // Handle stream errors
+    downloadStream.on('error', (error) => {
+      console.error('[DOWNLOAD] Stream error:', error);
+      if (!res.headersSent) {
+        return res.status(500).json({ success: false, message: 'Error downloading file' });
+      }
+    });
+
+    downloadStream.on('end', () => {
+      console.log('[DOWNLOAD] Download completed successfully');
+    });
+
+    // Pipe the file to response
+    downloadStream.pipe(res);
+
+  } catch (error) {
+    console.error('[DOWNLOAD] Error:', error);
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, message: error.message });
+    }
+  }
+};
