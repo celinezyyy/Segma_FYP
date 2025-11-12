@@ -46,17 +46,31 @@ def customer_check_optional_columns(df, threshold=0.9):
     # Generate user-friendly message
     if dropped_columns:
         dropped_str = ", ".join(dropped_columns)
+        dropped_details = [report for report in missing_report if any(col in report for col in dropped_columns)]
+        kept_details = [report for report in missing_report if not any(col in report for col in dropped_columns)]
+        
         message = (
-            f"\nWe noticed that very few entries were provided for {dropped_str}. "
-            "These columns have been removed. "
-            "Segmentation will still be performed using geographic (City, State) "
-            "and behavioral data (e.g., orders, purchase items, total spend).\n\n"
-            "Missing Data Summary:\n" + "\n".join(missing_report)
+            f"Optional Columns Removed:\n\n"
+            f"The following column(s) were removed due to insufficient data: {dropped_str}\n"
         )
+        if dropped_details:
+            message += "Details:\n" + "\n".join(f"  • {d}" for d in dropped_details) + "\n\n"
+        
+        message += (
+            "Why? These columns had less than 90% complete data, which is too sparse for reliable analysis.\n\n"
+            "Good News: Segmentation will still work using:\n"
+            "  • Geographic data (City, State)\n"
+            "  • Behavioral data (orders, purchase patterns, spending)\n"
+        )
+        
+        if kept_details:
+            message += "\n\n Columns Kept:\n" + "\n".join(f"  • {d}" for d in kept_details)
     else:
         message = (
-            "\nAll optional columns have enough data and are kept for analysis.\n\n"
-            "Missing Data Summary:\n" + "\n".join(missing_report)
+            "All Optional Columns Retained:\n\n"
+            "All optional columns (Date of Birth, Gender) have sufficient data (≥90% filled) and will be kept for analysis.\n\n"
+            "Data Completeness:\n" + "\n".join(f"  • {report}" for report in missing_report) + "\n\n"
+            "Note: We already clean missing values in these columns during the cleaning process."
         )
     
     return df, message
@@ -87,6 +101,8 @@ def deduplicate_customers(df):
     removed_dup_id = before_dup_id - len(df)
     if removed_dup_id > 0:
         message = (f"{removed_dup_id} duplicate CustomerIDs removed.")
+    else:
+        message = "No duplicate CustomerIDs found."
     print("[LOG - STAGE 3] Deduplication complete (vectorized)")
     return df, message
 
@@ -112,11 +128,11 @@ def standardize_dob(df):
             return pd.NaT  # If no valid format found
         df['dob'] = df['dob'].apply(parse_date)
         df['dob'] = pd.to_datetime(df['dob'])
-        df['dob'] = df['dob'].fillna("Unknown")
-        print("[LOG - STAGE 4] DOB parsing complete. Invalid dates marked as Unknown")
+        # Keep NaT as is - don't fill with "Unknown" string (causes issues with .year/.month/.day)
+        print("[LOG - STAGE 4] DOB parsing complete. Invalid dates kept as NaT")
         message = (
             "Since your dataset includes a Date of Birth information, we derived two useful fields — "
-            "'age' and 'age_group' — for segmentation purposes, and the original 'dob' column will be remove."
+            "'age' and 'age_group' — for segmentation purposes, and the original 'Date of Birth' column will be remove."
         )
     else:
         print("[LOG - STAGE 4] DOB column not found, skipping")
@@ -143,10 +159,13 @@ def derive_age_features(df):
             if pd.notnull(x) else None
         )
         df['age'] = pd.to_numeric(df['age'], errors='coerce')
+        # Replace NaN with "Unknown" and ensure no empty strings
         df['age'] = df['age'].fillna("Unknown")
+        df['age'] = df['age'].replace('', 'Unknown')  # Handle empty strings
         print("[LOG - STAGE 4] Age derived from DOB, null age marked as Unknown")
     else:
-        print("[LOG - STAGE 4] DOB column not found, skipping")
+        # If DOB column doesn't exist, skip age creation
+        print("[LOG - STAGE 4] DOB column not found, skipping age creation")
     return df
     # Example: ((today.month, today.day) < (x.month, x.day))
     # (10,15) < (12,1) → True (birthday in Dec is after Oct 15)
@@ -162,8 +181,14 @@ def derive_age_group(df):
     print("[LOG - STAGE 4] Running derive_age_group...")
     if 'age' in df.columns:
         def categorize_age(age):
-            if pd.isnull(age):
+            if pd.isnull(age) or age == "Unknown" or age == '':
                 return 'Unknown'
+            # Convert to numeric if string (safety check)
+            if isinstance(age, str):
+                try:
+                    age = float(age)
+                except:
+                    return 'Unknown'
             if age < 18: return 'Below 18'
             elif 18 <= age <= 24: return '18-24'
             elif 25 <= age <= 34: return '25-34'
@@ -172,10 +197,12 @@ def derive_age_group(df):
             elif 55 <= age <= 64: return '55-64'
             else: return 'Above 65'
         df['age_group'] = df['age'].apply(categorize_age)
-        df['age_group'] = df['age_group'].fillna("Unknown") 
+        # Clean up any remaining empty strings or NaN
+        df['age_group'] = df['age_group'].fillna("Unknown")
+        df['age_group'] = df['age_group'].replace('', 'Unknown')
         print("[LOG - STAGE 4] Age groups derived, null age_group marked as Unknown")
     else:
-        print("[LOG - STAGE 4] Age column not found, skipping")
+        print("[LOG - STAGE 4] Age column not found, skipping age_group creation")
     return df
 
 # ===============================================================================
@@ -201,20 +228,18 @@ def standardize_gender(df):
     """Clean and standardize gender values"""
     print("[LOG - STAGE 4] Running standardize_gender...")
     if 'gender' in df.columns:
-        df['gender'] = (
-            df['gender']
-            .astype(str)
-            .str.strip()
-            .str.lower()
-            .replace({
-                 'm': 'Male',
-                'man': 'Male',
-                'boy': 'Male',
-                'f': 'Female',
-                'woman': 'Female',
-                'girl': 'Female'
-            })
-        )
+        # Normalize to lowercase for mapping
+        gender_norm = df['gender'].astype(str).str.strip().str.lower()
+
+        # Map common variants to canonical labels
+        mapping = {
+            'm': 'Male', 'male': 'Male', 'man': 'Male', 'boy': 'Male',
+            'f': 'Female', 'female': 'Female', 'woman': 'Female', 'girl': 'Female'
+        }
+        gender_norm = gender_norm.replace(mapping)
+
+        # Anything not exactly 'Male' or 'Female' becomes Unknown (e.g., other/others/na/null/empty)
+        df['gender'] = gender_norm
         df.loc[~df['gender'].isin(['Male', 'Female']), 'gender'] = 'Unknown'
         print("[LOG - STAGE 4] Gender standardized (vectorized)")
     else:
@@ -395,11 +420,12 @@ def handle_missing_values_customer(df):
                 print(f"[TRACE - STAGE 5] Filled {filled_count} row(s) → city='{mode_city}', state='{mode_state}' (Fallback)")
 
         if stats["case1_api_filled"] > 0 or stats["case1_fallback_filled"] > 0:
-            msg = f"Location - Missing State (City Known): "
+            msg = "Location - Missing State (City Known):\n"
             if stats["case1_api_filled"] > 0:
-                msg += f"Filled {stats['case1_api_filled']} record(s) using geocoding API to detect the correct state. "
+                msg += f"  • {stats['case1_api_filled']} record(s) automatically matched to correct state using map service\n"
             if stats["case1_fallback_filled"] > 0:
-                msg += f"Filled {stats['case1_fallback_filled']} record(s) using statistical mode (most frequent city-state pair) when API couldn't determine location."
+                msg += f"  • {stats['case1_fallback_filled']} record(s) filled based on where most customers are located (city name couldn't be verified - may be misspelled or invalid)\n"
+            msg += "Why safe: We kept their original city and only filled in the missing state using reliable location data"
             messages.append(msg)
 
         # Case 2: missing city but state known → fill with mode city per state
@@ -420,7 +446,10 @@ def handle_missing_values_customer(df):
                     print(f"[TRACE - STAGE 5] Filled {filled_count} row(s) → missing city for state='{state}' → city='{city_mode}'")
         
         if stats["case2_filled"] > 0:
-            messages.append(f"Location - Missing City (State Known): Filled {stats['case2_filled']} record(s) using the most frequent city for each known state.")
+            msg = "Location - Missing City (State Known):\n"
+            msg += f"  • {stats['case2_filled']} record(s) filled with representative city for their state\n"
+            msg += "Why safe: Used real cities from your actual customer base, ensuring realistic segmentation"
+            messages.append(msg)
 
         # Case 3: both missing → fill with most frequent pair
         print("\n[LOG - STAGE 5] Case 3: Filling missing city and state...")
@@ -437,13 +466,16 @@ def handle_missing_values_customer(df):
                 print("[WARN - STAGE 5] No valid city/state pairs to fill missing both values")
         
         if stats["case3_filled"] > 0:
-            messages.append(f"Location - Both City & State Missing: Filled {stats['case3_filled']} record(s) using the most frequent city-state pair in the dataset.")
+            msg = "Location - Both City & State Missing:\n"
+            msg += f"  • {stats['case3_filled']} record(s) filled with your primary customer location (where most customers are from)\n"
+            msg += "Why safe: Used the most common location in your customer base, minimizing impact on segmentation"
+            messages.append(msg)
 
     # Build final message
     if not messages:
         final_message = "No missing values found in critical fields (CustomerID, City, State)."
     else:
-        final_message = "Missing Value Handling Summary:\n\n" + "\n\n".join(messages)
+        final_message = "Summary:\n\n" + "\n\n".join(messages)
 
     return df, final_message
 
@@ -453,7 +485,8 @@ def customer_detect_outliers(df):
     print("[LOG - STAGE 6] Running detect_outliers...")
     message = None
     if 'age' in df.columns:
-        df['age'] = pd.to_numeric(df['age'], errors='coerce')
+        # Work on a temporary numeric copy to avoid mutating the displayed 'age' values (keep 'Unknown' text)
+        age_num = pd.to_numeric(df['age'], errors='coerce')
         n = len(df)
         print(f"[LOG - STAGE 6] Dataset has {n} rows")
 
@@ -463,14 +496,14 @@ def customer_detect_outliers(df):
 
         if n < 500:
             # IQR method
-            Q1 = df['age'].quantile(0.25)
-            Q3 = df['age'].quantile(0.75)
+            Q1 = age_num.quantile(0.25)
+            Q3 = age_num.quantile(0.75)
             IQR = Q3 - Q1
             lower_bound = Q1 - 1.5 * IQR
             upper_bound = Q3 + 1.5 * IQR
 
             # Flag outliers
-            outlier_mask = (df['age'] < lower_bound) | (df['age'] > upper_bound)
+            outlier_mask = (age_num < lower_bound) | (age_num > upper_bound)
             df.loc[outlier_mask, 'is_age_outlier'] = True
             outlier_count = outlier_mask.sum()
 
@@ -496,11 +529,11 @@ def customer_detect_outliers(df):
 
         else:
             # Percentile method
-            lower_bound = df['age'].quantile(0.01)
-            upper_bound = df['age'].quantile(0.99)
+            lower_bound = age_num.quantile(0.01)
+            upper_bound = age_num.quantile(0.99)
 
             # Flag outliers instead of capping
-            outlier_mask = (df['age'] < lower_bound) | (df['age'] > upper_bound)
+            outlier_mask = (age_num < lower_bound) | (age_num > upper_bound)
             df.loc[outlier_mask, 'is_age_outlier'] = True
             outlier_count = outlier_mask.sum()
 
@@ -547,6 +580,11 @@ def clean_customer_dataset(df, cleaned_output_path):
     print("🚀 Starting customer data cleaning pipeline...\n", flush=True)
     messages = [] 
     report = {"summary": {}, "detailed_messages": {}}
+    
+    # Capture initial row count before cleaning
+    initial_row_count = len(df)
+    report["summary"]["initial_rows"] = initial_row_count
+    
     # =======================================================
     # STAGE 0: NORMALIZE COLUMN NAMES (FROM GENERIC FUNCTION)
     # =======================================================
@@ -630,6 +668,7 @@ def clean_customer_dataset(df, cleaned_output_path):
     report["summary"].update({
         "total_rows_final": len(df),
         "total_columns_final": len(df.columns),
+        "final_columns": list(df.columns),  # Add list of remaining column names
     })
     # =============================================
     # SAVE CLEANED DATASET
