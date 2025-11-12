@@ -318,7 +318,7 @@ export const startDatasetCleaning = async (req, res) => {
     const exitCode = await new Promise((resolve, reject) => {
       py.on('close', (code) => {
         if (code === 0) resolve(0);
-        else reject(new Error(`Python cleaning failed with code ${code}: ${stderr}`));
+        else reject(new Error(`Python cleaning failed with exit code ${code}`));
       });
     });
 
