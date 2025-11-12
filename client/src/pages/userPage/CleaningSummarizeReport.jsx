@@ -31,6 +31,8 @@ const DataQualityReport = () => {
       
       // Check if this paragraph is a title (contains key phrases)
       const firstLine = lines[0]?.trim() || '';
+      const isWarning = firstLine.includes('⚠️') || firstLine.includes('WARNING') || firstLine.includes('🔴');
+      const isSuccess = firstLine.includes('✅');
       const isTitle = firstLine.includes('Summary:') || 
                       firstLine.includes('Detected:') || 
                       firstLine.includes('Look Good:') ||
@@ -38,7 +40,18 @@ const DataQualityReport = () => {
                       firstLine.includes('Calculated:') ||
                       firstLine.includes('Details:') ||
                       firstLine.includes('Note:') ||
-                      firstLine.includes('What we did:');
+                      firstLine.includes('Impact:') ||
+                      firstLine.includes('STRONGLY RECOMMENDED:') ||
+                      firstLine.includes('RECOMMENDED:') ||
+                      firstLine.includes('What we did:') ||
+                      firstLine.includes('How Missing Values') ||
+                      firstLine.includes('Data Completeness:') ||
+                      firstLine.includes('Missing Data');
+      
+      // Special handling for separator lines (===)
+      if (firstLine.match(/^={3,}$/)) {
+        return <div key={pIdx} className="border-t-2 border-orange-300 my-2"></div>;
+      }
       
       return (
         <div key={pIdx} className="mb-4">
@@ -46,17 +59,21 @@ const DataQualityReport = () => {
             const trimmedLine = line.trim();
             
             // First line and it's a title
-            if (lIdx === 0 && isTitle) {
+            if (lIdx === 0 && (isTitle || isWarning || isSuccess)) {
+              let colorClass = 'text-gray-800';
+              if (isWarning) colorClass = 'text-red-700';
+              if (isSuccess) colorClass = 'text-green-700';
+              
               return (
-                <h4 key={lIdx} className="font-semibold text-gray-800 text-base mb-2">
+                <h4 key={lIdx} className={`font-semibold ${colorClass} text-base mb-2`}>
                   {trimmedLine}
                 </h4>
               );
             }
             
-            // Sub-items (lines starting with spaces or dashes)
-            if (trimmedLine.startsWith('-') || line.match(/^\s{2,}/)) {
-              const text = trimmedLine.replace(/^[\s-]+/, '');
+            // Sub-items (lines starting with spaces, dashes, or bullets)
+            if (trimmedLine.match(/^\s*[•\-]/) || line.match(/^\s{2,}/)) {
+              const text = trimmedLine.replace(/^[\s•\-]+/, '');
               return (
                 <div key={lIdx} className="flex items-start gap-2 ml-4 mb-1">
                   <span className="text-blue-500 mt-1.5 text-xs">●</span>
@@ -127,6 +144,12 @@ const DataQualityReport = () => {
             <span>📊</span> Summary Statistics
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {summary.initial_rows !== undefined && (
+              <div className="bg-white rounded-lg p-3 text-center shadow-sm">
+                <p className="text-2xl font-bold text-gray-700">{summary.initial_rows}</p>
+                <p className="text-xs text-gray-600 mt-1">Initial Rows</p>
+              </div>
+            )}
             {summary.duplicates_removed_rows !== undefined && (
               <div className="bg-white rounded-lg p-3 text-center shadow-sm">
                 <p className="text-2xl font-bold text-red-500">{summary.duplicates_removed_rows}</p>
@@ -148,6 +171,25 @@ const DataQualityReport = () => {
               <p className="text-xs text-gray-600 mt-1">Total Columns</p>
             </div>
           </div>
+
+          {/* Final Columns List */}
+          {summary.final_columns && summary.final_columns.length > 0 && (
+            <div className="mt-4 bg-white rounded-lg p-4 shadow-sm">
+              <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                <span>📋</span> Remaining Columns After Cleaning
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {summary.final_columns.map((col, idx) => (
+                  <span 
+                    key={idx} 
+                    className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium"
+                  >
+                    {col}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Detailed Messages */}
