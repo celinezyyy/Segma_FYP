@@ -194,15 +194,16 @@ def standardize_transaction_method(df):
 def handle_missing_values_order(df):
     """
     Strategy (for SME context):
-    - Drop rows if critical identifiers are missing (orderid, customerid, purchase date)
-    - Drop rows if both item price and total spend are missing
-    - Fill or infer non-critical missing fields logically:
-        - purchase item: "Unknown Item"
-        - purchase quantity: 1
-        - item price: median price
-        - total spend: item_price * quantity (if available)
-        - transaction method: "Unknown"
-        - purchase time: "Unknown"
+    - Drop rows if (orderid, customerid, purchase date) are missing
+    - Drop rows if (purchase time) is missing (when time column exists)
+    - Drop rows if both (item price and total spend) are missing
+    - Drop rows if (item price) is missing (critical for calculations)
+    - Fill or calculate non-critical missing fields logically:
+        - purchase quantity: calculate from (total spend / item price) if possible, otherwise fill with 1
+        - total spend: calculate from (item price × quantity) if possible, otherwise drop row
+        - transaction method: fill with "Unknown"
+    
+    Note: purchase item is NOT filled because product name is important for business analysis
     """
 
     initial_count = len(df)
