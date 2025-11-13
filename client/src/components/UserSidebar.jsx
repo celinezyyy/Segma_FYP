@@ -113,7 +113,6 @@ const UserSidebar = () => {
               {isOpen && (
                 <ul className={`${segOpen ? 'block' : 'hidden'} py-2 space-y-2 pl-11`}>
                   <li><a href="/dataset-selection" className="block p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700">Dataset Selection</a></li>
-                  <li><a href="/mapping-result" className="block p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700">Mapping Result</a></li>
                   <li><a href="/segmentation-result" className="block p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700">Segmentation Result</a></li>
                 </ul>
               )}
