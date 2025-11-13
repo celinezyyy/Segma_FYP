@@ -227,7 +227,7 @@ const DatasetTab = () => {
 
       Swal.fire({
         icon: 'success',
-        title: 'Download Started',
+        title: 'Download',
         text: `Downloading ${dataset.originalname}...`,
         timer: 2000,
         showConfirmButton: false

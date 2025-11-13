@@ -10,6 +10,7 @@ const DataQualityReport = () => {
   const navigate = useNavigate();
   const { backendUrl } = useContext(AppContext);
   const { selectedCustomer, selectedOrder, customerReport, orderReport } = location.state || {};
+  const [activeTab, setActiveTab] = React.useState('customer');
 
   console.log('📊 Location state:', location.state);
   console.log('📊 Customer Report:', customerReport);
@@ -304,11 +305,35 @@ const DataQualityReport = () => {
             Data Quality Report
           </h1>
 
-          {/* Customer Report */}
-          {renderReport(customerReport, 'Customer')}
+          {/* Tab Navigation */}
+          <div className="mb-6 flex justify-center">
+            <div className="flex border-2 border-[#C3E5F1] rounded-lg overflow-hidden shadow-sm">
+              <button
+                className={`px-8 py-3 font-semibold transition-all ${
+                  activeTab === 'customer' 
+                    ? 'bg-[#C3E5F1] text-[#2C3E50]' 
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+                onClick={() => setActiveTab('customer')}
+              >
+                👤 Customer Report
+              </button>
+              <button
+                className={`px-8 py-3 font-semibold transition-all border-l-2 border-[#C3E5F1] ${
+                  activeTab === 'order' 
+                    ? 'bg-[#C3E5F1] text-[#2C3E50]' 
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+                onClick={() => setActiveTab('order')}
+              >
+                🛒 Order Report
+              </button>
+            </div>
+          </div>
 
-          {/* Order Report */}
-          {renderReport(orderReport, 'Order')}
+          {/* Report Content Based on Active Tab */}
+          {activeTab === 'customer' && renderReport(customerReport, 'Customer')}
+          {activeTab === 'order' && renderReport(orderReport, 'Order')}
 
           {/* Action Buttons */}
           <div className="flex justify-center gap-4 mt-8">
