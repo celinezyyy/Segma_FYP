@@ -215,9 +215,8 @@ const DataQualityReport = () => {
           </h2>
           <button
             onClick={() => handleDownload(datasetId, `cleaned_${type.toLowerCase()}_data.csv`, type)}
-            className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg transition-all shadow-md hover:shadow-lg"
+            className="inline-block bg-[#F1F8E9] border border-green-400 text-green-700 font-medium py-2 px-4 rounded hover:bg-[#E6F4D7] transition"
           >
-            <span>⬇️</span>
             Download Cleaned Data
           </button>
         </div>

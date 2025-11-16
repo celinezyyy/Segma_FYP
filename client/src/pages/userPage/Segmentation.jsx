@@ -185,13 +185,15 @@ const Segmentation = () => {
               Analyze customer segments based on behavioral, demographic, and geographic attributes
             </p>
             <div className="mt-4 flex gap-3">
-              <button
-                onClick={handleDownloadMerged}
-                disabled={downloading}
-                className={`px-4 py-2 ${downloading ? 'bg-gray-300' : 'bg-emerald-600 hover:bg-emerald-700'} text-white rounded-md text-sm`}
-              >
-                {downloading ? 'Preparing CSV…' : 'Download merged CSV'}
-              </button>
+                <button
+                    onClick={handleDownloadMerged}
+                    disabled={downloading}
+                    className={`inline-block border border-green-400 text-green-700 font-medium py-2 px-4 rounded transition
+                    ${downloading ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-[#F1F8E9] hover:bg-[#E6F4D7]'}
+                    `}
+                >
+                    {downloading ? 'Preparing CSV…' : (<>Download merged dataset</>)}
+                </button>
             </div>
           </div>
 
