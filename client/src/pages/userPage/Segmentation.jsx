@@ -97,13 +97,13 @@ const Segmentation = () => {
     );
   }
 
-  // Generate CSV from existing mergedData (no API call needed!)
+  // Generate CSV from existing mergedData 
   const handleDownloadMerged = () => {
     try {
       setDownloading(true);
       
       if (!mergedData || mergedData.length === 0) {
-        throw new Error('No data available to download');
+        throw new Error('No data available to download, server returned empty dataset.');
       }
 
       // Convert mergedData to CSV
@@ -333,42 +333,7 @@ const Segmentation = () => {
             </div>
           )}
 
-          {/* Data Preview */}
-          {mergedData && mergedData.length > 0 && (
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-bold text-gray-800 mb-4">Data Preview</h2>
-              <p className="text-gray-600 mb-4">Showing first 5 customer profiles:</p>
-              
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer ID</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Age</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gender</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">State</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Orders</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Spend</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Recency (Days)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {mergedData.slice(0, 5).map((customer, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm text-gray-900">{customer.customerid}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700">{customer.age || 'N/A'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700">{customer.gender || 'N/A'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700">{customer.state}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700">{customer.totalOrders}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700">RM {customer.totalSpend?.toFixed(2) || '0.00'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700">{customer.daysSinceLastPurchase || 'N/A'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+          {/* Data Preview - removed per stakeholder request */}
 
           {/* Next Steps - Coming Soon */}
           <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg shadow-md p-6 mt-6">
