@@ -301,8 +301,8 @@ const mergeCustomerAndOrderData = (customerRows, aggregatedOrderData) => {
       purchaseFrequency: orderData.purchaseFrequency || 0,
       favoritePaymentMethod: orderData.favoritePaymentMethod || null,
       favoriteItem: orderData.favoriteItem || null,
-  favoritePurchaseHour: orderData.favoritePurchaseHour ?? null,
-  favoriteDayPart: orderData.favoriteDayPart ?? null,
+      favoritePurchaseHour: orderData.favoritePurchaseHour ?? null,
+      favoriteDayPart: orderData.favoriteDayPart ?? null,
       
       // === RFM SCORES (for RFM segmentation) ===
       recency: orderData.recency || null,        // Days since last purchase
@@ -337,17 +337,27 @@ const getAvailableAttributes = (mergedData) => {
   // Check if Age and Gender data are available
   const hasAge = sampleRecord.age !== null;
   const hasGender = sampleRecord.gender !== null;
+  // Check availability of favorite metrics
+  const hasFavPayment = mergedData.some(c => !!c.favoritePaymentMethod);
+  const hasFavItem = mergedData.some(c => !!c.favoriteItem);
+  const hasFavHour = mergedData.some(c => c.favoritePurchaseHour !== null && c.favoritePurchaseHour !== undefined);
+  const hasFavDayPart = mergedData.some(c => !!c.favoriteDayPart);
   
   const attributes = {
     // === BEHAVIORAL ATTRIBUTES ===
     // These are always available (calculated from orders)
     behavioral: [
-      { value: 'totalSpend', label: 'Total Spending', available: true },
-      { value: 'totalOrders', label: 'Number of Orders', available: true },
+      { value: 'totalSpend', label: 'Total Spending (M)', available: true },
+      { value: 'totalOrders', label: 'Number of Orders (F)', available: true },
       { value: 'avgOrderValue', label: 'Average Order Value', available: true },
-      { value: 'daysSinceLastPurchase', label: 'Recency (Days Since Last Purchase)', available: true },
+      { value: 'daysSinceLastPurchase', label: 'Recency (R) - Days Since Last Purchase', available: true },
       { value: 'purchaseFrequency', label: 'Purchase Frequency', available: true },
       { value: 'customerLifetimeMonths', label: 'Customer Lifetime (Months)', available: true },
+      // Favorites and time preferences (categorical/numeric)
+      { value: 'favoritePaymentMethod', label: 'Favorite Payment Method', available: hasFavPayment },
+      { value: 'favoriteItem', label: 'Favorite Item', available: hasFavItem },
+      { value: 'favoritePurchaseHour', label: 'Favorite Purchase Hour', available: hasFavHour },
+      { value: 'favoriteDayPart', label: 'Favorite Day Part', available: hasFavDayPart },
     ],
     
     // === DEMOGRAPHIC ATTRIBUTES ===
