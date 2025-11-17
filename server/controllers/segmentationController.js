@@ -197,8 +197,8 @@ const aggregateOrderData = (orderRows) => {
       purchaseFrequency: purchaseFrequency ? parseFloat(purchaseFrequency.toFixed(2)) : 0,
       favoritePaymentMethod: favoritePaymentMethod,
       favoriteItem: favoriteItem,
-  favoritePurchaseHour: favoritePurchaseHour,   // Optional, integer 0-23
-  favoriteDayPart: favoriteDayPart,             // Optional, one of Night/Morning/Afternoon/Evening
+      favoritePurchaseHour: favoritePurchaseHour,   // Optional, integer 0-23
+      favoriteDayPart: favoriteDayPart,             // Optional, one of Night/Morning/Afternoon/Evening
       
       // === RFM COMPONENTS (for RFM segmentation) ===
       recency: daysSinceLastPurchase,      // R: Days since last purchase (lower is better)
@@ -217,7 +217,7 @@ const aggregateOrderData = (orderRows) => {
  * - Takes each customer row (demographics from customer dataset)
  * - Finds their aggregated order data (behavioral metrics)
  * - Combines both into one complete customer profile
- * - Handles optional columns (DOB, Gender) that might be missing
+ * - ONLY includes demographic columns (age, age_group, gender) if they exist in the cleaned customer dataset
  * 
  * INPUT: 
  *   - customerRows: Array of customer rows from cleaned CSV
@@ -225,10 +225,25 @@ const aggregateOrderData = (orderRows) => {
  * 
  * OUTPUT: Array of merged customer profiles with both demographics and behavior
  * 
- * NOTE: Column names are LOWERCASE after cleaning pipeline
+ * NOTE: 
+ * - Column names are LOWERCASE after cleaning pipeline
+ * - Cleaning may drop optional columns (age, age_group, gender) if not provided or mostly empty
+ * - We check if columns exist before merging them
  */
 const mergeCustomerAndOrderData = (customerRows, aggregatedOrderData) => {
   const mergedData = [];
+
+  // === CHECK WHICH OPTIONAL COLUMNS EXIST IN CLEANED CUSTOMER DATASET ===
+  // Look at the first row to see which columns are present
+  const sampleCustomer = customerRows[0] || {};
+  const hasAgeColumn = 'age' in sampleCustomer;
+  const hasAgeGroupColumn = 'age_group' in sampleCustomer;  // cleaning uses 'age_group' with underscore
+  const hasGenderColumn = 'gender' in sampleCustomer;
+
+  console.log('[LOG - MERGE] Column availability check:');
+  console.log(`  - age: ${hasAgeColumn}`);
+  console.log(`  - age_group: ${hasAgeGroupColumn}`);
+  console.log(`  - gender: ${hasGenderColumn}`);
 
   customerRows.forEach(customer => {
     // Get customer ID (lowercase from cleaning)
@@ -237,60 +252,17 @@ const mergeCustomerAndOrderData = (customerRows, aggregatedOrderData) => {
     // Find this customer's behavioral data (or empty object if no orders)
     const orderData = aggregatedOrderData[customerId] || {};
 
-    // === HANDLE OPTIONAL DEMOGRAPHIC FIELDS ===
-    // These might not exist if user didn't provide them or if cleaning removed them
-    const dob = customer['date of birth'] || null;  // lowercase from cleaning
-    const gender = customer['gender'] || null;      // lowercase from cleaning
-    
-    // === CALCULATE AGE AND AGE GROUP (if DOB exists) ===
-    let age = null;
-    let ageGroup = null;
-
-    if (dob) {
-      try {
-        const birthDate = new Date(dob);
-        const today = new Date();
-        
-        // Calculate age
-        age = today.getFullYear() - birthDate.getFullYear();
-        const monthDiff = today.getMonth() - birthDate.getMonth();
-        
-        // Adjust if birthday hasn't occurred this year yet
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-          age--;
-        }
-
-        // === CATEGORIZE INTO AGE GROUPS ===
-        // Useful for segmentation (e.g., targeting young adults vs seniors)
-        if (age < 18) ageGroup = 'Under 18';
-        else if (age >= 18 && age <= 24) ageGroup = '18-24';
-        else if (age >= 25 && age <= 34) ageGroup = '25-34';
-        else if (age >= 35 && age <= 44) ageGroup = '35-44';
-        else if (age >= 45 && age <= 54) ageGroup = '45-54';
-        else if (age >= 55 && age <= 64) ageGroup = '55-64';
-        else ageGroup = '65+';
-      } catch (error) {
-        console.log(`Error calculating age for customer ${customerId}:`, error);
-      }
-    }
-
     // === CREATE MERGED CUSTOMER PROFILE ===
-    // Combine demographics + behavioral data into one object
+    // Start with mandatory fields (always present)
     const mergedCustomer = {
       // === IDENTIFICATION ===
-      customerid: customerId,  // Keep lowercase for consistency
+      customerid: customerId,
       
-      // === DEMOGRAPHIC DATA ===
-      // (These might be null if not provided by user)
-      dob: dob,                    // Date of birth
-      gender: gender,              // Male/Female/Other
-      age: age,                    // Calculated from DOB
-      ageGroup: ageGroup,          // Age category (e.g., "25-34")
-      city: customer['city'] || null,    // lowercase from cleaning
-      state: customer['state'] || null,  // lowercase from cleaning
+      // === GEOGRAPHIC DATA (always present) ===
+      city: customer['city'] || null,
+      state: customer['state'] || null,
       
       // === BEHAVIORAL DATA FROM ORDERS ===
-      // (These default to 0 or null if customer has no orders)
       totalOrders: orderData.totalOrders || 0,
       totalSpend: orderData.totalSpend || 0,
       avgOrderValue: orderData.avgOrderValue || 0,
@@ -305,10 +277,33 @@ const mergeCustomerAndOrderData = (customerRows, aggregatedOrderData) => {
       favoriteDayPart: orderData.favoriteDayPart ?? null,
       
       // === RFM SCORES (for RFM segmentation) ===
-      recency: orderData.recency || null,        // Days since last purchase
-      frequency: orderData.frequency || 0,       // Number of orders
-      monetary: orderData.monetary || 0,         // Total spending
+      recency: orderData.recency || null,
+      frequency: orderData.frequency || 0,
+      monetary: orderData.monetary || 0,
     };
+
+    // === CONDITIONALLY ADD DEMOGRAPHIC FIELDS (only if column exists in cleaned data) ===
+    if (hasAgeColumn) {
+      const ageValue = customer['age'];
+      // Only add if not 'Unknown' string
+      if (ageValue && ageValue !== 'Unknown') {
+        mergedCustomer.age = parseInt(ageValue);
+      }
+    }
+
+    if (hasAgeGroupColumn) {
+      const ageGroupValue = customer['age_group'];  // note: underscore from cleaning
+      if (ageGroupValue && ageGroupValue !== 'Unknown') {
+        mergedCustomer.ageGroup = ageGroupValue;
+      }
+    }
+
+    if (hasGenderColumn) {
+      const genderValue = customer['gender'];
+      if (genderValue && genderValue !== 'Unknown') {
+        mergedCustomer.gender = genderValue;
+      }
+    }
 
     mergedData.push(mergedCustomer);
   });
@@ -347,10 +342,10 @@ const getAvailableAttributes = (mergedData) => {
     // === BEHAVIORAL ATTRIBUTES ===
     // These are always available (calculated from orders)
     behavioral: [
-      { value: 'totalSpend', label: 'Total Spending (M)', available: true },
-      { value: 'totalOrders', label: 'Number of Orders (F)', available: true },
+      { value: 'totalSpend', label: 'Total Spending', available: true }, // Monetary
+      { value: 'totalOrders', label: 'Number of Orders', available: true }, // Frequency
       { value: 'avgOrderValue', label: 'Average Order Value', available: true },
-      { value: 'daysSinceLastPurchase', label: 'Recency (R) - Days Since Last Purchase', available: true },
+      { value: 'daysSinceLastPurchase', label: 'Recency - Days Since Last Purchase', available: true }, // Recency
       { value: 'purchaseFrequency', label: 'Purchase Frequency', available: true },
       { value: 'customerLifetimeMonths', label: 'Customer Lifetime (Months)', available: true },
       // Favorites and time preferences (categorical/numeric)
