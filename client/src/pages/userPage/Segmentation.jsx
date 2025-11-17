@@ -348,7 +348,7 @@ const Segmentation = () => {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-blue-600">✓</span>
-                <span className="text-gray-700">Choose from pre-defined segmentation models (RFM, Demographic, Geographic-Behavioral)</span>
+                <span className="text-gray-700">Choose from our pre-defined segmentation models</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-blue-600">✓</span>
