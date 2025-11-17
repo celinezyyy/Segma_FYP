@@ -2,6 +2,7 @@ import datasetModel from '../models/datasetModel.js';
 import { getGridFSBucket } from '../utils/gridfs.js';
 import csvParser from 'csv-parser';
 import { Readable } from 'stream';
+import { segmentationPairs } from "../utils/segmentationPairs.js";
 
 /**
  * Step 1: Aggregate order data by CustomerID
@@ -565,4 +566,12 @@ export const prepareSegmentationData = async (req, res) => {
       error: error.message 
     });
   }
+};
+
+// Endpoint to get predefined segmentation pairs
+export const getSegmentationPairs = (req, res) => {
+  return res.json({
+    success: true,
+    pairs: segmentationPairs
+  });
 };

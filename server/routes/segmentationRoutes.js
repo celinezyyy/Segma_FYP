@@ -7,5 +7,6 @@ const segmentationRouter = express.Router();
 // Merge customer and order data for segmentation
 segmentationRouter.post('/prepare', userAuth, prepareSegmentationData);
 segmentationRouter.post('/download', userAuth, downloadMergedCsv);
+segmentationRouter.post('/attributes-pairs', userAuth, downloadMergedCsv);
 
 export default segmentationRouter;
