@@ -16,6 +16,11 @@ const Segmentation = () => {
   const [availableAttributes, setAvailableAttributes] = useState(null);
   const [summary, setSummary] = useState(null);
   const [downloading, setDownloading] = useState(false);
+  const [featureA, setFeatureA] = useState('');
+  const [featureB, setFeatureB] = useState('');
+  const [segLoading, setSegLoading] = useState(false);
+  const [segResult, setSegResult] = useState(null);
+  const [errorMsg, setErrorMsg] = useState(null);
 
   // Fetch and merge data when component loads
   useEffect(() => {
@@ -330,36 +335,123 @@ const Segmentation = () => {
                   </div>
                 </div>
               )}
+
+              {/* Attribute Pair Selection */}
+              <div className="mt-8 border-t pt-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                  <span>🎯</span> Select 2 Attributes to Segment Customers
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">Choose two different attributes (numeric or categorical). Customers without orders or missing these values are automatically excluded.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Attribute 1</label>
+                    <select value={featureA} onChange={e=>setFeatureA(e.target.value)} className="w-full border rounded px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200">
+                      <option value="">-- Select --</option>
+                      {['behavioral','demographic','geographic'].map(group => (
+                        availableAttributes[group].filter(a=>a.available).map(a=> <option key={a.value} value={a.value}>{a.label}</option>)
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Attribute 2</label>
+                    <select value={featureB} onChange={e=>setFeatureB(e.target.value)} className="w-full border rounded px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200">
+                      <option value="">-- Select --</option>
+                      {['behavioral','demographic','geographic'].map(group => (
+                        availableAttributes[group].filter(a=>a.available).map(a=> <option key={a.value} value={a.value}>{a.label}</option>)
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {errorMsg && <p className="text-red-600 text-sm mt-2">{errorMsg}</p>}
+                <div className="mt-4 flex gap-3">
+                  <button
+                    onClick={async ()=>{
+                      setErrorMsg(null); setSegResult(null);
+                      if (!featureA || !featureB) { setErrorMsg('Please select both attributes.'); return; }
+                      if (featureA === featureB) { setErrorMsg('Attributes must be different.'); return; }
+                      setSegLoading(true);
+                      try {
+                        const resp = await axios.post(`${backendUrl}/api/segmentation/run`, {
+                          customerDatasetId: selectedCustomer,
+                          orderDatasetId: selectedOrder,
+                          selectedFeatures: [featureA, featureB]
+                        }, { withCredentials: true });
+                        if (resp.data.success) {
+                          setSegResult(resp.data);
+                          Swal.fire({ icon:'success', title:'Segmentation Complete', text:`K=${resp.data.bestK} clusters generated`, timer:2500, showConfirmButton:false });
+                        } else {
+                          setErrorMsg(resp.data.message || 'Segmentation failed.');
+                        }
+                      } catch (err) {
+                        console.error(err);
+                        setErrorMsg(err.response?.data?.message || 'Server error running segmentation.');
+                      } finally {
+                        setSegLoading(false);
+                      }
+                    }}
+                    disabled={segLoading}
+                    className={`inline-flex items-center gap-2 px-5 py-2 rounded font-medium border transition ${segLoading? 'bg-gray-300 border-gray-300 text-gray-600 cursor-not-allowed':'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'}`}
+                  >
+                    {segLoading ? 'Running...' : 'Run Segmentation'}
+                  </button>
+                  {segResult && (
+                    <button
+                      onClick={()=>setSegResult(null)}
+                      className="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-100"
+                    >Clear Result</button>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Data Preview - removed per stakeholder request */}
-
-          {/* Next Steps - Coming Soon */}
-          <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg shadow-md p-6 mt-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-3">🚀 Next Steps</h2>
-            <p className="text-gray-700 mb-4">
-              Data merging and aggregation is complete! The following features will be implemented next:
-            </p>
-            <ul className="space-y-2">
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600">✓</span>
-                <span className="text-gray-700">Select 2 attributes for segmentation</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600">✓</span>
-                <span className="text-gray-700">Choose from our pre-defined segmentation models</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600">✓</span>
-                <span className="text-gray-700">Visualize customer segments</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600">✓</span>
-                <span className="text-gray-700">Download segment results</span>
-              </li>
-            </ul>
-          </div>
+          {/* Segmentation Result */}
+          {segResult && (
+            <div className="mt-8 bg-white rounded-lg shadow-md p-6">
+              <h2 className="text-xl font-bold text-gray-800 mb-4">Segmentation Result (K={segResult.bestK})</h2>
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <h3 className="font-semibold text-gray-700 mb-2">Evaluation Metrics</h3>
+                  <table className="w-full text-sm border">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="p-2 border">K</th>
+                        <th className="p-2 border">Silhouette</th>
+                        <th className="p-2 border">DBI</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {segResult.evaluations.map(ev => (
+                        <tr key={ev.k} className={ev.k===segResult.bestK? 'bg-blue-50':''}>
+                          <td className="p-2 border text-center">{ev.k}</td>
+                          <td className="p-2 border text-center">{ev.silhouette}</td>
+                          <td className="p-2 border text-center">{ev.dbi}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="text-xs text-gray-500 mt-2">Higher silhouette and lower DBI indicate better separation.</p>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-700 mb-2">Cluster Summary</h3>
+                  <div className="space-y-3 max-h-72 overflow-auto pr-2">
+                    {Object.entries(segResult.clusterSummary).map(([key,val]) => (
+                      <div key={key} className="border rounded p-3">
+                        <div className="flex justify-between mb-2">
+                          <span className="font-medium text-gray-800">{key}</span>
+                          <span className="text-sm text-gray-600">{val.count} ({val.percentage}%)</span>
+                        </div>
+                        <ul className="text-xs text-gray-600 list-disc ml-4">
+                          {Object.entries(val.attributes).map(([f,v]) => <li key={f}>{f}: {v}</li>)}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 text-sm text-gray-500">Records used: {segResult.recordsUsed} / Total profiles: {segResult.totalProfiles}</div>
+            </div>
+          )}
         </div>
       </div>
     </div>
