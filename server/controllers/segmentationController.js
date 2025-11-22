@@ -286,9 +286,11 @@ const mergeCustomerAndOrderData = (customerRows, aggregatedOrderData) => {
     // === CONDITIONALLY ADD DEMOGRAPHIC FIELDS (only if column exists in cleaned data) ===
     if (hasAgeColumn) {
       const ageValue = customer['age'];
-      // Only add if not 'Unknown' string
-      if (ageValue && ageValue !== 'Unknown') {
+      // Add age if valid, otherwise mark as "Not Provided"
+      if (ageValue && ageValue !== 'Unknown' && !isNaN(parseInt(ageValue))) {
         mergedCustomer.age = parseInt(ageValue);
+      } else {
+        mergedCustomer.age = 'Not Provided';
       }
     }
 
@@ -296,6 +298,8 @@ const mergeCustomerAndOrderData = (customerRows, aggregatedOrderData) => {
       const ageGroupValue = customer['age_group'];  // note: underscore from cleaning
       if (ageGroupValue && ageGroupValue !== 'Unknown') {
         mergedCustomer.ageGroup = ageGroupValue;
+      } else {
+        mergedCustomer.ageGroup = 'Not Provided';
       }
     }
 
@@ -303,6 +307,8 @@ const mergeCustomerAndOrderData = (customerRows, aggregatedOrderData) => {
       const genderValue = customer['gender'];
       if (genderValue && genderValue !== 'Unknown') {
         mergedCustomer.gender = genderValue;
+      } else {
+        mergedCustomer.gender = 'Not Provided';
       }
     }
 
@@ -331,8 +337,9 @@ const getAvailableAttributes = (mergedData) => {
   const sampleRecord = mergedData[0];
   
   // Check if Age and Gender data are available
-  const hasAge = sampleRecord.age !== null;
-  const hasGender = sampleRecord.gender !== null;
+  const hasAge = 'age' in sampleRecord;
+  const hasAgeGroup = 'ageGroup' in sampleRecord;
+  const hasGender = 'gender' in sampleRecord;
   // Check availability of favorite metrics
   const hasFavPayment = mergedData.some(c => !!c.favoritePaymentMethod);
   const hasFavItem = mergedData.some(c => !!c.favoriteItem);
@@ -359,7 +366,8 @@ const getAvailableAttributes = (mergedData) => {
     // === DEMOGRAPHIC ATTRIBUTES ===
     // These might not be available if user didn't provide DOB/Gender
     demographic: [
-      { value: 'ageGroup', label: 'Age Group', available: hasAge },
+      { value: 'age', label: 'Age', available: hasAge },
+      { value: 'ageGroup', label: 'Age Group', available: hasAgeGroup },
       { value: 'gender', label: 'Gender', available: hasGender },
     ],
     
