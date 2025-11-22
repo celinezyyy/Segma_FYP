@@ -196,14 +196,13 @@ def handle_missing_values_order(df):
     Strategy (for SME context):
     - Drop rows if (orderid, customerid, purchase date) are missing
     - Drop rows if (purchase time) is missing (when time column exists)
+    - Drop rows if (purchase item) is missing (important for segmentation analysis)
     - Drop rows if both (item price and total spend) are missing
     - Drop rows if (item price) is missing (critical for calculations)
     - Fill or calculate non-critical missing fields logically:
         - purchase quantity: calculate from (total spend / item price) if possible, otherwise fill with 1
         - total spend: calculate from (item price × quantity) if possible, otherwise drop row
         - transaction method: fill with "Unknown"
-    
-    Note: purchase item is NOT filled because product name is important for business analysis
     """
 
     initial_count = len(df)
@@ -219,13 +218,13 @@ def handle_missing_values_order(df):
         "transaction_method_filled": 0
     }
 
-    # Drop rows missing critical identifiers
-    critical_cols = ["orderid", "customerid", "purchase date"]
+    # Drop rows missing critical identifiers (orderid, customerid, purchase date, purchase item)
+    critical_cols = ["orderid", "customerid", "purchase date", "purchase item"]
     existing_critical = [c for c in critical_cols if c in df.columns]
     before_critical = len(df)
     df = df.dropna(subset=existing_critical)
     stats["critical_ids_removed"] = before_critical - len(df)
-    print(f"[LOG - STAGE 4] Dropped rows with missing critical identifiers: {stats['critical_ids_removed']}")
+    print(f"[LOG - STAGE 4] Dropped {stats['critical_ids_removed']} rows with missing critical identifiers (OrderID, CustomerID, Purchase Date, Purchase Item)")
     
     if "purchase time" in df.columns:
         # Drop rows where purchase time is null
@@ -294,7 +293,7 @@ def handle_missing_values_order(df):
     if dropped_total > 0:
         messages.append(f"{dropped_total} order(s) removed due to missing critical information:")
         if stats["critical_ids_removed"] > 0:
-            messages.append(f"  - {stats['critical_ids_removed']} order(s) without OrderID, CustomerID, or Purchase Date")
+            messages.append(f"  - {stats['critical_ids_removed']} order(s) without OrderID, CustomerID, Purchase Date, or Purchase Item")
         if stats["purchase_time_removed"] > 0:
             messages.append(f"  - {stats['purchase_time_removed']} order(s) without Purchase Time")
         if stats["no_financial_removed"] > 0:
