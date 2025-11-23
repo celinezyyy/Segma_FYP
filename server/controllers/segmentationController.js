@@ -583,3 +583,244 @@ export const getSegmentationPairs = (req, res) => {
     pairs: segmentationPairs
   });
 };
+
+/**
+ * Lightweight in-controller KMeans implementation for 2 selected features.
+ * NOTE: For SME scale and small datasets only. Not a replacement for Python/scikit-learn.
+ * Input body: { customerDatasetId, orderDatasetId, selectedFeatures: [f1, f2] }
+ */
+export const runSimpleSegmentation = async (req, res) => {
+  try {
+    const { userId } = req;
+    const { customerDatasetId, orderDatasetId, selectedFeatures, mergedData: mergedDataFromClient } = req.body;
+
+    if (!Array.isArray(selectedFeatures) || selectedFeatures.length !== 2) {
+      return res.status(400).json({ success: false, message: 'Exactly 2 features must be selected.' });
+    }
+
+    // If the client already has merged customer profiles, use them directly to avoid re-merging
+    let mergedData;
+    if (Array.isArray(mergedDataFromClient) && mergedDataFromClient.length > 0) {
+      mergedData = mergedDataFromClient;
+    } else {
+      // Validate datasets
+      const customerDataset = await datasetModel.findOne({ _id: customerDatasetId, user: userId, type: 'Customer', isClean: true });
+      const orderDataset = await datasetModel.findOne({ _id: orderDatasetId, user: userId, type: 'Order', isClean: true });
+      if (!customerDataset || !orderDataset) {
+        return res.status(400).json({ success: false, message: 'Invalid or unclean datasets.' });
+      }
+
+      const bucket = getGridFSBucket();
+      const readCsv = (fileId) => new Promise((resolve, reject) => {
+        const rows = [];
+        bucket.openDownloadStream(fileId)
+          .pipe(csvParser())
+          .on('data', (r) => rows.push(r))
+          .on('end', () => resolve(rows))
+          .on('error', reject);
+      });
+
+      const [customerRows, orderRows] = await Promise.all([
+        readCsv(customerDataset.fileId),
+        readCsv(orderDataset.fileId)
+      ]);
+
+      const aggregatedOrderData = aggregateOrderData(orderRows);
+      mergedData = mergeCustomerAndOrderData(customerRows, aggregatedOrderData);
+    }
+
+    // Filter: customers with orders & both features present (not null / undefined / 'Not Provided')
+    const usable = mergedData.filter(r => r.totalOrders > 0 && selectedFeatures.every(f => r[f] !== null && r[f] !== undefined && r[f] !== 'Not Provided'));
+    if (usable.length < 4) {
+      return res.status(400).json({ success: false, message: 'Not enough valid customer records for clustering (need >= 4).' });
+    }
+
+    // Prepare raw feature matrix
+    const featureMatrices = [];
+    const encoders = {}; // for categorical features mapping
+    selectedFeatures.forEach(f => {
+      const values = usable.map(r => r[f]);
+      const allNumeric = values.every(v => typeof v === 'number' && !isNaN(v));
+      if (allNumeric) {
+        featureMatrices.push(values);
+      } else {
+        // categorical → integer encode
+        const distinct = Array.from(new Set(values));
+        encoders[f] = Object.fromEntries(distinct.map((val, idx) => [val, idx]));
+        featureMatrices.push(values.map(v => encoders[f][v]));
+      }
+    });
+
+    // Transpose to get data points: [[x1,x2], ...]
+    const data = usable.map((_, i) => featureMatrices.map(col => col[i]));
+
+    // Standardize each column (z-score)
+    const cols = featureMatrices.length;
+    const means = Array(cols).fill(0);
+    const stds = Array(cols).fill(0);
+    for (let c = 0; c < cols; c++) {
+      const colVals = data.map(row => row[c]);
+      const m = colVals.reduce((a,b)=>a+b,0)/colVals.length;
+      means[c] = m;
+      const variance = colVals.reduce((a,b)=>a+Math.pow(b-m,2),0)/colVals.length;
+      stds[c] = Math.sqrt(variance) || 1;
+    }
+    data.forEach(row => {
+      for (let c=0;c<cols;c++) row[c] = (row[c]-means[c]) / stds[c];
+    });
+
+    // Helper distance
+    const dist = (a,b) => Math.sqrt(a.reduce((sum,v,i)=>sum+Math.pow(v-b[i],2),0));
+
+    // KMeans implementation
+    const kMeans = (points, k, maxIter=100) => {
+      // Initialize centroids: pick k distinct random points
+      const shuffled = [...points].sort(()=>Math.random()-0.5);
+      let centroids = shuffled.slice(0,k).map(p=>[...p]);
+      let labels = Array(points.length).fill(0);
+      for (let iter=0; iter<maxIter; iter++) {
+        // Assign
+        let changed = false;
+        for (let i=0;i<points.length;i++) {
+          const p = points[i];
+          let best = 0; let bestD = dist(p, centroids[0]);
+          for (let c=1;c<k;c++) {
+            const d = dist(p, centroids[c]);
+            if (d < bestD) { bestD = d; best = c; }
+          }
+            if (labels[i] !== best) { labels[i] = best; changed = true; }
+        }
+        // Recompute centroids
+        const newCentroids = centroids.map(()=>Array(cols).fill(0));
+        const counts = Array(k).fill(0);
+        for (let i=0;i<points.length;i++) {
+          const lab = labels[i]; counts[lab]++;
+          for (let c=0;c<cols;c++) newCentroids[lab][c]+=points[i][c];
+        }
+        for (let c=0;c<k;c++) {
+          if (counts[c] === 0) {
+            // Reinitialize empty centroid randomly
+            newCentroids[c] = [...points[Math.floor(Math.random()*points.length)]];
+          } else {
+            for (let j=0;j<cols;j++) newCentroids[c][j] /= counts[c];
+          }
+        }
+        centroids = newCentroids;
+        if (!changed) break;
+      }
+      return { centroids, labels };
+    };
+
+    // Silhouette score
+    const silhouette = (points, labels, k) => {
+      if (k < 2) return 0;
+      const n = points.length;
+      const clusters = Array.from({length:k},()=>[]);
+      for (let i=0;i<n;i++) clusters[labels[i]].push(i);
+      let total = 0;
+      for (let i=0;i<n;i++) {
+        const own = clusters[labels[i]];
+        // a(i)
+        let a = 0;
+        if (own.length > 1) {
+          for (const j of own) if (j!==i) a += dist(points[i], points[j]);
+          a /= (own.length -1);
+        }
+        // b(i)
+        let b = Infinity;
+        for (let c=0;c<k;c++) if (c !== labels[i] && clusters[c].length > 0) {
+          let avg = 0;
+          for (const j of clusters[c]) avg += dist(points[i], points[j]);
+          avg /= clusters[c].length;
+          if (avg < b) b = avg;
+        }
+        const s = (b - a) / Math.max(a, b || 1);
+        total += s;
+      }
+      return total / n;
+    };
+
+    // Davies-Bouldin Index
+    const daviesBouldin = (points, labels, k, centroids) => {
+      const clusterPoints = Array.from({length:k},()=>[]);
+      for (let i=0;i<points.length;i++) clusterPoints[labels[i]].push(points[i]);
+      const S = clusterPoints.map((pts, idx) => {
+        if (pts.length === 0) return 0;
+        const c = centroids[idx];
+        const sum = pts.reduce((acc,p)=>acc+dist(p,c),0);
+        return sum / pts.length;
+      });
+      let dbSum = 0;
+      for (let i=0;i<k;i++) {
+        let maxR = 0;
+        for (let j=0;j<k;j++) if (i!==j) {
+          const M = dist(centroids[i], centroids[j]);
+          if (M === 0) continue;
+          const R = (S[i] + S[j]) / M;
+          if (R > maxR) maxR = R;
+        }
+        dbSum += maxR;
+      }
+      return dbSum / k;
+    };
+
+    const evaluations = [];
+    let bestK = null; let bestSil = -Infinity; let bestLabels = null; let bestCentroids = null;
+    for (let k=2;k<=6;k++) {
+      if (usable.length < k) break; // cannot have more clusters than points
+      const { centroids, labels } = kMeans(data, k);
+      const sil = silhouette(data, labels, k);
+      const dbi = daviesBouldin(data, labels, k, centroids);
+      evaluations.push({ k, silhouette: parseFloat(sil.toFixed(4)), dbi: parseFloat(dbi.toFixed(4)) });
+      if (sil > bestSil) { bestSil = sil; bestK = k; bestLabels = labels; bestCentroids = centroids; }
+    }
+
+    if (!bestK) {
+      return res.status(400).json({ success: false, message: 'Failed to determine optimal K.' });
+    }
+
+    // Attach cluster labels back to records
+    usable.forEach((r,i)=>{ r.cluster = bestLabels[i]; });
+
+    // Build cluster summary
+    const clusterSummary = {};
+    const byCluster = {};
+    usable.forEach(r => { byCluster[r.cluster] = byCluster[r.cluster] || []; byCluster[r.cluster].push(r); });
+    Object.keys(byCluster).forEach(kc => {
+      const arr = byCluster[kc];
+      const stats = {};
+      selectedFeatures.forEach(f => {
+        const values = arr.map(r => r[f]);
+        if (values.every(v => typeof v === 'number' && !isNaN(v))) {
+          const mean = values.reduce((a,b)=>a+b,0)/values.length;
+          stats[f] = parseFloat(mean.toFixed(2));
+        } else {
+          // mode
+          const counts = {};
+          values.forEach(v => { counts[v] = (counts[v]||0)+1; });
+          const mode = Object.keys(counts).reduce((a,b)=> counts[a]>counts[b]?a:b);
+          stats[f] = mode;
+        }
+      });
+      clusterSummary[`cluster_${kc}`] = {
+        count: arr.length,
+        percentage: parseFloat((arr.length / usable.length * 100).toFixed(2)),
+        attributes: stats
+      };
+    });
+
+    res.json({
+      success: true,
+      bestK,
+      evaluations,
+      clusterAssignments: usable.map(r => ({ customerid: r.customerid, cluster: r.cluster })),
+      clusterSummary,
+      featureEncoders: encoders, // for transparency
+      recordsUsed: usable.length,
+      totalProfiles: mergedData.length
+    });
+  } catch (err) {
+    console.error('❌ Error running simple segmentation:', err);
+    res.status(500).json({ success: false, message: 'Segmentation failed', error: err.message });
+  }
+};

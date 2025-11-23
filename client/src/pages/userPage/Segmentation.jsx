@@ -341,7 +341,7 @@ const Segmentation = () => {
                 <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                   <span>🎯</span> Select 2 Attributes to Segment Customers
                 </h3>
-                <p className="text-sm text-gray-600 mb-4">Choose two different attributes (numeric or categorical). Customers without orders or missing these values are automatically excluded.</p>
+                <p className="text-sm text-gray-600 mb-4">Choose two different attributes to perform segmentation. For Inactive Customers will be automatically excluded.</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Attribute 1</label>
@@ -372,8 +372,9 @@ const Segmentation = () => {
                       setSegLoading(true);
                       try {
                         const resp = await axios.post(`${backendUrl}/api/segmentation/run`, {
-                          customerDatasetId: selectedCustomer,
-                          orderDatasetId: selectedOrder,
+                          // send mergedData already prepared on the client to avoid re-merging on server
+                          mergedData: mergedData,
+                          // also include selected features
                           selectedFeatures: [featureA, featureB]
                         }, { withCredentials: true });
                         if (resp.data.success) {
