@@ -13,14 +13,14 @@ const Segmentation = () => {
 
   const [loading, setLoading] = useState(false);
   const [mergedData, setMergedData] = useState(null);
-  const [availableAttributes, setAvailableAttributes] = useState(null);
   const [summary, setSummary] = useState(null);
+  const [segmentationId, setSegmentationId] = useState(null);
   const [downloading, setDownloading] = useState(false);
-  const [featureA, setFeatureA] = useState('');
-  const [featureB, setFeatureB] = useState('');
+  const [selectedPairId, setSelectedPairId] = useState(null);
   const [segLoading, setSegLoading] = useState(false);
   const [segResult, setSegResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [recommendedPairs, setRecommendedPairs] = useState([]);
 
   // Fetch and merge data when component loads
   useEffect(() => {
@@ -58,15 +58,14 @@ const Segmentation = () => {
 
       console.log('Merge response:', response.data);
 
-      if (response.data.success) {
-        setMergedData(response.data.data.customerProfiles);
-        setAvailableAttributes(response.data.data.availableAttributes);
-        setSummary(response.data.data.summary);
-
+      if (response.data?.success) {
+        setSegmentationId(response.data.segmentationId || null);
+        setSummary(response.data.summary || null);
+        setRecommendedPairs(Array.isArray(response.data.availablePairs) ? response.data.availablePairs : []);
         Swal.fire({
           icon: 'success',
           title: 'Data Prepared!',
-          text: `Successfully merged ${response.data.data.summary.totalCustomers} customer profiles.`,
+          text: `Successfully merged ${response.data.summary?.totalCustomers ?? ''} customer profiles.`,
           timer: 3000,
           showConfirmButton: false,
         });
@@ -102,77 +101,53 @@ const Segmentation = () => {
     );
   }
 
-  // Generate CSV from existing mergedData 
-  const handleDownloadMerged = () => {
+  const DownloadMergedDataset = async () => {
     try {
       setDownloading(true);
-      
-      if (!mergedData || mergedData.length === 0) {
-        throw new Error('No data available to download, server returned empty dataset.');
+      let sid = segmentationId;
+      // If not prepared yet, prepare on-demand
+      if (!sid) {
+        const prepResp = await axios.post(
+          `${backendUrl}/api/segmentation/prepare`,
+          { customerDatasetId: selectedCustomer, orderDatasetId: selectedOrder },
+          { withCredentials: true }
+        );
+        if (!prepResp.data?.success || !prepResp.data?.segmentationId) {
+          throw new Error(prepResp.data?.message || 'Failed to prepare merged dataset');
+        }
+        sid = prepResp.data.segmentationId;
+        setSegmentationId(sid);
+        setSummary(prepResp.data.summary || null);
       }
 
-      // Convert mergedData to CSV
-      const csv = convertToCSV(mergedData);
-      
-      // Create blob and download
-      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }); // \ufeff = BOM for Excel
+      const resp = await axios.post(
+        `${backendUrl}/api/segmentation/download`,
+        { segmentationId: sid },
+        { withCredentials: true, responseType: 'blob' }
+      );
+
+      const disposition = resp.headers['content-disposition'] || '';
+      const match = disposition.match(/filename="?([^";]+)"?/i);
+      const filename = match ? match[1] : `merged_customer_profiles_${new Date().toISOString().slice(0,10)}.csv`;
+
+      const blob = new Blob([resp.data], { type: 'text/csv;charset=utf-8' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      const dt = new Date().toISOString().slice(0, 10);
       link.href = url;
-      link.download = `merged_customer_profiles_${dt}.csv`;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      
-      Swal.fire({
-        icon: 'success',
-        title: 'Download Complete',
-        text: `Downloaded ${mergedData.length} customer profiles`,
-        timer: 2000,
-        showConfirmButton: false,
-      });
+
+      Swal.fire({ icon: 'success', title: 'Download Complete', timer: 2000, showConfirmButton: false });
     } catch (e) {
       console.error('Download failed', e);
-      Swal.fire({ 
-        icon: 'error', 
-        title: 'Download failed', 
-        text: e?.message || 'Unable to download merged CSV.' 
-      });
+      const msg = e.response?.data?.message || e.message || 'Unable to download merged CSV.';
+      Swal.fire({ icon: 'error', title: 'Download failed', text: msg });
     } finally {
       setDownloading(false);
     }
-  };
-
-  // Helper: Convert array of objects to CSV string
-  const convertToCSV = (data) => {
-    if (!data || data.length === 0) return '';
-    
-    // Get all unique column names
-    const columns = Array.from(
-      new Set(data.flatMap(row => Object.keys(row)))
-    );
-    
-    // Escape CSV values
-    const escapeCSV = (val) => {
-      if (val === null || val === undefined) return '';
-      const str = String(val);
-      if (str.includes('"') || str.includes(',') || str.includes('\n')) {
-        return '"' + str.replace(/"/g, '""') + '"';
-      }
-      return str;
-    };
-    
-    // Create header row
-    const header = columns.join(',');
-    
-    // Create data rows
-    const rows = data.map(row => 
-      columns.map(col => escapeCSV(row[col])).join(',')
-    );
-    
-    return [header, ...rows].join('\n');
   };
 
   return (
@@ -191,13 +166,13 @@ const Segmentation = () => {
             </p>
             <div className="mt-4 flex gap-3">
                 <button
-                    onClick={handleDownloadMerged}
-                    disabled={downloading}
+                  onClick={DownloadMergedDataset}
+                  disabled={downloading}
                     className={`inline-block border border-green-400 text-green-700 font-medium py-2 px-4 rounded transition
-                    ${downloading ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-[#F1F8E9] hover:bg-[#E6F4D7]'}
+                  ${downloading ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-[#F1F8E9] hover:bg-[#E6F4D7]'}
                     `}
                 >
-                    {downloading ? 'Preparing CSV…' : (<>Download merged dataset</>)}
+                  Download merged dataset
                 </button>
             </div>
           </div>
@@ -263,153 +238,94 @@ const Segmentation = () => {
             </div>
           )}
 
-          {/* Available Attributes Info */}
-          {availableAttributes && (
-            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <h2 className="text-xl font-bold text-gray-800 mb-4">Available Attributes for Segmentation</h2>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Behavioral */}
-                <div>
-                  <h3 className="text-lg font-semibold text-blue-600 mb-3 flex items-center gap-2">
-                    <span>📊</span> Behavioral
-                  </h3>
-                  <ul className="space-y-2">
-                    {availableAttributes.behavioral.map((attr) => (
-                      <li key={attr.value} className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${attr.available ? 'bg-green-500' : 'bg-gray-300'}`}></span>
-                        <span className={attr.available ? 'text-gray-700' : 'text-gray-400'}>{attr.label}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+          {/* Segmentation Pairs Selection */}
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-2">Choose a Segmentation Pair</h2>
+            <p className="text-sm text-gray-600 mb-4">Pick one pair to run clustering. Inactive customers are excluded automatically.</p>
+            {errorMsg && <p className="text-red-600 text-sm mt-2">{errorMsg}</p>}
 
-                {/* Demographic */}
-                <div>
-                  <h3 className="text-lg font-semibold text-purple-600 mb-3 flex items-center gap-2">
-                    <span>👥</span> Demographic
-                  </h3>
-                  <ul className="space-y-2">
-                    {availableAttributes.demographic.map((attr) => (
-                      <li key={attr.value} className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${attr.available ? 'bg-green-500' : 'bg-gray-300'}`}></span>
-                        <span className={attr.available ? 'text-gray-700' : 'text-gray-400'}>{attr.label}</span>
-                        {!attr.available && <span className="text-xs text-gray-400">(not provided)</span>}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Geographic */}
-                <div>
-                  <h3 className="text-lg font-semibold text-green-600 mb-3 flex items-center gap-2">
-                    <span>🌍</span> Geographic
-                  </h3>
-                  <ul className="space-y-2">
-                    {availableAttributes.geographic.map((attr) => (
-                      <li key={attr.value} className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${attr.available ? 'bg-green-500' : 'bg-gray-300'}`}></span>
-                        <span className={attr.available ? 'text-gray-700' : 'text-gray-400'}>{attr.label}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+            {recommendedPairs.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {recommendedPairs.map(p => {
+                  const selected = selectedPairId === p.id;
+                  return (
+                    <label key={p.id} className={`cursor-pointer select-none border rounded p-4 flex flex-col justify-between transition ${selected ? 'border-blue-600 bg-white shadow' : 'border-gray-200 bg-gray-50 hover:shadow-sm'}`}>
+                      <input type="radio" name="segPair" checked={selected} onChange={() => setSelectedPairId(p.id)} className="sr-only" />
+                      <div onClick={() => setSelectedPairId(p.id)}>
+                        <div className="flex items-center justify-between">
+                          <div className="font-semibold text-gray-800">{p.label}</div>
+                        </div>
+                        {!selected && <p className="text-xs text-gray-600 mt-2">{p.description}</p>}
+                      </div>
+                    </label>
+                  );
+                })}
               </div>
+            ) : (
+              <div className="mt-2 p-4 bg-yellow-50 border-l-4 border-yellow-300 rounded text-sm text-yellow-700">
+                No recommended segmentation pairs available. Please verify your datasets contain enough attributes.
+              </div>
+            )}
 
-              {/* Optional Fields Warning */}
-              {(!summary?.hasAgeData || !summary?.hasGenderData) && (
-                <div className="mt-6 bg-yellow-50 border-l-4 border-yellow-400 p-4">
-                  <div className="flex">
-                    <div className="flex-shrink-0">
-                      <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    <div className="ml-3">
-                      <p className="text-sm text-yellow-700">
-                        <span className="font-medium">Note:</span> Some demographic attributes are not available because they were not provided in the customer dataset.
-                        {!summary?.hasAgeData && <span className="block">• Age and Age Group data is missing</span>}
-                        {!summary?.hasGenderData && <span className="block">• Gender data is missing</span>}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Attribute Pair Selection */}
-              <div className="mt-8 border-t pt-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <span>🎯</span> Select 2 Attributes to Segment Customers
-                </h3>
-                <p className="text-sm text-gray-600 mb-4">Choose two different attributes to perform segmentation. For Inactive Customers will be automatically excluded.</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Attribute 1</label>
-                    <select value={featureA} onChange={e=>setFeatureA(e.target.value)} className="w-full border rounded px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200">
-                      <option value="">-- Select --</option>
-                      {['behavioral','demographic','geographic'].map(group => (
-                        availableAttributes[group].filter(a=>a.available).map(a=> <option key={a.value} value={a.value}>{a.label}</option>)
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Attribute 2</label>
-                    <select value={featureB} onChange={e=>setFeatureB(e.target.value)} className="w-full border rounded px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200">
-                      <option value="">-- Select --</option>
-                      {['behavioral','demographic','geographic'].map(group => (
-                        availableAttributes[group].filter(a=>a.available).map(a=> <option key={a.value} value={a.value}>{a.label}</option>)
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                {errorMsg && <p className="text-red-600 text-sm mt-2">{errorMsg}</p>}
-                <div className="mt-4 flex gap-3">
-                  <button
-                    onClick={async ()=>{
-                      setErrorMsg(null); setSegResult(null);
-                      if (!featureA || !featureB) { setErrorMsg('Please select both attributes.'); return; }
-                      if (featureA === featureB) { setErrorMsg('Attributes must be different.'); return; }
-                      setSegLoading(true);
-                      try {
-                        const resp = await axios.post(`${backendUrl}/api/segmentation/run`, {
-                          // send mergedData already prepared on the client to avoid re-merging on server
-                          mergedData: mergedData,
-                          // also include selected features
-                          selectedFeatures: [featureA, featureB]
-                        }, { withCredentials: true });
-                        if (resp.data.success) {
-                          setSegResult(resp.data);
-                          Swal.fire({ icon:'success', title:'Segmentation Complete', text:`K=${resp.data.bestK} clusters generated`, timer:2500, showConfirmButton:false });
-                        } else {
-                          setErrorMsg(resp.data.message || 'Segmentation failed.');
-                        }
-                      } catch (err) {
-                        console.error(err);
-                        setErrorMsg(err.response?.data?.message || 'Server error running segmentation.');
-                      } finally {
-                        setSegLoading(false);
+            <div className="mt-4 flex items-center justify-between gap-4">
+              <div className="flex-1">
+                {selectedPairId ? (
+                  (() => {
+                    const p = recommendedPairs.find(x => x.id === selectedPairId);
+                    return p ? (
+                      <div className="text-sm">
+                        <div className="font-medium">Selected pair: <span className="text-gray-700">{p.label}</span></div>
+                        <div className="text-xs text-gray-500 mt-1">{p.features.join(' × ')}</div>
+                      </div>
+                    ) : null;
+                  })()
+                ) : (
+                  <div className="text-sm text-gray-500">No pair selected. Click a card to choose a pair.</div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={async ()=>{
+                    setErrorMsg(null); setSegResult(null);
+                    if (!selectedPairId) { setErrorMsg('Please select a segmentation pair.'); return; }
+                    const p = recommendedPairs.find(x => x.id === selectedPairId);
+                    if (!p) { setErrorMsg('Invalid pair selected.'); return; }
+                    setSegLoading(true);
+                    try {
+                      const resp = await axios.post(`${backendUrl}/api/segmentation/run`, {
+                        segmentationId,
+                        selectedFeatures: [p.features[0], p.features[1]]
+                      }, { withCredentials: true });
+                      if (resp.data.success) {
+                        setSegResult(resp.data);
+                        Swal.fire({ icon:'success', title:'Segmentation Complete', text:`K=${resp.data.bestK} clusters generated`, timer:2500, showConfirmButton:false });
+                      } else {
+                        setErrorMsg(resp.data.message || 'Segmentation failed.');
                       }
-                    }}
-                    disabled={segLoading}
-                    className={`inline-flex items-center gap-2 px-5 py-2 rounded font-medium border transition ${segLoading? 'bg-gray-300 border-gray-300 text-gray-600 cursor-not-allowed':'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'}`}
-                  >
-                    {segLoading ? 'Running...' : 'Run Segmentation'}
-                  </button>
-                  {segResult && (
-                    <button
-                      onClick={()=>setSegResult(null)}
-                      className="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-100"
-                    >Clear Result</button>
-                  )}
-                </div>
+                    } catch (err) {
+                      console.error(err);
+                      setErrorMsg(err.response?.data?.message || 'Server error running segmentation.');
+                    } finally {
+                      setSegLoading(false);
+                    }
+                  }}
+                  disabled={segLoading || !selectedPairId}
+                  className={`inline-flex items-center gap-2 px-5 py-2 rounded font-medium border transition ${segLoading? 'bg-gray-300 border-gray-300 text-gray-600 cursor-not-allowed':'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'}`}
+                >{segLoading ? 'Running...' : 'Run Selected Pair'}</button>
+                <button onClick={()=>{ setSelectedPairId(null); setErrorMsg(null); }} className="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-100">Clear</button>
               </div>
             </div>
-          )}
+          </div>
 
           {/* Segmentation Result */}
           {segResult && (
             <div className="mt-8 bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-bold text-gray-800 mb-4">Segmentation Result (K={segResult.bestK})</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-800">Segmentation Result (K={segResult.bestK})</h2>
+                <div>
+                  <button onClick={()=>setSegResult(null)} className="px-3 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-100">Clear Result</button>
+                </div>
+              </div>
               <div className="grid md:grid-cols-2 gap-6">
                 <div>
                   <h3 className="font-semibold text-gray-700 mb-2">Evaluation Metrics</h3>
