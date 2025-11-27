@@ -1,25 +1,12 @@
 import datasetModel from '../models/datasetModel.js';
+import segmentationModel from '../models/segmentationModel.js';
 import { getGridFSBucket } from '../utils/gridfs.js';
 import csvParser from 'csv-parser';
 import { Readable } from 'stream';
-import { segmentationPairs } from "../utils/segmentationPairs.js";
+import segmentationPairs from '../utils/segmentationPairs.js';
 
-/**
- * Step 1: Aggregate order data by CustomerID
- * 
- * EXPLANATION:
- * - This function takes all order rows for ALL customers
- * - Groups them by customerid (e.g., all orders for "C001" together)
- * - Calculates behavioral metrics like total spend, recency, frequency
- * 
- * INPUT: Array of order rows from cleaned CSV
- * OUTPUT: Object with customerid as key, aggregated metrics as value
- * 
- * NOTE: After cleaning pipeline, all column names are LOWERCASE
- */
+// Merge dataset
 const aggregateOrderData = (orderRows) => {
-  // Object to store aggregated data per customer
-  // Structure: { "C001": { orders: [...], totalSpend: 1500, ... }, "C002": { ... } }
   const customerOrders = {};
 
   // Loop through each order row
@@ -211,26 +198,6 @@ const aggregateOrderData = (orderRows) => {
   return aggregatedData;
 };
 
-/**
- * Step 2: Merge customer demographic data with aggregated order data
- * 
- * EXPLANATION:
- * - Takes each customer row (demographics from customer dataset)
- * - Finds their aggregated order data (behavioral metrics)
- * - Combines both into one complete customer profile
- * - ONLY includes demographic columns (age, age_group, gender) if they exist in the cleaned customer dataset
- * 
- * INPUT: 
- *   - customerRows: Array of customer rows from cleaned CSV
- *   - aggregatedOrderData: Object with customerid as key, metrics as value
- * 
- * OUTPUT: Array of merged customer profiles with both demographics and behavior
- * 
- * NOTE: 
- * - Column names are LOWERCASE after cleaning pipeline
- * - Cleaning may drop optional columns (age, age_group, gender) if not provided or mostly empty
- * - We check if columns exist before merging them
- */
 const mergeCustomerAndOrderData = (customerRows, aggregatedOrderData) => {
   const mergedData = [];
 
@@ -318,158 +285,6 @@ const mergeCustomerAndOrderData = (customerRows, aggregatedOrderData) => {
   return mergedData;
 };
 
-/**
- * Step 3: Get available attributes for segmentation
- * 
- * EXPLANATION:
- * - Checks which attributes are actually available in the data
- * - Some attributes (Age, Gender) are optional - user might not have provided them
- * - Tells frontend which attributes can be used for segmentation
- * 
- * This prevents users from trying to segment by Age if no DOB was provided
- */
-const getAvailableAttributes = (mergedData) => {
-  if (mergedData.length === 0) {
-    return { behavioral: [], demographic: [], geographic: [] };
-  }
-
-  // Check the first customer to see which optional fields exist
-  const sampleRecord = mergedData[0];
-  
-  // Check if Age and Gender data are available
-  const hasAge = 'age' in sampleRecord;
-  const hasAgeGroup = 'ageGroup' in sampleRecord;
-  const hasGender = 'gender' in sampleRecord;
-  // Check availability of favorite metrics
-  const hasFavPayment = mergedData.some(c => !!c.favoritePaymentMethod);
-  const hasFavItem = mergedData.some(c => !!c.favoriteItem);
-  const hasFavHour = mergedData.some(c => c.favoritePurchaseHour !== null && c.favoritePurchaseHour !== undefined);
-  const hasFavDayPart = mergedData.some(c => !!c.favoriteDayPart);
-  
-  const attributes = {
-    // === BEHAVIORAL ATTRIBUTES ===
-    // These are always available (calculated from orders)
-    behavioral: [
-      { value: 'totalSpend', label: 'Total Spending', available: true }, // Monetary
-      { value: 'totalOrders', label: 'Number of Orders', available: true }, // Frequency
-      { value: 'avgOrderValue', label: 'Average Order Value', available: true },
-      { value: 'daysSinceLastPurchase', label: 'Recency - Days Since Last Purchase', available: true }, // Recency
-      { value: 'purchaseFrequency', label: 'Purchase Frequency', available: true },
-      { value: 'customerLifetimeMonths', label: 'Customer Lifetime (Months)', available: true },
-      // Favorites and time preferences (categorical/numeric)
-      { value: 'favoritePaymentMethod', label: 'Favorite Payment Method', available: hasFavPayment },
-      { value: 'favoriteItem', label: 'Favorite Item', available: hasFavItem },
-      { value: 'favoritePurchaseHour', label: 'Favorite Purchase Hour', available: hasFavHour },
-      { value: 'favoriteDayPart', label: 'Favorite Day Part', available: hasFavDayPart },
-    ],
-    
-    // === DEMOGRAPHIC ATTRIBUTES ===
-    // These might not be available if user didn't provide DOB/Gender
-    demographic: [
-      { value: 'age', label: 'Age', available: hasAge },
-      { value: 'ageGroup', label: 'Age Group', available: hasAgeGroup },
-      { value: 'gender', label: 'Gender', available: hasGender },
-    ],
-    
-    // === GEOGRAPHIC ATTRIBUTES ===
-    // These are always available (mandatory in customer dataset)
-    geographic: [
-      { value: 'state', label: 'State', available: true },
-      { value: 'city', label: 'City', available: true },
-    ]
-  };
-
-  return attributes;
-};
-
-/**
- * Helper: Convert merged data array to CSV string
- */
-const toCsv = (rows) => {
-  if (!rows || rows.length === 0) return '';
-  // Determine all columns (union of keys) in a stable order
-  const colsSet = new Set();
-  rows.forEach(r => Object.keys(r).forEach(k => colsSet.add(k)));
-  const cols = Array.from(colsSet);
-  const escape = (val) => {
-    if (val === null || val === undefined) return '';
-    const s = String(val);
-    if (s.includes('"') || s.includes(',') || s.includes('\n')) {
-      return '"' + s.replace(/"/g, '""') + '"';
-    }
-    return s;
-  };
-  const header = cols.join(',');
-  const lines = rows.map(r => cols.map(c => escape(r[c])).join(','));
-  return [header, ...lines].join('\n');
-};
-
-/**
- * POST /api/segmentation/download
- * Rebuild merged profiles and stream as CSV download without persisting.
- */
-export const downloadMergedCsv = async (req, res) => {
-  try {
-    const { userId } = req;
-    const { customerDatasetId, orderDatasetId } = req.body;
-    console.log('[LOG - DOWNLOAD CSV] user:', userId, 'customerDatasetId:', customerDatasetId, 'orderDatasetId:', orderDatasetId);
-
-    const customerDataset = await datasetModel.findOne({ 
-      _id: customerDatasetId, user: userId, type: 'Customer', isClean: true 
-    });
-    const orderDataset = await datasetModel.findOne({ 
-      _id: orderDatasetId, user: userId, type: 'Order', isClean: true 
-    });
-    if (!customerDataset || !orderDataset) {
-      return res.status(400).json({ success: false, message: 'Invalid datasets or not cleaned.' });
-    }
-
-    const bucket = getGridFSBucket();
-    const readCsv = (fileId) => new Promise((resolve, reject) => {
-      const rows = [];
-      bucket.openDownloadStream(fileId)
-        .pipe(csvParser())
-        .on('data', (row) => rows.push(row))
-        .on('end', () => resolve(rows))
-        .on('error', reject);
-    });
-
-    const [customerRows, orderRows] = await Promise.all([
-      readCsv(customerDataset.fileId),
-      readCsv(orderDataset.fileId)
-    ]);
-
-    const aggregatedOrderData = aggregateOrderData(orderRows);
-    const mergedData = mergeCustomerAndOrderData(customerRows, aggregatedOrderData);
-
-  const csv = '\ufeff' + toCsv(mergedData); // Prepend BOM for Excel compatibility
-  const filename = `merged_customer_profiles_${new Date().toISOString().slice(0,10)}.csv`;
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.status(200).send(csv);
-  } catch (err) {
-    console.error('❌ Failed to build merged CSV:', err);
-    res.status(500).json({ success: false, message: 'Failed to generate merged CSV', error: err.message });
-  }
-};
-
-/**
- * Main controller: Merge and prepare data for segmentation
- * 
- * EXPLANATION OF THE COMPLETE FLOW:
- * 
- * 1. Validate that both datasets exist and are cleaned
- * 2. Read customer data from GridFS (MongoDB file storage)
- * 3. Read order data from GridFS
- * 4. Aggregate order data by customerid (Step 1)
- * 5. Merge customer demographics with order behavior (Step 2)
- * 6. Detect which attributes are available (Step 3)
- * 7. Return merged data + metadata to frontend
- * 
- * ENDPOINT: POST /api/segmentation/prepare
- * REQUIRES: Authentication (userAuth middleware)
- * BODY: { customerDatasetId, orderDatasetId }
- */
 export const prepareSegmentationData = async (req, res) => {
   try {
     const { userId } = req;
@@ -499,6 +314,23 @@ export const prepareSegmentationData = async (req, res) => {
       return res.status(400).json({ 
         success: false, 
         message: 'Invalid datasets or datasets not cleaned yet.' 
+      });
+    }
+
+    // Idempotency: If a segmentation for this user + dataset pair already exists, reuse it
+    const existingDoc = await segmentationModel.findOne({
+      user: userId,
+      customerDatasetId,
+      orderDatasetId,
+    });
+
+    if (existingDoc && existingDoc.mergedFileId) {
+      console.log('[INFO] Reusing existing segmentation:', existingDoc._id);
+      return res.json({
+        success: true,
+        segmentationId: existingDoc._id,
+        summary: existingDoc.summary || null,
+        availablePairs: Array.isArray(existingDoc.availablePairs) ? existingDoc.availablePairs : [],
       });
     }
 
@@ -539,32 +371,94 @@ export const prepareSegmentationData = async (req, res) => {
     const mergedData = mergeCustomerAndOrderData(customerRows, aggregatedOrderData);
     console.log(`[LOG - STAGE PREPARE MERGING] - Merged data: ${mergedData.length} customer profiles created`);
 
-    // === STEP 3: DETECT AVAILABLE ATTRIBUTES ===
-    // Check which attributes exist (some are optional like Age, Gender)
-    const availableAttributes = getAvailableAttributes(mergedData);
-    console.log(`[LOG - STAGE PREPARE MERGING] - Available attributes:`, availableAttributes);
-
-    // === RETURN RESULTS TO FRONTEND ===
-    res.json({
-      success: true,
-      data: {
-        // Complete customer profiles (demographics + behavior)
-        customerProfiles: mergedData,
-        
-        // Which attributes are available for segmentation
-        availableAttributes: availableAttributes,
-        
-        // Summary statistics for display
-        summary: {
-          totalCustomers: mergedData.length,
-          totalOrders: orderRows.length,
-          customersWithOrders: Object.keys(aggregatedOrderData).length,
-          customersWithoutOrders: mergedData.length - Object.keys(aggregatedOrderData).length,
-          hasAgeData: mergedData.some(c => c.age !== null),  // lowercase
-          hasGenderData: mergedData.some(c => c.gender !== null),  // lowercase
+    // === CREATE OR REUSE SEGMENTATION RECORD WITHOUT STORING JSON ===
+    let segRecord = existingDoc;
+    if (!segRecord) {
+      try {
+        segRecord = await segmentationModel.create({
+          user: userId,
+          customerDatasetId: customerDatasetId,
+          orderDatasetId: orderDatasetId,
+        });
+      } catch (createErr) {
+        // Handle race conditions when unique index prevents duplicates
+        if (createErr && createErr.code === 11000) {
+          segRecord = await segmentationModel.findOne({
+            user: userId,
+            customerDatasetId,
+            orderDatasetId,
+          });
+        } else {
+          throw createErr;
         }
       }
-    });
+    }
+
+    // Convert merged data to CSV and upload to GridFS for durable storage/download
+    const toCsv = (rows) => {
+      if (!rows || rows.length === 0) return '';
+      const colsSet = new Set();
+      rows.forEach(r => Object.keys(r).forEach(k => colsSet.add(k)));
+      const cols = Array.from(colsSet);
+      const escape = (val) => {
+        if (val === null || val === undefined) return '';
+        const s = String(val);
+        if (s.includes('"') || s.includes(',') || s.includes('\n')) {
+          return '"' + s.replace(/"/g, '""') + '"';
+        }
+        return s;
+      };
+      const header = cols.join(',');
+      const lines = rows.map(r => cols.map(c => escape(r[c])).join(','));
+      return [header, ...lines].join('\n');
+    };
+
+    try {
+      const bucket = getGridFSBucket();
+      const csvString = '\ufeff' + toCsv(mergedData); // BOM for Excel
+      const uploadStream = bucket.openUploadStream(`segmentation_merged_${new Date().toISOString()}.csv`, {
+        metadata: {
+          user: userId,
+          customerDatasetId,
+          orderDatasetId,
+        }
+      });
+      const readable = Readable.from(csvString);
+      await new Promise((resolve, reject) => {
+        readable.pipe(uploadStream)
+          .on('finish', resolve)
+          .on('error', reject);
+      });
+      // Persist the GridFS file id on segmentation record
+      segRecord.mergedFileId = uploadStream.id;
+    } catch (csvErr) {
+      console.warn('Failed to store merged CSV in GridFS:', csvErr?.message);
+    }
+//WIP
+    // Persist availablePairs and summary snapshot on the record for quick reads
+    // Build recommended pairs based on available features in merged data
+    const featureSet = new Set();
+    for (const row of mergedData) {
+      Object.keys(row || {}).forEach(k => featureSet.add(k));
+    }
+    const availablePairs = segmentationPairs.filter(p => p.features.every(f => featureSet.has(f)));
+
+    const summaryPayload = {
+      totalCustomers: mergedData.length,
+      totalOrders: orderRows.length,
+      customersWithOrders: Object.keys(aggregatedOrderData).length,
+      customersWithoutOrders: mergedData.length - Object.keys(aggregatedOrderData).length,
+      hasAgeData: mergedData.some(c => c.age !== null),
+      hasGenderData: mergedData.some(c => c.gender !== null),
+    };
+
+    segRecord.summary = summaryPayload;
+    segRecord.availablePairs = availablePairs;
+    await segRecord.save();
+
+    // === RETURN RESULTS TO FRONTEND (include segmentationId for client usage) ===
+    console.log('[LOG - STAGE PREPARE MERGING] Saved segmentation record:', segRecord._id);
+    res.json({ success: true, segmentationId: segRecord._id, summary: summaryPayload, availablePairs });
 
   } catch (error) {
     console.error('❌ Error preparing segmentation data:', error);
@@ -575,252 +469,44 @@ export const prepareSegmentationData = async (req, res) => {
     });
   }
 };
+//===============================================================================================
+// Download merge dataset
 
-// Endpoint to get predefined segmentation pairs
-export const getSegmentationPairs = (req, res) => {
-  return res.json({
-    success: true,
-    pairs: segmentationPairs
-  });
-};
-
-/**
- * Lightweight in-controller KMeans implementation for 2 selected features.
- * NOTE: For SME scale and small datasets only. Not a replacement for Python/scikit-learn.
- * Input body: { customerDatasetId, orderDatasetId, selectedFeatures: [f1, f2] }
- */
-export const runSimpleSegmentation = async (req, res) => {
+export const downloadMergedCsv = async (req, res) => {
   try {
     const { userId } = req;
-    const { customerDatasetId, orderDatasetId, selectedFeatures, mergedData: mergedDataFromClient } = req.body;
-
-    if (!Array.isArray(selectedFeatures) || selectedFeatures.length !== 2) {
-      return res.status(400).json({ success: false, message: 'Exactly 2 features must be selected.' });
+    const { segmentationId } = req.body;
+    if (!segmentationId) {
+      return res.status(400).json({ success: false, message: 'segmentationId is required' });
     }
 
-    // If the client already has merged customer profiles, use them directly to avoid re-merging
-    let mergedData;
-    if (Array.isArray(mergedDataFromClient) && mergedDataFromClient.length > 0) {
-      mergedData = mergedDataFromClient;
-    } else {
-      // Validate datasets
-      const customerDataset = await datasetModel.findOne({ _id: customerDatasetId, user: userId, type: 'Customer', isClean: true });
-      const orderDataset = await datasetModel.findOne({ _id: orderDatasetId, user: userId, type: 'Order', isClean: true });
-      if (!customerDataset || !orderDataset) {
-        return res.status(400).json({ success: false, message: 'Invalid or unclean datasets.' });
-      }
-
-      const bucket = getGridFSBucket();
-      const readCsv = (fileId) => new Promise((resolve, reject) => {
-        const rows = [];
-        bucket.openDownloadStream(fileId)
-          .pipe(csvParser())
-          .on('data', (r) => rows.push(r))
-          .on('end', () => resolve(rows))
-          .on('error', reject);
-      });
-
-      const [customerRows, orderRows] = await Promise.all([
-        readCsv(customerDataset.fileId),
-        readCsv(orderDataset.fileId)
-      ]);
-
-      const aggregatedOrderData = aggregateOrderData(orderRows);
-      mergedData = mergeCustomerAndOrderData(customerRows, aggregatedOrderData);
+    const segRecord = await segmentationModel.findOne({ _id: segmentationId, user: userId });
+    if (!segRecord) {
+      return res.status(404).json({ success: false, message: 'Segmentation record not found' });
     }
 
-    // Filter: customers with orders & both features present (not null / undefined / 'Not Provided')
-    const usable = mergedData.filter(r => r.totalOrders > 0 && selectedFeatures.every(f => r[f] !== null && r[f] !== undefined && r[f] !== 'Not Provided'));
-    if (usable.length < 4) {
-      return res.status(400).json({ success: false, message: 'Not enough valid customer records for clustering (need >= 4).' });
+    if (!segRecord.mergedFileId) {
+      return res.status(404).json({ success: false, message: 'No merged CSV stored for this segmentation' });
     }
 
-    // Prepare raw feature matrix
-    const featureMatrices = [];
-    const encoders = {}; // for categorical features mapping
-    selectedFeatures.forEach(f => {
-      const values = usable.map(r => r[f]);
-      const allNumeric = values.every(v => typeof v === 'number' && !isNaN(v));
-      if (allNumeric) {
-        featureMatrices.push(values);
-      } else {
-        // categorical → integer encode
-        const distinct = Array.from(new Set(values));
-        encoders[f] = Object.fromEntries(distinct.map((val, idx) => [val, idx]));
-        featureMatrices.push(values.map(v => encoders[f][v]));
+    const bucket = getGridFSBucket();
+    const downloadStream = bucket.openDownloadStream(segRecord.mergedFileId);
+    const filename = `merged_customer_profiles_${new Date().toISOString().slice(0,10)}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    downloadStream.on('error', (err) => {
+      console.error('GridFS download error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, message: 'Failed to stream merged CSV' });
       }
     });
 
-    // Transpose to get data points: [[x1,x2], ...]
-    const data = usable.map((_, i) => featureMatrices.map(col => col[i]));
-
-    // Standardize each column (z-score)
-    const cols = featureMatrices.length;
-    const means = Array(cols).fill(0);
-    const stds = Array(cols).fill(0);
-    for (let c = 0; c < cols; c++) {
-      const colVals = data.map(row => row[c]);
-      const m = colVals.reduce((a,b)=>a+b,0)/colVals.length;
-      means[c] = m;
-      const variance = colVals.reduce((a,b)=>a+Math.pow(b-m,2),0)/colVals.length;
-      stds[c] = Math.sqrt(variance) || 1;
-    }
-    data.forEach(row => {
-      for (let c=0;c<cols;c++) row[c] = (row[c]-means[c]) / stds[c];
-    });
-
-    // Helper distance
-    const dist = (a,b) => Math.sqrt(a.reduce((sum,v,i)=>sum+Math.pow(v-b[i],2),0));
-
-    // KMeans implementation
-    const kMeans = (points, k, maxIter=100) => {
-      // Initialize centroids: pick k distinct random points
-      const shuffled = [...points].sort(()=>Math.random()-0.5);
-      let centroids = shuffled.slice(0,k).map(p=>[...p]);
-      let labels = Array(points.length).fill(0);
-      for (let iter=0; iter<maxIter; iter++) {
-        // Assign
-        let changed = false;
-        for (let i=0;i<points.length;i++) {
-          const p = points[i];
-          let best = 0; let bestD = dist(p, centroids[0]);
-          for (let c=1;c<k;c++) {
-            const d = dist(p, centroids[c]);
-            if (d < bestD) { bestD = d; best = c; }
-          }
-            if (labels[i] !== best) { labels[i] = best; changed = true; }
-        }
-        // Recompute centroids
-        const newCentroids = centroids.map(()=>Array(cols).fill(0));
-        const counts = Array(k).fill(0);
-        for (let i=0;i<points.length;i++) {
-          const lab = labels[i]; counts[lab]++;
-          for (let c=0;c<cols;c++) newCentroids[lab][c]+=points[i][c];
-        }
-        for (let c=0;c<k;c++) {
-          if (counts[c] === 0) {
-            // Reinitialize empty centroid randomly
-            newCentroids[c] = [...points[Math.floor(Math.random()*points.length)]];
-          } else {
-            for (let j=0;j<cols;j++) newCentroids[c][j] /= counts[c];
-          }
-        }
-        centroids = newCentroids;
-        if (!changed) break;
-      }
-      return { centroids, labels };
-    };
-
-    // Silhouette score
-    const silhouette = (points, labels, k) => {
-      if (k < 2) return 0;
-      const n = points.length;
-      const clusters = Array.from({length:k},()=>[]);
-      for (let i=0;i<n;i++) clusters[labels[i]].push(i);
-      let total = 0;
-      for (let i=0;i<n;i++) {
-        const own = clusters[labels[i]];
-        // a(i)
-        let a = 0;
-        if (own.length > 1) {
-          for (const j of own) if (j!==i) a += dist(points[i], points[j]);
-          a /= (own.length -1);
-        }
-        // b(i)
-        let b = Infinity;
-        for (let c=0;c<k;c++) if (c !== labels[i] && clusters[c].length > 0) {
-          let avg = 0;
-          for (const j of clusters[c]) avg += dist(points[i], points[j]);
-          avg /= clusters[c].length;
-          if (avg < b) b = avg;
-        }
-        const s = (b - a) / Math.max(a, b || 1);
-        total += s;
-      }
-      return total / n;
-    };
-
-    // Davies-Bouldin Index
-    const daviesBouldin = (points, labels, k, centroids) => {
-      const clusterPoints = Array.from({length:k},()=>[]);
-      for (let i=0;i<points.length;i++) clusterPoints[labels[i]].push(points[i]);
-      const S = clusterPoints.map((pts, idx) => {
-        if (pts.length === 0) return 0;
-        const c = centroids[idx];
-        const sum = pts.reduce((acc,p)=>acc+dist(p,c),0);
-        return sum / pts.length;
-      });
-      let dbSum = 0;
-      for (let i=0;i<k;i++) {
-        let maxR = 0;
-        for (let j=0;j<k;j++) if (i!==j) {
-          const M = dist(centroids[i], centroids[j]);
-          if (M === 0) continue;
-          const R = (S[i] + S[j]) / M;
-          if (R > maxR) maxR = R;
-        }
-        dbSum += maxR;
-      }
-      return dbSum / k;
-    };
-
-    const evaluations = [];
-    let bestK = null; let bestSil = -Infinity; let bestLabels = null; let bestCentroids = null;
-    for (let k=2;k<=6;k++) {
-      if (usable.length < k) break; // cannot have more clusters than points
-      const { centroids, labels } = kMeans(data, k);
-      const sil = silhouette(data, labels, k);
-      const dbi = daviesBouldin(data, labels, k, centroids);
-      evaluations.push({ k, silhouette: parseFloat(sil.toFixed(4)), dbi: parseFloat(dbi.toFixed(4)) });
-      if (sil > bestSil) { bestSil = sil; bestK = k; bestLabels = labels; bestCentroids = centroids; }
-    }
-
-    if (!bestK) {
-      return res.status(400).json({ success: false, message: 'Failed to determine optimal K.' });
-    }
-
-    // Attach cluster labels back to records
-    usable.forEach((r,i)=>{ r.cluster = bestLabels[i]; });
-
-    // Build cluster summary
-    const clusterSummary = {};
-    const byCluster = {};
-    usable.forEach(r => { byCluster[r.cluster] = byCluster[r.cluster] || []; byCluster[r.cluster].push(r); });
-    Object.keys(byCluster).forEach(kc => {
-      const arr = byCluster[kc];
-      const stats = {};
-      selectedFeatures.forEach(f => {
-        const values = arr.map(r => r[f]);
-        if (values.every(v => typeof v === 'number' && !isNaN(v))) {
-          const mean = values.reduce((a,b)=>a+b,0)/values.length;
-          stats[f] = parseFloat(mean.toFixed(2));
-        } else {
-          // mode
-          const counts = {};
-          values.forEach(v => { counts[v] = (counts[v]||0)+1; });
-          const mode = Object.keys(counts).reduce((a,b)=> counts[a]>counts[b]?a:b);
-          stats[f] = mode;
-        }
-      });
-      clusterSummary[`cluster_${kc}`] = {
-        count: arr.length,
-        percentage: parseFloat((arr.length / usable.length * 100).toFixed(2)),
-        attributes: stats
-      };
-    });
-
-    res.json({
-      success: true,
-      bestK,
-      evaluations,
-      clusterAssignments: usable.map(r => ({ customerid: r.customerid, cluster: r.cluster })),
-      clusterSummary,
-      featureEncoders: encoders, // for transparency
-      recordsUsed: usable.length,
-      totalProfiles: mergedData.length
-    });
+    downloadStream.pipe(res);
   } catch (err) {
-    console.error('❌ Error running simple segmentation:', err);
-    res.status(500).json({ success: false, message: 'Segmentation failed', error: err.message });
+    console.error('Download merged CSV failed:', err);
+    res.status(500).json({ success: false, message: 'Server error downloading merged CSV' });
   }
 };
+
+//===============================================================================================

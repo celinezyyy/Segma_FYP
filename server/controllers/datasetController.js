@@ -1,4 +1,5 @@
 import datasetModel from '../models/datasetModel.js';
+import segmentationModel from '../models/segmentationModel.js';
 import datasetTemplate from '../models/datasetTemplateModel.js';
 import path from 'path';
 import csvParser from 'csv-parser';
@@ -145,8 +146,10 @@ export const deleteDataset = async (req, res) => {
     if (!dataset)
       return res.status(404).json({ success: false, message: 'Dataset not found' });
 
+    // Initialize GridFS bucket once for this operation
+    const bucket = getGridFSBucket();
+
     try {
-      const bucket = getGridFSBucket();
       const file = await bucket.find({ filename: dataset.filename }).toArray();
 
       if (file.length > 0) {
@@ -162,8 +165,30 @@ export const deleteDataset = async (req, res) => {
       console.warn('File already missing on disk.');
     }
 
+    // === Cascade delete segmentation records that depend on this dataset ===
+    try {
+      const segFilter = { $or: [ { customerDatasetId: dataset._id }, { orderDatasetId: dataset._id } ] };
+      const segRecords = await segmentationModel.find(segFilter, { _id: 1, mergedFileId: 1 }).lean();
+
+      for (const seg of segRecords) {
+        if (seg.mergedFileId) {
+          try {
+            await bucket.delete(seg.mergedFileId);
+          } catch (e) {
+            console.warn('⚠️ Failed deleting merged GridFS file', e?.message);
+          }
+        }
+      }
+      if (segRecords.length) {
+        await segmentationModel.deleteMany(segFilter);
+      }
+      console.log(`[INFO] Cascaded deletion: removed ${segRecords.length} segmentation records and their merged CSV files`);
+    } catch (cascadeErr) {
+      console.warn('Cascade delete warning:', cascadeErr?.message);
+    }
+
     await datasetModel.findByIdAndDelete(req.params.id);
-    res.json({ success: true, message: 'Dataset deleted successfully' });
+    res.json({ success: true, message: 'Dataset deleted successfully (with cascaded segmentation cleanup)' });
 
   } catch (error) {
     console.error('Server error:', error);
