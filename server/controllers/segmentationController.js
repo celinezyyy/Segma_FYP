@@ -204,8 +204,9 @@ const mergeCustomerAndOrderData = (customerRows, aggregatedOrderData) => {
   // === CHECK WHICH OPTIONAL COLUMNS EXIST IN CLEANED CUSTOMER DATASET ===
   // Look at the first row to see which columns are present
   const sampleCustomer = customerRows[0] || {};
+  // Support both underscore and hyphen variants from cleaning outputs
   const hasAgeColumn = 'age' in sampleCustomer;
-  const hasAgeGroupColumn = 'age_group' in sampleCustomer;  // cleaning uses 'age_group' with underscore
+  const hasAgeGroupColumn = ('age_group' in sampleCustomer) || ('age-group' in sampleCustomer);
   const hasGenderColumn = 'gender' in sampleCustomer;
 
   console.log('[LOG - MERGE] Column availability check:');
@@ -253,20 +254,21 @@ const mergeCustomerAndOrderData = (customerRows, aggregatedOrderData) => {
     // === CONDITIONALLY ADD DEMOGRAPHIC FIELDS (only if column exists in cleaned data) ===
     if (hasAgeColumn) {
       const ageValue = customer['age'];
-      // Add age if valid, otherwise mark as "Not Provided"
-      if (ageValue && ageValue !== 'Unknown' && !isNaN(parseInt(ageValue))) {
+      // Add age if valid, otherwise mark as null (missing)
+      if (ageValue !== undefined && ageValue !== null && ageValue !== 'Unknown' && !isNaN(parseInt(ageValue))) {
         mergedCustomer.age = parseInt(ageValue);
       } else {
-        mergedCustomer.age = 'Not Provided';
+        mergedCustomer.age = null;
       }
     }
 
     if (hasAgeGroupColumn) {
-      const ageGroupValue = customer['age_group'];  // note: underscore from cleaning
+      // Prefer underscore if present, else fallback to hyphen variant
+      const ageGroupValue = (customer['age_group'] ?? customer['age-group']);
       if (ageGroupValue && ageGroupValue !== 'Unknown') {
         mergedCustomer.ageGroup = ageGroupValue;
       } else {
-        mergedCustomer.ageGroup = 'Not Provided';
+        mergedCustomer.ageGroup = null; // mark as truly missing
       }
     }
 
@@ -275,7 +277,7 @@ const mergeCustomerAndOrderData = (customerRows, aggregatedOrderData) => {
       if (genderValue && genderValue !== 'Unknown') {
         mergedCustomer.gender = genderValue;
       } else {
-        mergedCustomer.gender = 'Not Provided';
+        mergedCustomer.gender = null; // mark as missing for accurate summary
       }
     }
 
@@ -364,12 +366,12 @@ export const prepareSegmentationData = async (req, res) => {
     // === STEP 1: AGGREGATE ORDER DATA ===
     // Group all orders by customerid and calculate behavioral metrics
     const aggregatedOrderData = aggregateOrderData(orderRows);
-    console.log(`[LOG - STAGE PREPARE MERGING] - Aggregated order data for ${Object.keys(aggregatedOrderData).length} customers`);
+    console.log(`[LOG - STEP 1: AGGREGATE ORDER DATA] - Aggregated order data for ${Object.keys(aggregatedOrderData).length} customers`);
 
     // === STEP 2: MERGE CUSTOMER AND ORDER DATA ===
     // Combine demographics (from customer CSV) with behavior (from aggregated orders)
     const mergedData = mergeCustomerAndOrderData(customerRows, aggregatedOrderData);
-    console.log(`[LOG - STAGE PREPARE MERGING] - Merged data: ${mergedData.length} customer profiles created`);
+    console.log(`[LOG - STEP 2: MERGE CUSTOMER AND ORDER DATA] - Merged data: ${mergedData.length} customer profiles created`);
 
     // === CREATE OR REUSE SEGMENTATION RECORD WITHOUT STORING JSON ===
     let segRecord = existingDoc;
@@ -448,10 +450,11 @@ export const prepareSegmentationData = async (req, res) => {
       totalOrders: orderRows.length,
       customersWithOrders: Object.keys(aggregatedOrderData).length,
       customersWithoutOrders: mergedData.length - Object.keys(aggregatedOrderData).length,
-      hasAgeData: mergedData.some(c => c.age !== null),
-      hasGenderData: mergedData.some(c => c.gender !== null),
+      // Only count as having data if key exists and value is not null
+      hasAgeData: mergedData.some(c => ('age' in c) && c.age !== null),
+      hasGenderData: mergedData.some(c => ('gender' in c) && c.gender !== null),
     };
-
+    console.log('[DEBUG]Summary payload:', summaryPayload);
     segRecord.summary = summaryPayload;
     segRecord.availablePairs = availablePairs;
     await segRecord.save();
