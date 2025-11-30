@@ -12,7 +12,6 @@ const Segmentation = () => {
   const { selectedCustomer, selectedOrder } = location.state || {};
 
   const [loading, setLoading] = useState(false);
-  const [mergedData, setMergedData] = useState(null);
   const [summary, setSummary] = useState(null);
   const [segmentationId, setSegmentationId] = useState(null);
   const [downloading, setDownloading] = useState(false);
