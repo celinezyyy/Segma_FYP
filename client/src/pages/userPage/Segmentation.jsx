@@ -283,22 +283,8 @@ const Segmentation = () => {
               </div>
             )}
 
-            <div className="mt-4 flex items-center justify-between gap-4">
-              <div className="flex-1">
-                {selectedPairId ? (
-                  (() => {
-                    const p = recommendedPairs.find(x => x.id === selectedPairId);
-                    return p ? (
-                      <div className="text-sm">
-                        <div className="font-medium">Selected pair: <span className="text-gray-700">{p.label}</span></div>
-                        <div className="text-xs text-gray-500 mt-1">{p.features.join(' × ')}</div>
-                      </div>
-                    ) : null;
-                  })()
-                ) : (
-                  <div className="text-sm text-gray-500">No pair selected. Click a card to choose a pair.</div>
-                )}
-              </div>
+            <div className="mt-4">
+              {/* Removed persistent warning; will show only after click via errorMsg */}
               <div className="flex items-center gap-2">
                 <button
                   onClick={async ()=>{
@@ -326,7 +312,7 @@ const Segmentation = () => {
                     }
                   }}
                   disabled={segLoading || !selectedPairId}
-                  className={`inline-flex items-center gap-2 px-5 py-2 rounded font-medium border transition ${segLoading ? 'bg-gray-300 border-gray-300 text-gray-600 cursor-not-allowed' : 'border-green-400 text-green-700 bg-[#F1F8E9] hover:bg-[#E6F4D7]'}`}
+                  className={`inline-flex items-center gap-2 px-5 py-2 rounded font-medium border transition ${(segLoading || !selectedPairId) ? 'bg-gray-300 border-gray-300 text-gray-600 cursor-not-allowed' : 'border-green-400 text-green-700 bg-[#F1F8E9] hover:bg-[#E6F4D7]'}`}
                 >{segLoading ? 'Running...' : 'Run Suggested Pair'}</button>
                 <button onClick={()=>{ setSelectedPairId(null); setErrorMsg(null); }} className="px-4 py-2 rounded border border-red-400 text-red-600 hover:bg-red-50">Clear</button>
               </div>
