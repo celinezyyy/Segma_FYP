@@ -545,8 +545,12 @@ export const getMergedColumns = async (req, res) => {
       buffer += chunk.toString('utf8');
       const newlineIdx = buffer.indexOf('\n');
       if (newlineIdx !== -1) {
-        const headerLine = buffer.substring(0, newlineIdx).replace(/^\ufeff/, ''); // strip BOM
-        const columns = headerLine.split(',').map(col => col.trim());
+        let headerLine = buffer.substring(0, newlineIdx);
+        // Handle Windows CRLF and BOM
+        headerLine = headerLine.replace(/^\ufeff/, '').replace(/\r$/, '');
+        let columns = headerLine.split(',').map(col => col.trim());
+        columns = columns.filter(c => c.toLowerCase() !== 'customerid');
+        console.log('[DEBUG] Merged columns (early, filtered):', columns);
         headerParsed = true;
         downloadStream.destroy();
         return res.json({ success: true, columns });
@@ -563,11 +567,15 @@ export const getMergedColumns = async (req, res) => {
     downloadStream.on('end', () => {
       if (!headerParsed) {
         // If no newline found (single-line CSV), parse entire buffer
-        const headerLine = buffer.replace(/^\ufeff/, '');
+        let headerLine = buffer.replace(/^\ufeff/, '');
+        headerLine = headerLine.replace(/\r$/, '');
         if (headerLine.length === 0) {
+          console.log('[DEBUG] Merged columns (end): []');
           return res.json({ success: true, columns: [] });
         }
-        const columns = headerLine.split(',').map(col => col.trim());
+        let columns = headerLine.split(',').map(col => col.trim());
+        columns = columns.filter(c => c.toLowerCase() !== 'customerid');
+        console.log('[DEBUG] Merged columns (end, filtered):', columns);
         return res.json({ success: true, columns });
       }
     });

@@ -20,6 +20,9 @@ const Segmentation = () => {
   const [segResult, setSegResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [recommendedPairs, setRecommendedPairs] = useState([]);
+  const [mergedColumns, setMergedColumns] = useState([]);
+  const [customAttrA, setCustomAttrA] = useState('');
+  const [customAttrB, setCustomAttrB] = useState('');
 
   // Fetch and merge data when component loads
   useEffect(() => {
@@ -40,9 +43,9 @@ const Segmentation = () => {
   const fetchAndMergeData = async () => {
     setLoading(true);
     try {
-      console.log('Fetching and merging data...');
-      console.log('Customer ID:', selectedCustomer);
-      console.log('Order ID:', selectedOrder);
+      console.log('[DEBUG] Fetching and merging data...');
+      console.log('[DEBUG] Customer ID:', selectedCustomer);
+      console.log('[DEBUG] Order ID:', selectedOrder);
 
       const response = await axios.post(
         `${backendUrl}/api/segmentation/prepare`,
@@ -55,12 +58,24 @@ const Segmentation = () => {
         }
       );
 
-      console.log('Merge response:', response.data);
+      console.log('[DEBUG] Response return from /prepare API ::', response.data);
 
       if (response.data?.success) {
         setSegmentationId(response.data.segmentationId || null);
         setSummary(response.data.summary || null);
         setRecommendedPairs(Array.isArray(response.data.availablePairs) ? response.data.availablePairs : []);
+        // Fetch merged columns for custom selection
+        if (response.data.segmentationId) {
+          try {
+            const colsResp = await axios.get(`${backendUrl}/api/segmentation/${response.data.segmentationId}/columns`, { withCredentials: true });
+            if (colsResp.data?.success && Array.isArray(colsResp.data.columns)) {
+              console.log('[DEBUG] Merged columns:', colsResp.data.columns);
+              setMergedColumns(colsResp.data.columns);
+            }
+          } catch (e) {
+            console.warn('Unable to fetch merged columns', e?.message);
+          }
+        }
         Swal.fire({
           icon: 'success',
           title: 'Data Prepared!',
@@ -239,10 +254,12 @@ const Segmentation = () => {
 
           {/* Segmentation Pairs Selection */}
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-2">Choose a Segmentation Pair</h2>
-            <p className="text-sm text-gray-600 mb-4">Pick one pair to run clustering. Inactive customers are excluded automatically.</p>
+            <h2 className="text-xl font-bold text-gray-800 mb-2">Choose How To Segment</h2>
+            <p className="text-sm text-gray-600 mb-4">Use our suggested pairs, or pick your own two attributes.</p>
             {errorMsg && <p className="text-red-600 text-sm mt-2">{errorMsg}</p>}
 
+            {/* Suggested Pairs */}
+            <h3 className="text-base font-semibold text-gray-800 mb-2">Use Suggested Pairs</h3>
             {recommendedPairs.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {recommendedPairs.map(p => {
@@ -309,9 +326,86 @@ const Segmentation = () => {
                     }
                   }}
                   disabled={segLoading || !selectedPairId}
-                  className={`inline-flex items-center gap-2 px-5 py-2 rounded font-medium border transition ${segLoading? 'bg-gray-300 border-gray-300 text-gray-600 cursor-not-allowed':'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'}`}
-                >{segLoading ? 'Running...' : 'Run Selected Pair'}</button>
-                <button onClick={()=>{ setSelectedPairId(null); setErrorMsg(null); }} className="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-100">Clear</button>
+                  className={`inline-flex items-center gap-2 px-5 py-2 rounded font-medium border transition ${segLoading ? 'bg-gray-300 border-gray-300 text-gray-600 cursor-not-allowed' : 'border-green-400 text-green-700 bg-[#F1F8E9] hover:bg-[#E6F4D7]'}`}
+                >{segLoading ? 'Running...' : 'Run Suggested Pair'}</button>
+                <button onClick={()=>{ setSelectedPairId(null); setErrorMsg(null); }} className="px-4 py-2 rounded border border-red-400 text-red-600 hover:bg-red-50">Clear</button>
+              </div>
+            </div>
+
+            {/* OR Divider */}
+            <div className="relative my-8">
+              <div className="border-t"></div>
+              <div className="absolute left-1/2 -translate-x-1/2 -top-3 bg-white px-3 text-xs text-gray-500">OR</div>
+            </div>
+
+            {/* Custom Pair Selector */}
+            <div className="mt-2">
+              <h3 className="text-base font-semibold text-gray-800 mb-2">Choose Your Own Pair</h3>
+              <p className="text-sm text-gray-600 mb-4">Pick any two attributes from the merged dataset.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">Attribute A</label>
+                  <select
+                    className="w-full border rounded px-3 py-2 bg-white"
+                    value={customAttrA}
+                    onChange={(e) => setCustomAttrA(e.target.value)}
+                    disabled={segLoading || !segmentationId}
+                  >
+                    <option value="">Select attribute</option>
+                    {mergedColumns.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">Attribute B</label>
+                  <select
+                    className="w-full border rounded px-3 py-2 bg-white"
+                    value={customAttrB}
+                    onChange={(e) => setCustomAttrB(e.target.value)}
+                    disabled={segLoading || !segmentationId}
+                  >
+                    <option value="">Select attribute</option>
+                    {mergedColumns.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {customAttrA && customAttrB && customAttrA === customAttrB && (
+                <p className="text-red-600 text-sm mt-2">Please choose two different attributes.</p>
+              )}
+
+              <div className="mt-4 flex items-center gap-2">
+                <button
+                  onClick={async ()=>{
+                    setErrorMsg(null); setSegResult(null);
+                    const a = customAttrA, b = customAttrB;
+                    if (!a || !b) { setErrorMsg('Please select two attributes.'); return; }
+                    if (a === b) { setErrorMsg('Please choose two different attributes.'); return; }
+                    setSegLoading(true);
+                    try {
+                      const resp = await axios.post(`${backendUrl}/api/segmentation/run`, {
+                        segmentationId,
+                        selectedFeatures: [a, b]
+                      }, { withCredentials: true });
+                      if (resp.data.success) {
+                        setSegResult(resp.data);
+                        Swal.fire({ icon:'success', title:'Segmentation Complete', text:`K=${resp.data.bestK} clusters generated`, timer:2500, showConfirmButton:false });
+                      } else {
+                        setErrorMsg(resp.data.message || 'Segmentation failed.');
+                      }
+                    } catch (err) {
+                      console.error(err);
+                      setErrorMsg(err.response?.data?.message || 'Server error running segmentation.');
+                    } finally {
+                      setSegLoading(false);
+                    }
+                  }}
+                  disabled={segLoading || !segmentationId || !customAttrA || !customAttrB || customAttrA===customAttrB}
+                  className={`inline-flex items-center gap-2 px-5 py-2 rounded font-medium border transition ${(segLoading || !segmentationId || !customAttrA || !customAttrB || customAttrA===customAttrB) ? 'bg-gray-300 border-gray-300 text-gray-600 cursor-not-allowed' : 'border-green-400 text-green-700 bg-[#F1F8E9] hover:bg-[#E6F4D7]'}`}
+                >Run Custom Pair</button>
+                <span className="text-xs text-gray-500">Tip: Choose two attributes you care about.</span>
               </div>
             </div>
           </div>
