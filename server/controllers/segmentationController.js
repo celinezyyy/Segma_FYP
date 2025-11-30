@@ -4,6 +4,12 @@ import { getGridFSBucket } from '../utils/gridfs.js';
 import csvParser from 'csv-parser';
 import { Readable } from 'stream';
 import segmentationPairs from '../utils/segmentationPairs.js';
+// ES module imports for runtime dependencies
+import path from 'path';
+import fs from 'fs';
+import mongoose from 'mongoose';
+import { GridFSBucket } from 'mongodb';
+import { spawn } from 'child_process';
 
 // Merge dataset
 const aggregateOrderData = (orderRows) => {
@@ -472,9 +478,9 @@ export const prepareSegmentationData = async (req, res) => {
     });
   }
 };
+
 //===============================================================================================
 // Download merge dataset
-
 export const downloadMergedCsv = async (req, res) => {
   try {
     const { userId } = req;
@@ -514,7 +520,6 @@ export const downloadMergedCsv = async (req, res) => {
 
 //===============================================================================================
 // List merged dataset columns (for custom attribute selection)
-
 export const getMergedColumns = async (req, res) => {
   try {
     const { userId } = req;
@@ -586,3 +591,183 @@ export const getMergedColumns = async (req, res) => {
 };
 
 //===============================================================================================
+// Run segmentation flow
+function streamMergedToTemp(mergedFileId, tempPath) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const bucket = getGridFSBucket(); // use initialized 'datasets' bucket
+      console.log('[SEGMENTATION RUN] Using GridFS bucket:', bucket.s.options.bucketName);
+      // Pre-check file existence in bucket
+      const filesColl = bucket.s.db.collection(`${bucket.s.options.bucketName}.files`);
+      const exists = await filesColl.findOne({ _id: mergedFileId });
+      if (!exists) {
+        return reject(new Error(`Merged file not found in bucket '${bucket.s.options.bucketName}' for id ${mergedFileId}`));
+      }
+      const readStream = bucket.openDownloadStream(mergedFileId);
+      const writeStream = fs.createWriteStream(tempPath);
+      readStream.pipe(writeStream);
+      writeStream.on('finish', () => resolve());
+      writeStream.on('error', reject);
+      readStream.on('error', reject);
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+function runSegmentationPython(csvPath, features, debugFlag = false) {
+  return new Promise((resolve, reject) => {
+    // Resolve project root (handle if server started inside /server)
+    const cwd = process.cwd();
+    const candidateRoots = [cwd, path.dirname(cwd)];
+    let projectRoot = candidateRoots.find(r => fs.existsSync(path.join(r, 'venv_fyp_new', 'Scripts', 'python.exe')));
+    if (!projectRoot) projectRoot = cwd; // fallback
+
+    const pyExe = path.join(projectRoot, 'venv_fyp_new', 'Scripts', 'python.exe');
+    // Prefer segmentationPipeline new location
+    const scriptCandidates = [
+      path.join(projectRoot, 'server', 'python', 'segmentationPipeline', 'segmentation.py'),
+      path.join(projectRoot, 'server', 'python', 'cleaningPipeline', 'segmentation.py')
+    ];
+    const script = scriptCandidates.find(p => fs.existsSync(p));
+    if (!script) {
+      return reject(new Error('Segmentation script not found in expected locations.'));
+    }
+    if (!fs.existsSync(pyExe)) {
+      return reject(new Error(`Python interpreter not found at ${pyExe}. Activate venv or adjust path.`));
+    }
+
+    // Prepare temp JSON output file
+    const outJsonPath = path.join(path.dirname(csvPath), `segmentation_result_${Date.now()}.json`);
+    const args = ['--csv', csvPath, '--features', features.join(','), '--out', outJsonPath];
+    if (debugFlag) args.push('--verbose');
+    console.log('[SEGMENTATION RUN] Using python:', pyExe);
+    console.log('[SEGMENTATION RUN] Using script:', script);
+    console.log('[SEGMENTATION RUN] Features:', features);
+    console.log('[SEGMENTATION RUN] CSV path:', csvPath);
+    console.log('[SEGMENTATION RUN] JSON out path:', outJsonPath);
+
+    const proc = spawn(pyExe, [script, ...args], { shell: false, env: { ...process.env, PYTHONUNBUFFERED: '1' } });
+    let out = '';
+    let err = '';
+    const stderrLines = [];
+    proc.stdout.on('data', d => {
+      const chunk = d.toString();
+      out += chunk;
+      console.log('[SEGMENTATION RUN][PY-STDOUT]', chunk.trim().slice(0, 500));
+    });
+    proc.stderr.on('data', d => {
+      const chunk = d.toString();
+      err += chunk;
+      const trimmed = chunk.trim();
+      console.error('[SEGMENTATION RUN][PY-STDERR]', trimmed.slice(0, 500));
+      if (trimmed) stderrLines.push(trimmed);
+    });
+    proc.on('error', spawnErr => {
+      console.error('[SEGMENTATION RUN] Spawn error:', spawnErr);
+    });
+    proc.on('close', code => {
+      if (code !== 0) {
+        console.error('[SEGMENTATION RUN] Non-zero exit code:', code);
+        console.error('[SEGMENTATION RUN] Stderr snippet:', err.slice(0, 1000));
+        return reject(new Error(`EXIT_CODE_${code};STDERR:${err.slice(0, 300)}`));
+      }
+      // Prefer reading JSON from file
+      if (fs.existsSync(outJsonPath)) {
+        try {
+          const fileData = fs.readFileSync(outJsonPath, 'utf-8');
+          const parsed = JSON.parse(fileData);
+          if (debugFlag) parsed._debugLogs = stderrLines;
+          // cleanup JSON file
+          try { fs.unlinkSync(outJsonPath); } catch(_) {}
+          return resolve(parsed);
+        } catch (e) {
+          console.error('[SEGMENTATION RUN] Failed reading/parsing JSON file:', e.message);
+          // Fallback to stdout parse
+        }
+      } else {
+        console.warn('[SEGMENTATION RUN] Output JSON file missing, falling back to stdout parsing');
+      }
+      try {
+        const parsedStd = JSON.parse(out);
+        if (debugFlag) parsedStd._debugLogs = stderrLines;
+        resolve(parsedStd);
+      } catch (e) {
+        console.error('[SEGMENTATION RUN] JSON parse failure (stdout fallback). Raw stdout (truncated 1000 chars):', out.slice(0, 1000));
+        return reject(new Error(`JSON_PARSE_FAIL:${e.message};RAW_OUT:${out.slice(0,300)}`));
+      }
+    });
+  });
+}
+
+export const runSegmentationFlow = async (req, res) => {
+  try {
+    // segmentationId may come from URL param or body
+    const segmentationId = req.params.segmentationId || req.body.segmentationId;
+    // Accept both 'features' (preferred) and legacy 'selectedFeatures'
+    let { features, selectedFeatures } = req.body;
+    if ((!features || !Array.isArray(features)) && Array.isArray(selectedFeatures)) {
+      features = selectedFeatures;
+    }
+    if (!Array.isArray(features) || features.length === 0) {
+      return res.status(400).json({ message: 'Please provide selected features.' });
+    }
+
+    const segRecord = await segmentationModel.findById(segmentationId);
+    if (!segRecord || !segRecord.mergedFileId) {
+      return res.status(404).json({ message: 'Segmentation or merged data not found.' });
+    }
+
+    // Determine temp directory robustly (avoid duplicated /server/server)
+    const cwd = process.cwd();
+    // If we are already inside the server folder, just use its local temp
+    const isServerCwd = path.basename(cwd) === 'server';
+    // If cwd already ends with 'server', use that directly; else append /server
+    const serverRoot = isServerCwd ? cwd : path.join(cwd, 'server');
+    const tempDir = path.join(serverRoot, 'temp');
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+    const tempCsv = path.join(tempDir, `merged_${segmentationId}.csv`);
+
+    try {
+      await streamMergedToTemp(segRecord.mergedFileId, tempCsv);
+    } catch (streamErr) {
+      console.error('[SEGMENTATION RUN] Failed streaming merged file:', streamErr.message);
+      return res.status(404).json({ message: 'Merged CSV file missing', error: streamErr.message, segmentationId });
+    }
+    const tempSize = fs.existsSync(tempCsv) ? fs.statSync(tempCsv).size : 0;
+    console.log('[SEGMENTATION RUN] Temp CSV written:', tempCsv, 'size(bytes)=', tempSize);
+    if (tempSize === 0) {
+      return res.status(500).json({ message: 'Temp CSV is empty', segmentationId });
+    }
+
+    const debugFlag = !!req.body.debug || req.query.debug === 'true';
+    let result;
+    try {
+      result = await runSegmentationPython(tempCsv, features, debugFlag);
+    } catch (pyErr) {
+      console.error('[SEGMENTATION RUN] Python invocation failed:', pyErr.message);
+      return res.status(500).json({ message: 'Segmentation run failed', error: pyErr.message, debug: true });
+    }
+
+    // Cleanup temp CSV after successful run
+    try { fs.unlink(tempCsv, () => {}); } catch(_) {}
+
+    // Transform keys for frontend convenience
+    const responsePayload = {
+      success: true,
+      bestK: result.best_k ?? result.bestK ?? result.best_k, // unify naming
+      evaluations: result.evaluation || result.evaluations || [],
+      clusterSummary: result.cluster_summary || result.clusterSummary || {},
+      featureInfo: result.feature_info || result.featureInfo || {},
+      decision: result.decision || {},
+      raw: result
+    };
+    if (debugFlag && result._debugLogs) {
+      responsePayload.debugLogs = result._debugLogs;
+    }
+    return res.json(responsePayload);
+  } catch (err) {
+    console.error('[Segmentation run error]', err);
+    return res.status(500).json({ message: 'Segmentation run failed', error: String(err) });
+  }
+};

@@ -289,20 +289,27 @@ const Segmentation = () => {
                 <button
                   onClick={async ()=>{
                     setErrorMsg(null); setSegResult(null);
-                    if (!selectedPairId) { setErrorMsg('Please select a segmentation pair.'); return; }
                     const p = recommendedPairs.find(x => x.id === selectedPairId);
                     if (!p) { setErrorMsg('Invalid pair selected.'); return; }
                     setSegLoading(true);
                     try {
-                      const resp = await axios.post(`${backendUrl}/api/segmentation/run`, {
-                        segmentationId,
-                        selectedFeatures: [p.features[0], p.features[1]]
+                      const resp = await axios.post(`${backendUrl}/api/segmentation/${segmentationId}/run`, {
+                        features: [p.features[0], p.features[1]]
                       }, { withCredentials: true });
-                      if (resp.data.success) {
-                        setSegResult(resp.data);
-                        Swal.fire({ icon:'success', title:'Segmentation Complete', text:`K=${resp.data.bestK} clusters generated`, timer:2500, showConfirmButton:false });
+                      const data = resp.data || {};
+                      if (data.success) {
+                        // Normalize expected structure for UI
+                        setSegResult({
+                          bestK: data.bestK || data.best_k,
+                          evaluations: data.evaluations || data.evaluation || [],
+                          clusterSummary: data.clusterSummary || data.cluster_summary || {},
+                          recordsUsed: data.feature_info?.transformed_shape?.[0] || null,
+                          totalProfiles: summary?.totalCustomers || null,
+                          raw: data
+                        });
+                        Swal.fire({ icon:'success', title:'Segmentation Complete', text:`K=${(data.bestK || data.best_k) ?? '—'} clusters generated`, timer:2500, showConfirmButton:false });
                       } else {
-                        setErrorMsg(resp.data.message || 'Segmentation failed.');
+                        setErrorMsg(data.message || 'Segmentation failed.');
                       }
                     } catch (err) {
                       console.error(err);
