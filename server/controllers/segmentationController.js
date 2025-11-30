@@ -292,10 +292,10 @@ export const prepareSegmentationData = async (req, res) => {
     const { userId } = req;
     const { customerDatasetId, orderDatasetId } = req.body;
 
-    console.log('[LOG - STAGE MERGING] Preparing segmentation data...');
-    console.log('[LOG - STAGE MERGING] User ID:', userId);
-    console.log('[LOG - STAGE MERGING] Customer Dataset ID:', customerDatasetId);
-    console.log('[LOG - STAGE MERGING] Order Dataset ID:', orderDatasetId);
+    console.log('[LOG - STEP 0: STAGE PREPARE MERGING] Preparing segmentation data...');
+    console.log('[LOG - STEP 0: STAGE PREPARE MERGING] User ID:', userId);
+    console.log('[LOG - STEP 0: STAGE PREPARE MERGING] Customer Dataset ID:', customerDatasetId);
+    console.log('[LOG - STEP 0: STAGE PREPARE MERGING] Order Dataset ID:', orderDatasetId);
 
     // Validate that both datasets exist and belong to user
     const customerDataset = await datasetModel.findOne({ 
@@ -361,7 +361,7 @@ export const prepareSegmentationData = async (req, res) => {
         .on('error', reject);
     });
 
-    console.log(`[LOG - STAGE PREPARE MERGING] - Loaded ${customerRows.length} customers and ${orderRows.length} orders`);
+    console.log(`[LOG - STEP 0: STAGE PREPARE MERGING] - Loaded ${customerRows.length} customers and ${orderRows.length} orders`);
 
     // === STEP 1: AGGREGATE ORDER DATA ===
     // Group all orders by customerid and calculate behavioral metrics
@@ -454,13 +454,13 @@ export const prepareSegmentationData = async (req, res) => {
       hasAgeData: mergedData.some(c => ('age' in c) && c.age !== null),
       hasGenderData: mergedData.some(c => ('gender' in c) && c.gender !== null),
     };
-    console.log('[DEBUG]Summary payload:', summaryPayload);
+    console.log('[DEBUG] Summary payload:', summaryPayload);
     segRecord.summary = summaryPayload;
     segRecord.availablePairs = availablePairs;
     await segRecord.save();
 
     // === RETURN RESULTS TO FRONTEND (include segmentationId for client usage) ===
-    console.log('[LOG - STAGE PREPARE MERGING] Saved segmentation record:', segRecord._id);
+    console.log('[LOG - STEP 4: DONE MERGING] Saved segmentation record:', segRecord._id);
     res.json({ success: true, segmentationId: segRecord._id, summary: summaryPayload, availablePairs });
 
   } catch (error) {
@@ -509,6 +509,71 @@ export const downloadMergedCsv = async (req, res) => {
   } catch (err) {
     console.error('Download merged CSV failed:', err);
     res.status(500).json({ success: false, message: 'Server error downloading merged CSV' });
+  }
+};
+
+//===============================================================================================
+// List merged dataset columns (for custom attribute selection)
+
+export const getMergedColumns = async (req, res) => {
+  try {
+    const { userId } = req;
+    const { segmentationId } = req.params;
+
+    if (!segmentationId) {
+      return res.status(400).json({ success: false, message: 'segmentationId is required' });
+    }
+
+    const segRecord = await segmentationModel.findOne({ _id: segmentationId, user: userId });
+    if (!segRecord) {
+      return res.status(404).json({ success: false, message: 'Segmentation record not found' });
+    }
+
+    if (!segRecord.mergedFileId) {
+      return res.status(404).json({ success: false, message: 'No merged CSV stored for this segmentation' });
+    }
+
+    const bucket = getGridFSBucket();
+    const downloadStream = bucket.openDownloadStream(segRecord.mergedFileId);
+
+    // Read only the first line (header) to extract columns
+    let buffer = '';
+    let headerParsed = false;
+
+    downloadStream.on('data', (chunk) => {
+      if (headerParsed) return; // ignore further data once header is parsed
+      buffer += chunk.toString('utf8');
+      const newlineIdx = buffer.indexOf('\n');
+      if (newlineIdx !== -1) {
+        const headerLine = buffer.substring(0, newlineIdx).replace(/^\ufeff/, ''); // strip BOM
+        const columns = headerLine.split(',').map(col => col.trim());
+        headerParsed = true;
+        downloadStream.destroy();
+        return res.json({ success: true, columns });
+      }
+    });
+
+    downloadStream.on('error', (err) => {
+      console.error('GridFS read error (columns):', err);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, message: 'Failed to read merged CSV header' });
+      }
+    });
+
+    downloadStream.on('end', () => {
+      if (!headerParsed) {
+        // If no newline found (single-line CSV), parse entire buffer
+        const headerLine = buffer.replace(/^\ufeff/, '');
+        if (headerLine.length === 0) {
+          return res.json({ success: true, columns: [] });
+        }
+        const columns = headerLine.split(',').map(col => col.trim());
+        return res.json({ success: true, columns });
+      }
+    });
+  } catch (err) {
+    console.error('Get merged columns failed:', err);
+    res.status(500).json({ success: false, message: 'Server error getting merged columns' });
   }
 };
 
