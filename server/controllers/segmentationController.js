@@ -591,12 +591,12 @@ export const getMergedColumns = async (req, res) => {
 };
 
 //===============================================================================================
+//WIP - Run segmentation, Do checking on the after segmentsation done, and then check does it overwrite the dataset into DB
 // Run segmentation flow
 function streamMergedToTemp(mergedFileId, tempPath) {
   return new Promise(async (resolve, reject) => {
     try {
       const bucket = getGridFSBucket(); // use initialized 'datasets' bucket
-      console.log('[SEGMENTATION RUN] Using GridFS bucket:', bucket.s.options.bucketName);
       // Pre-check file existence in bucket
       const filesColl = bucket.s.db.collection(`${bucket.s.options.bucketName}.files`);
       const exists = await filesColl.findOne({ _id: mergedFileId });
@@ -624,15 +624,11 @@ function runSegmentationPython(csvPath, features, debugFlag = false) {
     if (!projectRoot) projectRoot = cwd; // fallback
 
     const pyExe = path.join(projectRoot, 'venv_fyp_new', 'Scripts', 'python.exe');
-    // Prefer segmentationPipeline new location
-    const scriptCandidates = [
-      path.join(projectRoot, 'server', 'python', 'segmentationPipeline', 'segmentation.py'),
-      path.join(projectRoot, 'server', 'python', 'cleaningPipeline', 'segmentation.py')
-    ];
-    const script = scriptCandidates.find(p => fs.existsSync(p));
-    if (!script) {
-      return reject(new Error('Segmentation script not found in expected locations.'));
+    const script = path.join(projectRoot, 'server', 'python', 'segmentationPipeline', 'segmentation.py');
+    if (!fs.existsSync(script)) {
+      return reject(new Error('Segmentation script not found in expected location.'));
     }
+
     if (!fs.existsSync(pyExe)) {
       return reject(new Error(`Python interpreter not found at ${pyExe}. Activate venv or adjust path.`));
     }
@@ -702,15 +698,10 @@ function runSegmentationPython(csvPath, features, debugFlag = false) {
 
 export const runSegmentationFlow = async (req, res) => {
   try {
-    // segmentationId may come from URL param or body
-    const segmentationId = req.params.segmentationId || req.body.segmentationId;
-    // Accept both 'features' (preferred) and legacy 'selectedFeatures'
-    let { features, selectedFeatures } = req.body;
-    if ((!features || !Array.isArray(features)) && Array.isArray(selectedFeatures)) {
-      features = selectedFeatures;
-    }
-    if (!Array.isArray(features) || features.length === 0) {
-      return res.status(400).json({ message: 'Please provide selected features.' });
+    const segmentationId = req.params.segmentationId;
+    const { features } = req.body;
+    if (!Array.isArray(features) || features.length < 2) {
+      return res.status(400).json({ message: 'Please provide features: an array of two attributes.' });
     }
 
     const segRecord = await segmentationModel.findById(segmentationId);
@@ -718,14 +709,16 @@ export const runSegmentationFlow = async (req, res) => {
       return res.status(404).json({ message: 'Segmentation or merged data not found.' });
     }
 
-    // Determine temp directory robustly (avoid duplicated /server/server)
+    // Track old file for cleanup, and response info for client
+    const oldFileId = segRecord.mergedFileId;
+    let labelingStats = null;
+
     const cwd = process.cwd();
-    // If we are already inside the server folder, just use its local temp
     const isServerCwd = path.basename(cwd) === 'server';
-    // If cwd already ends with 'server', use that directly; else append /server
     const serverRoot = isServerCwd ? cwd : path.join(cwd, 'server');
     const tempDir = path.join(serverRoot, 'temp');
-    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+    if (!fs.existsSync(tempDir)) 
+      fs.mkdirSync(tempDir, { recursive: true });
     const tempCsv = path.join(tempDir, `merged_${segmentationId}.csv`);
 
     try {
@@ -734,8 +727,8 @@ export const runSegmentationFlow = async (req, res) => {
       console.error('[SEGMENTATION RUN] Failed streaming merged file:', streamErr.message);
       return res.status(404).json({ message: 'Merged CSV file missing', error: streamErr.message, segmentationId });
     }
+
     const tempSize = fs.existsSync(tempCsv) ? fs.statSync(tempCsv).size : 0;
-    console.log('[SEGMENTATION RUN] Temp CSV written:', tempCsv, 'size(bytes)=', tempSize);
     if (tempSize === 0) {
       return res.status(500).json({ message: 'Temp CSV is empty', segmentationId });
     }
@@ -749,22 +742,113 @@ export const runSegmentationFlow = async (req, res) => {
       return res.status(500).json({ message: 'Segmentation run failed', error: pyErr.message, debug: true });
     }
 
-    // Cleanup temp CSV after successful run
-    try { fs.unlink(tempCsv, () => {}); } catch(_) {}
+    // --------------------- PATCHED: cluster assignment ---------------------
+    try {
+      const assignments = result.cluster_assignments || [];
+      if (Array.isArray(assignments) && assignments.length > 0) {
+        const clusterMap = new Map();
+        for (const rec of assignments) {
+          if (rec && rec.customerid != null) {
+            // normalize to lowercase string to match CSV columns
+            clusterMap.set(String(rec.customerid), rec.cluster);
+          }
+        }
 
-    // Transform keys for frontend convenience
+        // Read temp CSV
+        const rows = await new Promise((resolve, reject) => {
+          const arr = [];
+          fs.createReadStream(tempCsv, { encoding: 'utf-8' })
+            .pipe(csvParser())
+            .on('data', (row) => arr.push(row))
+            .on('end', () => resolve(arr))
+            .on('error', reject);
+        });
+
+        // If for any reason no rows were parsed, keep original merged file
+        if (!rows || rows.length === 0) {
+          console.log('[SEGMENTATION RUN] No rows parsed from temp CSV; skip overwrite to avoid corrupting dataset.');
+        } else {
+          // Enrich CSV rows with cluster value
+          const enriched = rows.map(r => {
+            const cidRaw = r['customerid'] ?? '';
+            const cl = clusterMap.has(cidRaw) ? clusterMap.get(cidRaw) : '';
+            return { ...r, cluster: cl };
+          });
+
+        // Serialize enriched CSV
+        const toCsvLocal = (dataRows) => {
+          if (!dataRows || dataRows.length === 0) return '';
+          const colsSet = new Set();
+          dataRows.forEach(r => Object.keys(r).forEach(k => colsSet.add(k)));
+          const cols = Array.from(colsSet).filter(c => c !== 'cluster').concat(['cluster']);
+          const escape = (val) => {
+            if (val === null || val === undefined) return '';
+            const s = String(val);
+            if (s.includes('"') || s.includes(',') || s.includes('\n')) {
+              return '"' + s.replace(/"/g, '""') + '"';
+            }
+            return s;
+          };
+          const header = cols.join(',');
+          const lines = dataRows.map(r => cols.map(c => escape(r[c])).join(','));
+          return [header, ...lines].join('\n');
+        };
+
+          const labeledCsv = '\ufeff' + toCsvLocal(enriched);
+          const bucket = getGridFSBucket();
+          const filename = `segmentation_labeled_${segmentationId}_${new Date().toISOString()}.csv`;
+          const uploadStream = bucket.openUploadStream(filename, { metadata: { segmentationId, features } });
+          await new Promise((resolve, reject) => {
+            Readable.from(labeledCsv).pipe(uploadStream)
+              .on('finish', resolve)
+              .on('error', reject);
+          });
+
+        // Overwrite mergedFileId to point to the new labeled file
+        try {
+          const newFileId = uploadStream.id;
+          segRecord.mergedFileId = newFileId;
+          await segRecord.save();
+
+          // After successfully updating the segmentation record, delete old file to avoid stale data
+          if (oldFileId && String(oldFileId) !== String(newFileId)) {
+            try {
+              await new Promise((resolve, reject) => {
+                bucket.delete(oldFileId, (err) => (err ? reject(err) : resolve()));
+              });
+              console.log('[SEGMENTATION RUN] Deleted previous merged GridFS file:', String(oldFileId));
+            } catch (delErr) {
+              console.warn('[SEGMENTATION RUN] Failed to delete previous merged file:', delErr?.message);
+            }
+          }
+        } catch (e) {
+          console.warn('[SEGMENTATION RUN] Failed to overwrite mergedFileId:', e?.message);
+        }
+        }
+      }
+    } catch (labelErr) {
+      console.warn('[SEGMENTATION RUN] Labeled CSV generation failed:', labelErr?.message);
+    } finally {
+      try { fs.unlink(tempCsv, () => {}); } catch(_) {}
+    }
+
+    // --------------------- Response ---------------------
     const responsePayload = {
       success: true,
-      bestK: result.best_k ?? result.bestK ?? result.best_k, // unify naming
-      evaluations: result.evaluation || result.evaluations || [],
-      clusterSummary: result.cluster_summary || result.clusterSummary || {},
-      featureInfo: result.feature_info || result.featureInfo || {},
-      decision: result.decision || {},
+      bestK: result.best_k,
+      evaluations: result.evaluation,
+      clusterSummary: result.cluster_summary,
+      featureInfo: result.feature_info,
+      decision: result.decision,
+      assignments: result.cluster_assignments,
+      selectedFeatures: features,
       raw: result
     };
+
     if (debugFlag && result._debugLogs) {
       responsePayload.debugLogs = result._debugLogs;
     }
+
     return res.json(responsePayload);
   } catch (err) {
     console.error('[Segmentation run error]', err);
