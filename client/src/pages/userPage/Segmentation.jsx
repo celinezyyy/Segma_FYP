@@ -279,7 +279,7 @@ const Segmentation = () => {
               </div>
             ) : (
               <div className="mt-2 p-4 bg-yellow-50 border-l-4 border-yellow-300 rounded text-sm text-yellow-700">
-                No recommended segmentation pairs available. Please verify your datasets contain enough attributes.
+                No recommended segmentation pairs available. Error in retrieving attributes pairs
               </div>
             )}
 
@@ -288,14 +288,13 @@ const Segmentation = () => {
               <div className="flex items-center gap-2">
                 <button
                   onClick={async ()=>{
-                    setErrorMsg(null); setSegResult(null);
+                    setErrorMsg(null); 
+                    setSegResult(null);
                     const p = recommendedPairs.find(x => x.id === selectedPairId);
                     if (!p) { setErrorMsg('Invalid pair selected.'); return; }
                     setSegLoading(true);
                     try {
-                      const resp = await axios.post(`${backendUrl}/api/segmentation/${segmentationId}/run`, {
-                        features: [p.features[0], p.features[1]]
-                      }, { withCredentials: true });
+                      const resp = await axios.post(`${backendUrl}/api/segmentation/${segmentationId}/run`, { features: [p.features[0], p.features[1]]}, { withCredentials: true });
                       const data = resp.data || {};
                       if (data.success) {
                         // Normalize expected structure for UI
