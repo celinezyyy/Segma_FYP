@@ -17,3 +17,10 @@ const datasetSchema = new mongoose.Schema({
 
 const datasetModel = mongoose.models.dataset || mongoose.model('dataset', datasetSchema);
 export default datasetModel;
+
+// GridFS:
+//     files._id = ObjectId("AAA111")
+// datasetModel:
+//     _id        = ObjectId("BBB222")
+//     fileId     = ObjectId("AAA111")   <— references GridFS
+//     user       = ObjectId("USER999")
