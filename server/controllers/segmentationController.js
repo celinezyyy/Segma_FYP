@@ -10,6 +10,7 @@ import fs from 'fs';
 import mongoose from 'mongoose';
 import { GridFSBucket } from 'mongodb';
 import { spawn } from 'child_process';
+import { stringify as csvStringify } from 'csv-stringify/sync';
 
 // Merge dataset
 const aggregateOrderData = (orderRows) => {
@@ -405,25 +406,30 @@ export const prepareSegmentationData = async (req, res) => {
     // Convert merged data to CSV and upload to GridFS for durable storage/download
     const toCsv = (rows) => {
       if (!rows || rows.length === 0) return '';
-      const colsSet = new Set();
-      rows.forEach(r => Object.keys(r).forEach(k => colsSet.add(k)));
-      const cols = Array.from(colsSet);
-      const escape = (val) => {
-        if (val === null || val === undefined) return '';
-        const s = String(val);
-        if (s.includes('"') || s.includes(',') || s.includes('\n')) {
-          return '"' + s.replace(/"/g, '""') + '"';
+      // Build a stable column order: first row's keys in order, then any additional keys encountered
+      const first = rows[0] || {};
+      const firstKeys = Object.keys(first);
+      const seen = new Set(firstKeys);
+      const extras = [];
+      for (const r of rows) {
+        for (const k of Object.keys(r)) {
+          if (!seen.has(k)) { seen.add(k); extras.push(k); }
         }
-        return s;
-      };
-      const header = cols.join(',');
-      const lines = rows.map(r => cols.map(c => escape(r[c])).join(','));
-      return [header, ...lines].join('\n');
+      }
+      const columns = [...firstKeys, ...extras];
+
+      return csvStringify(rows, {
+        header: true,
+        columns,
+        bom: false,
+        record_delimiter: '\n',
+        cast: { null: () => '' }
+      });
     };
 
     try {
       const bucket = getGridFSBucket();
-      const csvString = '\ufeff' + toCsv(mergedData); // BOM for Excel
+      const csvString = toCsv(mergedData); 
       const uploadStream = bucket.openUploadStream(`segmentation_merged_${new Date().toISOString()}.csv`, {
         metadata: {
           user: userId,
@@ -615,7 +621,7 @@ function streamMergedToTemp(mergedFileId, tempPath) {
   });
 }
 
-function runSegmentationPython(csvPath, features, debugFlag = false) {
+function runSegmentationPython(csvPath, features, debugFlag) {
   return new Promise((resolve, reject) => {
     // Resolve project root (handle if server started inside /server)
     const cwd = process.cwd();
@@ -636,7 +642,8 @@ function runSegmentationPython(csvPath, features, debugFlag = false) {
     // Prepare temp JSON output file
     const outJsonPath = path.join(path.dirname(csvPath), `segmentation_result_${Date.now()}.json`);
     const args = ['--csv', csvPath, '--features', features.join(','), '--out', outJsonPath];
-    if (debugFlag) args.push('--verbose');
+    if (debugFlag) 
+      args.push('--verbose');
     console.log('[SEGMENTATION RUN] Using python:', pyExe);
     console.log('[SEGMENTATION RUN] Using script:', script);
     console.log('[SEGMENTATION RUN] Features:', features);
@@ -711,7 +718,6 @@ export const runSegmentationFlow = async (req, res) => {
 
     // Track old file for cleanup, and response info for client
     const oldFileId = segRecord.mergedFileId;
-    let labelingStats = null;
 
     const cwd = process.cwd();
     const isServerCwd = path.basename(cwd) === 'server';
@@ -733,7 +739,7 @@ export const runSegmentationFlow = async (req, res) => {
       return res.status(500).json({ message: 'Temp CSV is empty', segmentationId });
     }
 
-    const debugFlag = !!req.body.debug || req.query.debug === 'true';
+    const debugFlag = true;
     let result;
     try {
       result = await runSegmentationPython(tempCsv, features, debugFlag);
@@ -744,13 +750,15 @@ export const runSegmentationFlow = async (req, res) => {
 
     // --------------------- PATCHED: cluster assignment ---------------------
     try {
+      console.log('[SEGMENTATION RUN] Cluster assignments present:', Array.isArray(result.cluster_assignments), 'count=', Array.isArray(result.cluster_assignments) ? result.cluster_assignments.length : 0);
+      
       const assignments = result.cluster_assignments || [];
       if (Array.isArray(assignments) && assignments.length > 0) {
         const clusterMap = new Map();
         for (const rec of assignments) {
           if (rec && rec.customerid != null) {
-            // normalize to lowercase string to match CSV columns
-            clusterMap.set(String(rec.customerid), rec.cluster);
+            // normalize id (trim) to match CSV columns
+            clusterMap.set(String(rec.customerid).trim(), rec.cluster);
           }
         }
 
@@ -768,12 +776,18 @@ export const runSegmentationFlow = async (req, res) => {
         if (!rows || rows.length === 0) {
           console.log('[SEGMENTATION RUN] No rows parsed from temp CSV; skip overwrite to avoid corrupting dataset.');
         } else {
-          // Enrich CSV rows with cluster value
+          const headerKeys = Object.keys(rows[0] || {});
+          console.log('[SEGMENTATION RUN] First row header keys:', headerKeys);
+          // Enrich CSV rows with cluster value (normalize id + handle BOM/case variants)
+          let matchedClusterCount = 0;
           const enriched = rows.map(r => {
-            const cidRaw = r['customerid'] ?? '';
+            const cidRaw = (r['customerid'] ?? r['\ufeffcustomerid'] ?? '');
             const cl = clusterMap.has(cidRaw) ? clusterMap.get(cidRaw) : '';
+            if (cl !== '' && cl !== undefined && cl !== null) 
+              matchedClusterCount += 1;
             return { ...r, cluster: cl };
           });
+          console.log('[SEGMENTATION RUN] Labeling stats:', { parsedRowCount: rows.length, assignmentCount: assignments.length, matchedClusterCount });
 
         // Serialize enriched CSV
         const toCsvLocal = (dataRows) => {
@@ -844,10 +858,6 @@ export const runSegmentationFlow = async (req, res) => {
       selectedFeatures: features,
       raw: result
     };
-
-    if (debugFlag && result._debugLogs) {
-      responsePayload.debugLogs = result._debugLogs;
-    }
 
     return res.json(responsePayload);
   } catch (err) {
