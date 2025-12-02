@@ -60,7 +60,7 @@ def run_segmentation(df: pd.DataFrame, selected_features: List[str]) -> Dict[str
     Returns a JSON-friendly dict with best_k, evaluation metrics, assignments, and summary.
     """
 
-    vlog(f"Start run_segmentation with features={selected_features}")
+    vlog(f"===========================Start run_segmentation with features={selected_features}")
     usable_df = df[selected_features].copy()
 
     # Identify types BEFORE manual frequency encoding (object dtype for categoricals)
@@ -186,7 +186,7 @@ def run_segmentation(df: pd.DataFrame, selected_features: List[str]) -> Dict[str
     response = {
         'best_k': int(best_k),
         'evaluation': k_results,
-        'cluster_assignments': df[['customerid', 'cluster']].to_dict(orient='records') if 'customerid' in df.columns else [],
+        'cluster_assignments': df[['customerid', 'cluster']].to_dict(orient='records'),
         'cluster_summary': summary,
         'feature_info': {
             'selected_features': selected_features,
@@ -226,11 +226,20 @@ def generate_cluster_summary(df: pd.DataFrame, selected_features: List[str]) -> 
 
 def run_segmentation_from_csv(csv_path: str, selected_features: List[str]) -> Dict[str, Any]:
     df = pd.read_csv(csv_path)
-    # Optional filter: keep customers with at least one order
+
+    if 'customerid' not in df.columns:
+        raise ValueError(f"'customerid' column not found. Available columns: {list(df.columns)}")
+
+    # keep customers with at least one order
     if 'totalOrders' in df.columns:
         df = df[df['totalOrders'] > 0].copy()
     vlog(f"Loaded CSV rows={len(df)} after order filter")
+
+    # Keep only selected features that exist (use exact names provided by caller)
     existing = [c for c in selected_features if c in df.columns]
+    if len(existing) == 0:
+        raise ValueError(f"None of the selected features are present in CSV. selected={selected_features}, columns={list(df.columns)}")
+
     df = df.dropna(subset=existing)
     vlog(f"Rows after NA drop for existing features={len(df)}")
     return run_segmentation(df, existing)
