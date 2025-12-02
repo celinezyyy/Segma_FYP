@@ -743,6 +743,7 @@ export const runSegmentationFlow = async (req, res) => {
     let result;
     try {
       result = await runSegmentationPython(tempCsv, features, debugFlag);
+      console.log('[DEBUG]========================', result);
     } catch (pyErr) {
       console.error('[SEGMENTATION RUN] Python invocation failed:', pyErr.message);
       return res.status(500).json({ message: 'Segmentation run failed', error: pyErr.message, debug: true });
@@ -781,63 +782,63 @@ export const runSegmentationFlow = async (req, res) => {
           // Enrich CSV rows with cluster value (normalize id + handle BOM/case variants)
           let matchedClusterCount = 0;
           const enriched = rows.map(r => {
-            const cidRaw = (r['customerid'] ?? r['\ufeffcustomerid'] ?? '');
-            const cl = clusterMap.has(cidRaw) ? clusterMap.get(cidRaw) : '';
+            const cidRaw = (r['customerid'] ?? '');
+            const cidNorm = String(cidRaw).trim();
+            const cl = clusterMap.get(cidNorm) ?? '';
             if (cl !== '' && cl !== undefined && cl !== null) 
               matchedClusterCount += 1;
             return { ...r, cluster: cl };
           });
           console.log('[SEGMENTATION RUN] Labeling stats:', { parsedRowCount: rows.length, assignmentCount: assignments.length, matchedClusterCount });
 
-        // Serialize enriched CSV
-        const toCsvLocal = (dataRows) => {
-          if (!dataRows || dataRows.length === 0) return '';
-          const colsSet = new Set();
-          dataRows.forEach(r => Object.keys(r).forEach(k => colsSet.add(k)));
-          const cols = Array.from(colsSet).filter(c => c !== 'cluster').concat(['cluster']);
-          const escape = (val) => {
-            if (val === null || val === undefined) return '';
-            const s = String(val);
-            if (s.includes('"') || s.includes(',') || s.includes('\n')) {
-              return '"' + s.replace(/"/g, '""') + '"';
+            // Serialize enriched CSV with csv-stringify (UTF-8 without BOM) and stable columns
+            const first = enriched[0] || {};
+            const firstKeys = Object.keys(first);
+            const seen = new Set(firstKeys);
+            const extras = [];
+            for (const r of enriched) {
+              for (const k of Object.keys(r)) {
+                if (!seen.has(k)) { seen.add(k); extras.push(k); }
+              }
             }
-            return s;
-          };
-          const header = cols.join(',');
-          const lines = dataRows.map(r => cols.map(c => escape(r[c])).join(','));
-          return [header, ...lines].join('\n');
-        };
+            let columns = [...firstKeys, ...extras];
+            columns = columns.filter(c => c !== 'cluster').concat(['cluster']);
+            const labeledCsv = csvStringify(enriched, {
+              header: true,
+              columns,
+              bom: false,
+              record_delimiter: '\n',
+              cast: { null: () => '' }
+            });
+            const bucket = getGridFSBucket();
+            const filename = `segmentation_labeled_${new Date().toISOString()}.csv`;
+            const uploadStream = bucket.openUploadStream(filename, { metadata: { segmentationId, features } });
+            await new Promise((resolve, reject) => {
+              Readable.from(labeledCsv).pipe(uploadStream)
+                .on('finish', resolve)
+                .on('error', reject);
+            });
 
-          const labeledCsv = '\ufeff' + toCsvLocal(enriched);
-          const bucket = getGridFSBucket();
-          const filename = `segmentation_labeled_${segmentationId}_${new Date().toISOString()}.csv`;
-          const uploadStream = bucket.openUploadStream(filename, { metadata: { segmentationId, features } });
-          await new Promise((resolve, reject) => {
-            Readable.from(labeledCsv).pipe(uploadStream)
-              .on('finish', resolve)
-              .on('error', reject);
-          });
+          // Overwrite mergedFileId to point to the new labeled file
+          try {
+            const newFileId = uploadStream.id;
+            segRecord.mergedFileId = newFileId;
+            await segRecord.save();
 
-        // Overwrite mergedFileId to point to the new labeled file
-        try {
-          const newFileId = uploadStream.id;
-          segRecord.mergedFileId = newFileId;
-          await segRecord.save();
-
-          // After successfully updating the segmentation record, delete old file to avoid stale data
-          if (oldFileId && String(oldFileId) !== String(newFileId)) {
-            try {
-              await new Promise((resolve, reject) => {
-                bucket.delete(oldFileId, (err) => (err ? reject(err) : resolve()));
-              });
-              console.log('[SEGMENTATION RUN] Deleted previous merged GridFS file:', String(oldFileId));
-            } catch (delErr) {
-              console.warn('[SEGMENTATION RUN] Failed to delete previous merged file:', delErr?.message);
+            // After successfully updating the segmentation record, delete old file to avoid stale data
+            if (oldFileId && String(oldFileId) !== String(newFileId)) {
+              try {
+                await new Promise((resolve, reject) => {
+                  bucket.delete(oldFileId, (err) => (err ? reject(err) : resolve()));
+                });
+                console.log('[SEGMENTATION RUN] Deleted previous merged GridFS file:', String(oldFileId));
+              } catch (delErr) {
+                console.warn('[SEGMENTATION RUN] Failed to delete previous merged file:', delErr?.message);
+              }
             }
+          } catch (e) {
+            console.warn('[SEGMENTATION RUN] Failed to overwrite mergedFileId:', e?.message);
           }
-        } catch (e) {
-          console.warn('[SEGMENTATION RUN] Failed to overwrite mergedFileId:', e?.message);
-        }
         }
       }
     } catch (labelErr) {
