@@ -818,16 +818,19 @@ export const runSegmentationFlow = async (req, res) => {
                 .on('finish', resolve)
                 .on('error', reject);
             });
+            console.log('[SEGMENTATION RUN] Labeled CSV uploaded to GridFS:', String(uploadStream.id));
 
           // Overwrite mergedFileId to point to the new labeled file
           try {
             const newFileId = uploadStream.id;
             segRecord.mergedFileId = newFileId;
             await segRecord.save();
+            console.log('[SEGMENTATION RUN] Segmentation record updated with new fileId:', String(newFileId));
 
             // After successfully updating the segmentation record, delete old file to avoid stale data
             if (oldFileId && String(oldFileId) !== String(newFileId)) {
               try {
+                console.log('[SEGMENTATION RUN] Deleting previous merged GridFS file:', String(oldFileId));
                 await new Promise((resolve, reject) => {
                   bucket.delete(oldFileId, (err) => (err ? reject(err) : resolve()));
                 });
@@ -835,7 +838,11 @@ export const runSegmentationFlow = async (req, res) => {
               } catch (delErr) {
                 console.warn('[SEGMENTATION RUN] Failed to delete previous merged file:', delErr?.message);
               }
+            } else if (oldFileId) {
+              console.log('[SEGMENTATION RUN] Old and new file IDs are identical, skip delete:', String(oldFileId));
             }
+
+            console.log('[SEGMENTATION RUN] Overwrite complete: labeled dataset persisted and references updated.');
           } catch (e) {
             console.warn('[SEGMENTATION RUN] Failed to overwrite mergedFileId:', e?.message);
           }
