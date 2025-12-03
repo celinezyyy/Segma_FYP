@@ -830,10 +830,7 @@ export const runSegmentationFlow = async (req, res) => {
             // After successfully updating the segmentation record, delete old file to avoid stale data
             if (oldFileId && String(oldFileId) !== String(newFileId)) {
               try {
-                console.log('[SEGMENTATION RUN] Deleting previous merged GridFS file:', String(oldFileId));
-                await new Promise((resolve, reject) => {
-                  bucket.delete(oldFileId, (err) => (err ? reject(err) : resolve()));
-                });
+                await bucket.delete(oldFileId); 
                 console.log('[SEGMENTATION RUN] Deleted previous merged GridFS file:', String(oldFileId));
               } catch (delErr) {
                 console.warn('[SEGMENTATION RUN] Failed to delete previous merged file:', delErr?.message);
