@@ -4,11 +4,8 @@ import { getGridFSBucket } from '../utils/gridfs.js';
 import csvParser from 'csv-parser';
 import { Readable } from 'stream';
 import segmentationPairs from '../utils/segmentationPairs.js';
-// ES module imports for runtime dependencies
 import path from 'path';
 import fs from 'fs';
-import mongoose from 'mongoose';
-import { GridFSBucket } from 'mongodb';
 import { spawn } from 'child_process';
 import { stringify as csvStringify } from 'csv-stringify/sync';
 
@@ -258,17 +255,6 @@ const mergeCustomerAndOrderData = (customerRows, aggregatedOrderData) => {
       monetary: orderData.monetary || 0,
     };
 
-    // === CONDITIONALLY ADD DEMOGRAPHIC FIELDS (only if column exists in cleaned data) ===
-    if (hasAgeColumn) {
-      const ageValue = customer['age'];
-      // Add age if valid, otherwise mark as null (missing)
-      if (ageValue !== undefined && ageValue !== null && ageValue !== 'Unknown' && !isNaN(parseInt(ageValue))) {
-        mergedCustomer.age = parseInt(ageValue);
-      } else {
-        mergedCustomer.age = null;
-      }
-    }
-
     if (hasAgeGroupColumn) {
       // Prefer underscore if present, else fallback to hyphen variant
       const ageGroupValue = (customer['age_group'] ?? customer['age-group']);
@@ -335,12 +321,54 @@ export const prepareSegmentationData = async (req, res) => {
 
     if (existingDoc && existingDoc.mergedFileId) {
       console.log('[INFO] Reusing existing segmentation:', existingDoc._id);
-      return res.json({
-        success: true,
-        segmentationId: existingDoc._id,
-        summary: existingDoc.summary || null,
-        availablePairs: Array.isArray(existingDoc.availablePairs) ? existingDoc.availablePairs : [],
-      });
+      // Read header columns from existing merged CSV to filter available pairs from mergedFile
+      try {
+        const bucket = getGridFSBucket();
+        const downloadStream = bucket.openDownloadStream(existingDoc.mergedFileId);
+        let buffer = '';
+        let headerParsed = false;
+        const columns = await new Promise((resolve, reject) => {
+          downloadStream.on('data', (chunk) => {
+            if (headerParsed) return;
+            buffer += chunk.toString('utf8');
+            const newlineIdx = buffer.indexOf('\n');
+            if (newlineIdx !== -1) {
+              let headerLine = buffer.substring(0, newlineIdx);
+              headerLine = headerLine.replace(/^\ufeff/, '').replace(/\r$/, '');
+              const cols = headerLine.split(',').map((c) => c.trim());
+              headerParsed = true;
+              downloadStream.destroy();
+              resolve(cols);
+            }
+          });
+          downloadStream.on('error', (err) => reject(err));
+          downloadStream.on('end', () => {
+            if (!headerParsed) {
+              let headerLine = buffer.replace(/^\ufeff/, '').replace(/\r$/, '');
+              const cols = headerLine.length ? headerLine.split(',').map((c) => c.trim()) : [];
+              resolve(cols);
+            }
+          });
+        });
+        const featureSet = new Set(columns.map(c => c.toLowerCase()));
+        // filter out id column
+        featureSet.delete('customerid');
+        const availablePairs = segmentationPairs.filter(p => p.features.every(f => featureSet.has(String(f).toLowerCase())));
+        return res.json({
+          success: true,
+          segmentationId: existingDoc._id,
+          summary: existingDoc.summary || null,
+          availablePairs,
+        });
+      } catch (e) {
+        console.warn('[INFO] Reuse segmentation but failed to read header, returning full catalogue:', e?.message);
+        return res.json({
+          success: true,
+          segmentationId: existingDoc._id,
+          summary: existingDoc.summary || null,
+          availablePairs: segmentationPairs,
+        });
+      }
     }
 
     // Read customer data from GridFS
@@ -450,7 +478,7 @@ export const prepareSegmentationData = async (req, res) => {
       Object.keys(row || {}).forEach(k => featureSet.add(k));
     }
     const availablePairs = segmentationPairs.filter(p => p.features.every(f => featureSet.has(f)));
-
+    console.log('[DEBUG] Available segmentation pairs:', availablePairs);
     const summaryPayload = {
       totalCustomers: mergedData.length,
       totalOrders: orderRows.length,
@@ -709,6 +737,28 @@ export const runSegmentationFlow = async (req, res) => {
       return res.status(404).json({ message: 'Segmentation or merged data not found.' });
     }
 
+    // === CACHE: If a run with the same features already exists, return it directly ===
+    const existingRun = (segRecord.runsSegmentationResult || []).find(r => {
+      const saved = r.selectedPair?.features || [];
+      // Must match length
+      if (saved.length !== features.length) return false;
+
+      // Check if every element in 'features' exists in 'saved' (order does not matter)
+      return features.every(f => saved.includes(f));
+    });
+    if (existingRun) {
+      const result = existingRun;
+      const responsePayload = {
+        success: true,
+        bestK: result.decision.selected_k,
+        clusterSummary: result.cluster_summary,
+        assignments: result.cluster_assignments,
+        selectedFeatures: features,
+      };
+      console.log('[DEBUG] Use back segment result, already run before.');
+      return res.json(responsePayload);
+    }
+
     const cwd = process.cwd();
     const isServerCwd = path.basename(cwd) === 'server';
     const serverRoot = isServerCwd ? cwd : path.join(cwd, 'server');
@@ -739,6 +789,7 @@ export const runSegmentationFlow = async (req, res) => {
       return res.status(500).json({ message: 'Segmentation run failed', error: pyErr.message, debug: true });
     }
 
+    // Persist selection metadata for caching
     result.selectedPair = { features: features }; 
     segRecord.runsSegmentationResult.push(result);
     await segRecord.save();
@@ -746,19 +797,85 @@ export const runSegmentationFlow = async (req, res) => {
     // --------------------- Response ---------------------
     const responsePayload = {
       success: true,
-      bestK: result.best_k,
-      evaluations: result.evaluation,
+      bestK: result.decision.selected_k,
       clusterSummary: result.cluster_summary,
-      featureInfo: result.feature_info,
-      decision: result.decision,
       assignments: result.cluster_assignments,
       selectedFeatures: features,
-      raw: result
     };
 
     return res.json(responsePayload);
   } catch (err) {
     console.error('[Segmentation run error]', err);
     return res.status(500).json({ message: 'Segmentation run failed', error: String(err) });
+  }
+};
+
+//===============================================================================================
+export const showSegmentationResultInDashboard = async (req, res) => {
+  try {
+    const { segmentationId } = req.params;
+    const seg = await segmentationModel.findById(segmentationId);
+    if (!seg) 
+      return res.status(404).json({ success: false, message: 'SegmentationID not found' });
+
+    // Fetch merged dataset from GridFS
+    const bucket = getGridFSBucket();
+    const mergedData = [];
+    await new Promise((resolve, reject) => {
+      bucket.openDownloadStream(seg.mergedFileId)
+        .pipe(csvParser())
+        .on('data', (row) => mergedData.push(row))
+        .on('end', resolve)
+        .on('error', reject);
+    });
+
+    // Get latest cluster assignments
+    const latestRun = seg.runsSegmentationResult[seg.runsSegmentationResult.length - 1];
+    const clusterAssignments = latestRun?.cluster_assignments || {};
+
+    // Combine merged dataset with cluster
+    const mergedWithClusters = mergedData.map(c => ({
+      ...c,
+      cluster: clusterAssignments[c.customerid] ?? 'Unassigned'
+    }));
+
+    // 4️⃣ Summarize clusters
+    const clusterSummaries = {};
+    mergedWithClusters.forEach(c => {
+      const cid = c.cluster;
+      if (!clusterSummaries[cid]) clusterSummaries[cid] = { total: 0, totalSpending: 0, totalAge: 0, genderCount: {}, cityCount: {} };
+
+      clusterSummaries[cid].total += 1;
+      clusterSummaries[cid].totalSpending += parseFloat(c.totalSpending || 0);
+      clusterSummaries[cid].totalAge += parseFloat(c.age || 0);
+
+      if (c.gender) clusterSummaries[cid].genderCount[c.gender] = (clusterSummaries[cid].genderCount[c.gender] || 0) + 1;
+      if (c.city) clusterSummaries[cid].cityCount[c.city] = (clusterSummaries[cid].cityCount[c.city] || 0) + 1;
+    });
+
+    // Convert counts to human-readable summaries
+    for (const cid in clusterSummaries) {
+      const data = clusterSummaries[cid];
+      data.avgSpending = (data.totalSpending / data.total).toFixed(2);
+      data.avgAge = (data.totalAge / data.total).toFixed(1);
+      data.topGender = Object.entries(data.genderCount).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
+      data.topCity = Object.entries(data.cityCount).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
+
+      // Remove raw totals to reduce payload
+      delete data.totalSpending;
+      delete data.totalAge;
+      delete data.genderCount;
+      delete data.cityCount;
+    }
+
+    res.json({
+      success: true,
+      mergedWithClusters,
+      clusterSummaries
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
   }
 };

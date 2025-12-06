@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import UserSidebar from '../../components/UserSidebar';
 import { AppContext } from '../../context/AppContext';
@@ -23,6 +23,21 @@ const Segmentation = () => {
   const [mergedColumns, setMergedColumns] = useState([]);
   const [customAttrA, setCustomAttrA] = useState('');
   const [customAttrB, setCustomAttrB] = useState('');
+  const resultRef = useRef(null);
+
+  // Scroll to result when it's rendered (handles conditional render timing)
+  useEffect(() => {
+    if (segResult && resultRef.current) {
+      // Use rAF to ensure DOM painted, then adjust for fixed header offset
+      requestAnimationFrame(() => {
+        const el = resultRef.current;
+        const rect = el.getBoundingClientRect();
+        const offset = 80; // account for fixed navbar padding (pt-20 ~ 80px)
+        const targetY = window.scrollY + rect.top - offset;
+        window.scrollTo({ top: targetY, behavior: 'smooth' });
+      });
+    }
+  }, [segResult]);
 
   // Fetch and merge data when component loads
   useEffect(() => {
@@ -164,6 +179,77 @@ const Segmentation = () => {
     }
   };
 
+  // Unified run handler for suggested or custom pairs with Swal loading UX
+  const handleRunSegmentation = async () => {
+    setErrorMsg(null);
+    setSegResult(null);
+
+    // Determine features based on selection
+    let features = null;
+    if (selectedPairId) {
+      const p = recommendedPairs.find((x) => x.id === selectedPairId);
+      if (!p) 
+        { setErrorMsg('Invalid pair selected.'); return; }
+      features = [p.features[0], p.features[1]];
+    } else if (customAttrA && customAttrB) {
+      if (customAttrA === customAttrB) { setErrorMsg('Please choose two different attributes.'); return; }
+      features = [customAttrA, customAttrB];
+    } else {
+      setErrorMsg('Please choose a suggested pair or select two attributes.');
+      return;
+    }
+    if (!segmentationId) 
+      { setErrorMsg('Segmentation session is not ready yet.'); return; }
+
+    setSegLoading(true);
+    Swal.fire({
+      title: 'Almost ready!',
+      text: 'We’re grouping your customers now. Just a few seconds, please wait...',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      },
+    });
+    try {
+      const resp = await axios.post(
+        `${backendUrl}/api/segmentation/${segmentationId}/run`,
+        { features },
+        { withCredentials: true }
+      );
+      const data = resp.data || {};
+      Swal.close();
+
+      if (data.success) {
+        setSegResult({
+          bestK: data.bestK,
+          clusterSummary: data.cluster_summary,
+          assignments: data.cluster_assignments,
+          selectedFeatures: features,
+          totalProfiles: summary?.totalCustomers || null,
+        });
+        // Scroll handled by useEffect on segResult
+        Swal.fire({
+          icon: 'success',
+          title: 'Segmentation Complete',
+          text: `${(data.bestK)} clusters generated`,
+          timer: 2500,
+          showConfirmButton: false,
+        });
+      } else {
+        const msg = data.message || 'Segmentation failed.';
+        setErrorMsg(msg);
+        Swal.fire({ icon: 'error', title: 'Segmentation Failed', text: msg });
+      }
+    } catch (err) {
+      console.error(err);
+      const msg = err.response?.data?.message || 'Server error running segmentation.';
+      setErrorMsg(msg);
+      Swal.fire({ icon: 'error', title: 'Server Error', text: msg });
+    } finally {
+      setSegLoading(false);
+    }
+  };
+
   return (
     <div className="flex min-h-screen bg-gray-50">
       <UserSidebar />
@@ -286,40 +372,6 @@ const Segmentation = () => {
             <div className="mt-4">
               {/* Removed persistent warning; will show only after click via errorMsg */}
               <div className="flex items-center gap-2">
-                <button
-                  onClick={async ()=>{
-                    setErrorMsg(null); 
-                    setSegResult(null);
-                    const p = recommendedPairs.find(x => x.id === selectedPairId);
-                    if (!p) { setErrorMsg('Invalid pair selected.'); return; }
-                    setSegLoading(true);
-                    try {
-                      const resp = await axios.post(`${backendUrl}/api/segmentation/${segmentationId}/run`, { features: [p.features[0], p.features[1]]}, { withCredentials: true });
-                      const data = resp.data || {};
-                      if (data.success) {
-                        // Normalize expected structure for UI
-                        setSegResult({
-                          bestK: data.bestK || data.best_k,
-                          evaluations: data.evaluations || data.evaluation || [],
-                          clusterSummary: data.clusterSummary || data.cluster_summary || {},
-                          recordsUsed: data.feature_info?.transformed_shape?.[0] || null,
-                          totalProfiles: summary?.totalCustomers || null,
-                          raw: data
-                        });
-                        Swal.fire({ icon:'success', title:'Segmentation Complete', text:`K=${(data.bestK || data.best_k) ?? '—'} clusters generated`, timer:2500, showConfirmButton:false });
-                      } else {
-                        setErrorMsg(data.message || 'Segmentation failed.');
-                      }
-                    } catch (err) {
-                      console.error(err);
-                      setErrorMsg(err.response?.data?.message || 'Server error running segmentation.');
-                    } finally {
-                      setSegLoading(false);
-                    }
-                  }}
-                  disabled={segLoading || !selectedPairId}
-                  className={`inline-flex items-center gap-2 px-5 py-2 rounded font-medium border transition ${(segLoading || !selectedPairId) ? 'bg-gray-300 border-gray-300 text-gray-600 cursor-not-allowed' : 'border-green-400 text-green-700 bg-[#F1F8E9] hover:bg-[#E6F4D7]'}`}
-                >{segLoading ? 'Running...' : 'Run Suggested Pair'}</button>
                 <button onClick={()=>{ setSelectedPairId(null); setErrorMsg(null); }} className="px-4 py-2 rounded border border-red-400 text-red-600 hover:bg-red-50">Clear</button>
               </div>
             </div>
@@ -369,96 +421,82 @@ const Segmentation = () => {
               )}
 
               <div className="mt-4 flex items-center gap-2">
-                <button
-                  onClick={async ()=>{
-                    setErrorMsg(null); setSegResult(null);
-                    const a = customAttrA, b = customAttrB;
-                    if (!a || !b) { setErrorMsg('Please select two attributes.'); return; }
-                    if (a === b) { setErrorMsg('Please choose two different attributes.'); return; }
-                    setSegLoading(true);
-                    try {
-                      const resp = await axios.post(`${backendUrl}/api/segmentation/${segmentationId}/run`, {
-                        features: [a, b]
-                      }, { withCredentials: true });
-                      const data = resp.data || {};
-                      if (data.success) {
-                        setSegResult({
-                          bestK: data.bestK || data.best_k,
-                          evaluations: data.evaluations || data.evaluation || [],
-                          clusterSummary: data.clusterSummary || data.cluster_summary || {},
-                          recordsUsed: data.feature_info?.transformed_shape?.[0] || null,
-                          totalProfiles: summary?.totalCustomers || null,
-                          raw: data
-                        });
-                        Swal.fire({ icon:'success', title:'Segmentation Complete', text:`K=${(data.bestK || data.best_k) ?? '—'} clusters generated`, timer:2500, showConfirmButton:false });
-                      } else {
-                        setErrorMsg(data.message || 'Segmentation failed.');
-                      }
-                    } catch (err) {
-                      console.error(err);
-                      setErrorMsg(err.response?.data?.message || 'Server error running segmentation.');
-                    } finally {
-                      setSegLoading(false);
-                    }
-                  }}
-                  disabled={segLoading || !segmentationId || !customAttrA || !customAttrB || customAttrA===customAttrB}
-                  className={`inline-flex items-center gap-2 px-5 py-2 rounded font-medium border transition ${(segLoading || !segmentationId || !customAttrA || !customAttrB || customAttrA===customAttrB) ? 'bg-gray-300 border-gray-300 text-gray-600 cursor-not-allowed' : 'border-green-400 text-green-700 bg-[#F1F8E9] hover:bg-[#E6F4D7]'}`}
-                >Run Custom Pair</button>
                 <span className="text-xs text-gray-500">Tip: Choose two attributes you care about.</span>
               </div>
             </div>
+            {/* Unified Run Button */}
+            {(() => {
+              const canRun = !!segmentationId && (
+                (selectedPairId && recommendedPairs.some(x => x.id === selectedPairId)) ||
+                (customAttrA && customAttrB && customAttrA !== customAttrB)
+              );
+              return (
+                <div className="mt-6 pt-4 border-t flex items-center justify-end">
+                  <button
+                    onClick={handleRunSegmentation}
+                    disabled={segLoading || !canRun}
+                    className={`inline-flex items-center gap-2 px-5 py-2 rounded font-medium border transition ${(segLoading || !canRun) ? 'bg-gray-300 border-gray-300 text-gray-600 cursor-not-allowed' : 'border-blue-500 text-blue-700 bg-blue-50 hover:bg-blue-100'}`}
+                  >Run Segmentation</button>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Segmentation Result */}
           {segResult && (
-            <div className="mt-8 bg-white rounded-lg shadow-md p-6">
+            <div ref={resultRef} className="mt-8 bg-white rounded-lg shadow-md p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold text-gray-800">Segmentation Result (K={segResult.bestK})</h2>
                 <div>
                   <button onClick={()=>setSegResult(null)} className="px-3 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-100">Clear Result</button>
                 </div>
               </div>
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <h3 className="font-semibold text-gray-700 mb-2">Evaluation Metrics</h3>
-                  <table className="w-full text-sm border">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="p-2 border">K</th>
-                        <th className="p-2 border">Silhouette</th>
-                        <th className="p-2 border">DBI</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {segResult.evaluations.map(ev => (
-                        <tr key={ev.k} className={ev.k===segResult.bestK? 'bg-blue-50':''}>
-                          <td className="p-2 border text-center">{ev.k}</td>
-                          <td className="p-2 border text-center">{ev.silhouette}</td>
-                          <td className="p-2 border text-center">{ev.dbi}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <p className="text-xs text-gray-500 mt-2">Higher silhouette and lower DBI indicate better separation.</p>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-700 mb-2">Cluster Summary</h3>
-                  <div className="space-y-3 max-h-72 overflow-auto pr-2">
-                    {Object.entries(segResult.clusterSummary).map(([key,val]) => (
-                      <div key={key} className="border rounded p-3">
-                        <div className="flex justify-between mb-2">
-                          <span className="font-medium text-gray-800">{key}</span>
-                          <span className="text-sm text-gray-600">{val.count} ({val.percentage}%)</span>
+              {/* Simple, user-friendly summary */}
+              <div className="mb-4 p-4 border rounded bg-blue-50 text-sm text-gray-800">
+                <p className="mb-1">
+                  <span className="font-medium">Summary:</span> We generated <span className="font-semibold">{segResult.bestK}</span> customer clusters using
+                  {' '}<span className="font-semibold">{Array.isArray(segResult.selectedFeatures) ? segResult.selectedFeatures.join(' + ') : 'selected attributes'}</span>.
+                </p>
+              </div>
+              
+              {/* Compact per-cluster highlights based on selected attributes */}
+              {segResult.clusterSummary && (
+                <div className="mt-4">
+                  <h3 className="font-semibold text-gray-700 mb-2">Cluster Highlights</h3>
+                  <div className="grid md:grid-cols-2 gap-3">
+                    {Object.entries(segResult.clusterSummary).map(([cid, info]) => {
+                      const attrs = info?.attributes || {};
+                      const selected = Array.isArray(segResult.selectedFeatures) ? segResult.selectedFeatures : [];
+                      const highlights = selected
+                        .map(f => (f in attrs ? `${f}: ${attrs[f]}` : null))
+                        .filter(Boolean);
+                      return (
+                        <div key={cid} className="border rounded p-3 bg-gray-50">
+                          <div className="flex justify-between">
+                            <span className="font-medium text-gray-800">Cluster {cid}</span>
+                            <span className="text-xs text-gray-600">{info?.count} customers</span>
+                          </div>
+                          <div className="mt-2 text-xs text-gray-700">
+                            {highlights.length > 0 ? (
+                              <ul className="list-disc ml-4">
+                                {highlights.map(h => <li key={cid+String(h)}>{h}</li>)}
+                              </ul>
+                            ) : (
+                              <span className="text-gray-500">No clear attribute highlight for this cluster.</span>
+                            )}
+                          </div>
                         </div>
-                        <ul className="text-xs text-gray-600 list-disc ml-4">
-                          {Object.entries(val.attributes).map(([f,v]) => <li key={f}>{f}: {v}</li>)}
-                        </ul>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
+              )}
+              <div className="mt-3">
+                <button
+                  onClick={()=> navigate('/segmentation/result', { state: {segmentationId} })}
+                  className="px-4 py-2 rounded border border-blue-400 text-blue-600 hover:bg-blue-50"
+                >View Detail Result</button>
               </div>
-              <div className="mt-4 text-sm text-gray-500">Records used: {segResult.recordsUsed} / Total profiles: {segResult.totalProfiles}</div>
             </div>
           )}
         </div>
