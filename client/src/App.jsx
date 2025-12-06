@@ -15,6 +15,7 @@ import DatasetSelection from './pages/userPage/DatasetSelection';
 import ConfirmSelectedDataset from './pages/userPage/ConfirmSelectedDataset';
 import CleaningSummarizeReport from './pages/userPage/CleaningSummarizeReport';
 import Segmentation from './pages/userPage/Segmentation';
+import SegmentationDashboard from './pages/userPage/SegmentationDashboard';
 
 import AdminHome from './pages/adminPage/AdminHome';
 import UserList from './pages/adminPage/UserList';
@@ -44,6 +45,7 @@ const App = () => {
         <Route path='/confirm-selected-dataset' element={<ConfirmSelectedDataset />}/>
         <Route path='/cleaning-summarize-report' element={<CleaningSummarizeReport />}/>
         <Route path='/segmentation' element={<Segmentation />}/>
+        <Route path='/segmentation-dashboard' element={<SegmentationDashboard />}/>
         <Route></Route>
       </Routes>
     </div>
