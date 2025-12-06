@@ -204,7 +204,7 @@ def run_segmentation(df: pd.DataFrame, selected_features: List[str]) -> Dict[str
 
 
 def generate_cluster_summary(df: pd.DataFrame, selected_features: List[str]) -> Dict[str, Any]:
-    clusters = df['cluster'].unique()
+    clusters = sorted(df['cluster'].unique())
     out: Dict[str, Any] = {}
     for c in clusters:
         part = df[df['cluster'] == c]
