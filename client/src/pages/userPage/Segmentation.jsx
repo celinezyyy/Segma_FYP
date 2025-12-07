@@ -341,23 +341,78 @@ const Segmentation = () => {
           {/* Segmentation Pairs Selection */}
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
             <h2 className="text-xl font-bold text-gray-800 mb-2">Choose How To Segment</h2>
-            <p className="text-sm text-gray-600 mb-4">Use our suggested pairs, or pick your own two attributes.</p>
+            <p className="text-sm text-gray-600 mb-4">Use our suggested pairs</p>
             {errorMsg && <p className="text-red-600 text-sm mt-2">{errorMsg}</p>}
 
             {/* Suggested Pairs */}
-            <h3 className="text-base font-semibold text-gray-800 mb-2">Use Suggested Pairs</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-6">
+              Recommended Segmentation Strategies
+            </h3>
+
             {recommendedPairs.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
                 {recommendedPairs.map(p => {
                   const selected = selectedPairId === p.id;
+
                   return (
-                    <label key={p.id} className={`cursor-pointer select-none border rounded p-4 flex flex-col justify-between transition ${selected ? 'border-blue-600 bg-white shadow' : 'border-gray-200 bg-gray-50 hover:shadow-sm'}`}>
-                      <input type="radio" name="segPair" checked={selected} onChange={() => setSelectedPairId(p.id)} className="sr-only" />
-                      <div onClick={() => setSelectedPairId(p.id)}>
-                        <div className="flex items-center justify-between">
-                          <div className="font-semibold text-gray-800">{p.label}</div>
+                    <label
+                      key={p.id}
+                      className={`relative cursor-pointer rounded-2xl border-2 p-8 transition-all duration-300 ${
+                        selected
+                          ? "border-blue-600 bg-blue-50/70 shadow-2xl ring-4 ring-blue-200 scale-105"
+                          : "border-gray-200 bg-white shadow-lg hover:shadow-2xl hover:scale-102"
+                      }`}
+                      onClick={() => setSelectedPairId(p.id)}
+                    >
+                      <input type="radio" name="segPair" checked={selected} className="sr-only" />
+
+                      {/* Selected checkmark */}
+                      {selected && (
+                        <div className="absolute -top-4 -right-4">
+                          <div className="bg-blue-600 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-xl text-3xl font-bold">
+                            ✓
+                          </div>
                         </div>
-                        {!selected && <p className="text-xs text-gray-600 mt-2">{p.description}</p>}
+                      )}
+
+                      <div className="flex gap-6 items-start">
+                        {/* Icon */}
+                        <div className="text-6xl flex-shrink-0">{p.icon}</div>
+
+                        <div className="flex-1">
+                          {/* Title + tagline */}
+                          <h4 className="text-2xl font-bold text-gray-900 mb-2">{p.label}</h4>
+                          <p className="text-lg text-blue-600 font-medium mb-6">{p.tagline}</p>
+
+                          {/* Key metrics chips */}
+                          <div className="mb-6">
+                            <p className="text-sm font-semibold text-gray-700 mb-3">Key Metrics Used</p>
+                            <div className="flex flex-wrap gap-3">
+                              {p.metrics.map(m => (
+                                <span key={m} className="px-4 py-2 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                                  {m}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Benefits with green checks */}
+                          <ul className="space-y-3 mb-6">
+                            {p.benefits.map((benefit, i) => (
+                              <li key={i} className="flex items-center gap-3 text-gray-700">
+                                <span className="text-green-600 text-xl font-bold">✔</span>
+                                <span className="text-base">{benefit}</span>
+                              </li>
+                            ))}
+                          </ul>
+
+                          {/* Best for badge */}
+                          <div className="pt-4 border-t border-gray-200">
+                            <span className="inline-block px-5 py-2 bg-gray-100 text-gray-800 rounded-xl text-sm font-semibold">
+                              Best for {p.bestFor}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </label>
                   );
@@ -369,61 +424,6 @@ const Segmentation = () => {
               </div>
             )}
 
-            <div className="mt-4">
-              {/* Removed persistent warning; will show only after click via errorMsg */}
-              <div className="flex items-center gap-2">
-                <button onClick={()=>{ setSelectedPairId(null); setErrorMsg(null); }} className="px-4 py-2 rounded border border-red-400 text-red-600 hover:bg-red-50">Clear</button>
-              </div>
-            </div>
-
-            {/* OR Divider */}
-            <div className="relative my-8">
-              <div className="border-t"></div>
-              <div className="absolute left-1/2 -translate-x-1/2 -top-3 bg-white px-3 text-xs text-gray-500">OR</div>
-            </div>
-
-            {/* Custom Pair Selector */}
-            <div className="mt-2">
-              <h3 className="text-base font-semibold text-gray-800 mb-2">Choose Your Own Pair</h3>
-              <p className="text-sm text-gray-600 mb-4">Pick any two attributes from the merged dataset.</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">Attribute A</label>
-                  <select
-                    className="w-full border rounded px-3 py-2 bg-white"
-                    value={customAttrA}
-                    onChange={(e) => setCustomAttrA(e.target.value)}
-                    disabled={segLoading || !segmentationId}
-                  >
-                    <option value="">Select attribute</option>
-                    {mergedColumns.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">Attribute B</label>
-                  <select
-                    className="w-full border rounded px-3 py-2 bg-white"
-                    value={customAttrB}
-                    onChange={(e) => setCustomAttrB(e.target.value)}
-                    disabled={segLoading || !segmentationId}
-                  >
-                    <option value="">Select attribute</option>
-                    {mergedColumns.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              {customAttrA && customAttrB && customAttrA === customAttrB && (
-                <p className="text-red-600 text-sm mt-2">Please choose two different attributes.</p>
-              )}
-
-              <div className="mt-4 flex items-center gap-2">
-                <span className="text-xs text-gray-500">Tip: Choose two attributes you care about.</span>
-              </div>
-            </div>
             {/* Unified Run Button */}
             {(() => {
               const canRun = !!segmentationId && (

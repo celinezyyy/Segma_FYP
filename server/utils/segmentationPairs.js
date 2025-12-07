@@ -1,11 +1,54 @@
-// Recommended hybrid segmentation pairs
 export const segmentationPairs = [
-  { id: "recency_frequency", label: "Recency × Frequency", features: ["recency", "frequency"], description: "RFM-style: highlights recent active vs frequent buyers — good for churn and engagement segmentation." },
-  { id: "agegroup_monetary", label: "Age Group × Total Spend", features: ["ageGroup", "totalSpend"], description: "Shows which age groups spend more — useful for age-targeted promotions and product-market fit." },
-  { id: "gender_item", label: "Gender × Favorite Item", features: ["gender", "favoriteItem"], description: "Reveals product preferences by gender — helps merchandising and personalization." },
-  { id: "aov_recency", label: "Average Order Value × Recency", features: ["avgOrderValue", "recency"], description: "Average Order Value vs Recency: finds customers who spend more recently vs those with low AOV." },
-  { id: "spend_city", label: "Total Spend × City", features: ["totalSpend", "city"], description: "Total Spend vs City: identifies cities with higher spending customers." },
-  { id: "spend_state", label: "Total Spend × State", features: ["totalSpend", "state"], description: "Total Spend vs State: identifies states with higher spending customers." },
+  {
+    id: "rfm",
+    label: "Classic RFM",
+    tagline: "The timeless industry standard",
+    metrics: ["Recency", "Frequency", "Monetary"],
+    benefits: [
+      "Most stable",
+      "Highly validated academically",
+      "Universal",
+      "Retail + e-commerce standard",
+      "Works well for 90% SMEs"
+    ],
+    bestFor: "Retail & e-commerce",
+    icon: "🏆"
+  },
+  {
+    id: "spending",
+    label: "Spending Behavior",
+    tagline: "Focus on how much they spend",
+    metrics: ["totalSpend", "avgOrderValue", "totalOrders"],
+    benefits: [
+      "Identifies high spenders & bulk buyers",
+      "Highlights low-value or price-sensitive customers"
+    ],
+    bestFor: "Lifestyle retail, F&B, beauty",
+    icon: "🛍️"
+  },
+  {
+    id: "lifetime",
+    label: "Customer Lifetime + Behavior",
+    tagline: "Loyalty & long-term value",
+    metrics: ["customerLifetimeMonths", "purchaseFrequency", "totalSpend"],
+    benefits: [
+      "Shows long-term loyalty",
+      "New vs returning high-value customers"
+    ],
+    bestFor: "Subscription / repeat-purchase businesses",
+    icon: "❤️"
+  },
+  {
+    id: "timebased",
+    label: "Time-based Behavior",
+    tagline: "Spot churn early",
+    metrics: ["recency", "daysSinceLastPurchase", "purchaseFrequency"],
+    benefits: [
+      "Detects potential churn risk",
+      "Great for time-sensitive businesses"
+    ],
+    bestFor: "Apps, services, F&B",
+    icon: "⏳"
+  }
 ];
-
-export default segmentationPairs;
+ export default segmentationPairs;
