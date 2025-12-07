@@ -20,9 +20,6 @@ const Segmentation = () => {
   const [segResult, setSegResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [recommendedPairs, setRecommendedPairs] = useState([]);
-  const [mergedColumns, setMergedColumns] = useState([]);
-  const [customAttrA, setCustomAttrA] = useState('');
-  const [customAttrB, setCustomAttrB] = useState('');
   const resultRef = useRef(null);
 
   // Scroll to result when it's rendered (handles conditional render timing)
@@ -36,6 +33,13 @@ const Segmentation = () => {
         const targetY = window.scrollY + rect.top - offset;
         window.scrollTo({ top: targetY, behavior: 'smooth' });
       });
+    }
+  }, [segResult]);
+
+  // Log segResult only after state updates to avoid stale null logs
+  useEffect(() => {
+    if (segResult) {
+      console.log('[DEBUG] Segmentation result (state):', segResult);
     }
   }, [segResult]);
 
@@ -85,7 +89,6 @@ const Segmentation = () => {
             const colsResp = await axios.get(`${backendUrl}/api/segmentation/${response.data.segmentationId}/columns`, { withCredentials: true });
             if (colsResp.data?.success && Array.isArray(colsResp.data.columns)) {
               console.log('[DEBUG] Merged columns:', colsResp.data.columns);
-              setMergedColumns(colsResp.data.columns);
             }
           } catch (e) {
             console.warn('Unable to fetch merged columns', e?.message);
@@ -191,6 +194,7 @@ const Segmentation = () => {
       if (!p) 
         { setErrorMsg('Invalid pair selected.'); return; }
       features = [p.features[0], p.features[1], p.features[2]]; // use all 3 features from suggested pair
+      console.log('[DEBUG] Running segmentation with suggested pair features:', features);
     } else {
       setErrorMsg('Please choose a suggested pair or select two attributes.');
       return;
@@ -219,8 +223,8 @@ const Segmentation = () => {
       if (data.success) {
         setSegResult({
           bestK: data.bestK,
-          clusterSummary: data.cluster_summary,
-          assignments: data.cluster_assignments,
+          clusterSummary: data.clusterSummary,
+          assignments: data.assignments,
           selectedFeatures: features,
           totalProfiles: summary?.totalCustomers || null,
         });
@@ -405,8 +409,7 @@ const Segmentation = () => {
             {/* Unified Run Button */}
             {(() => {
               const canRun = !!segmentationId && (
-                (selectedPairId && recommendedPairs.some(x => x.id === selectedPairId)) ||
-                (customAttrA && customAttrB && customAttrA !== customAttrB)
+                (selectedPairId && recommendedPairs.some(x => x.id === selectedPairId))
               );
               return (
                 <div className="mt-6 pt-4 border-t flex items-center justify-end">
@@ -419,9 +422,9 @@ const Segmentation = () => {
               );
             })()}
           </div>
-
           {/* Segmentation Result */}
           {segResult && (
+            console.log('[DEBUG] Rendering segmentation result:', segResult),
             <div ref={resultRef} className="mt-8 bg-white rounded-lg shadow-md p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold text-gray-800">Segmentation Result (K={segResult.bestK})</h2>
@@ -432,8 +435,7 @@ const Segmentation = () => {
               {/* Simple, user-friendly summary */}
               <div className="mb-4 p-4 border rounded bg-blue-50 text-sm text-gray-800">
                 <p className="mb-1">
-                  <span className="font-medium">Summary:</span> We generated <span className="font-semibold">{segResult.bestK}</span> customer clusters using
-                  {' '}<span className="font-semibold">{Array.isArray(segResult.selectedFeatures) ? segResult.selectedFeatures.join(' + ') : 'selected attributes'}</span>.
+                  We have identidy <span className="font-semibold">{segResult.bestK}</span> customer clusters!
                 </p>
               </div>
               
@@ -451,7 +453,9 @@ const Segmentation = () => {
                       return (
                         <div key={cid} className="border rounded p-3 bg-gray-50">
                           <div className="flex justify-between">
-                            <span className="font-medium text-gray-800">Cluster {cid}</span>
+                            <span className="font-medium text-gray-800">
+                              Cluster {parseInt(cid.replace('cluster_', ''), 10) + 1}
+                            </span>
                             <span className="text-xs text-gray-600">{info?.count} customers</span>
                           </div>
                           <div className="mt-2 text-xs text-gray-700">
@@ -471,7 +475,7 @@ const Segmentation = () => {
               )}
               <div className="mt-3">
                 <button
-                  onClick={()=> navigate('/segmentation/result', { state: {segmentationId} })}
+                  onClick={()=> navigate('/segmentation/result', { state: {segmentationId, selectedFeatures: segResult.selectedFeatures} })}
                   className="px-4 py-2 rounded border border-blue-400 text-blue-600 hover:bg-blue-50"
                 >View Detail Result</button>
               </div>
