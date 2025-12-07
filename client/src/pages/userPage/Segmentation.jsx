@@ -66,6 +66,19 @@ const Segmentation = () => {
       });
       return;
     }
+    // Try cache first: avoid re-prepare if already done for these datasets
+    try {
+      const raw = localStorage.getItem('segmentationCache');
+      if (raw) {
+        const cached = JSON.parse(raw);
+        if (cached && cached.customerDatasetId === selectedCustomer && cached.orderDatasetId === selectedOrder && cached.segmentationId) {
+          setSegmentationId(cached.segmentationId);
+          setSummary(cached.summary || null);
+          setRecommendedPairs(Array.isArray(cached.availablePairs) ? cached.availablePairs : []);
+          return; // skip fetch & merge
+        }
+      }
+    } catch (_) {}
 
     fetchAndMergeData();
   }, [selectedCustomer, selectedOrder]);
@@ -94,6 +107,17 @@ const Segmentation = () => {
         setSegmentationId(response.data.segmentationId || null);
         setSummary(response.data.summary || null);
         setRecommendedPairs(Array.isArray(response.data.availablePairs) ? response.data.availablePairs : []);
+        // Persist cache to avoid re-prepare on return visits
+        try {
+          localStorage.setItem('segmentationCache', JSON.stringify({
+            segmentationId: response.data.segmentationId || null,
+            summary: response.data.summary || null,
+            availablePairs: Array.isArray(response.data.availablePairs) ? response.data.availablePairs : [],
+            customerDatasetId: selectedCustomer,
+            orderDatasetId: selectedOrder,
+            cachedAt: Date.now(),
+          }));
+        } catch (_) {}
         // Fetch merged columns for custom selection
         if (response.data.segmentationId) {
           try {
@@ -440,9 +464,6 @@ const Segmentation = () => {
             <div ref={resultRef} className="mt-8 bg-white rounded-lg shadow-md p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold text-gray-800">Segmentation Result (K={segResult.bestK})</h2>
-                <div>
-                  <button onClick={()=>setSegResult(null)} className="px-3 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-100">Clear Result</button>
-                </div>
               </div>
               {/* Simple, user-friendly summary */}
               <div className="mb-4 p-4 border rounded bg-blue-50 text-sm text-gray-800">
@@ -499,7 +520,7 @@ const Segmentation = () => {
               )}
               <div className="mt-3">
                 <button
-                  onClick={()=> navigate('/segmentation/result', { state: {segmentationId, selectedFeatures: segResult.selectedFeatures} })}
+                  onClick={()=> navigate('/segmentation/dashboard', { state: {segmentationId, selectedFeatures: segResult.selectedFeatures} })}
                   className="px-4 py-2 rounded border border-blue-400 text-blue-600 hover:bg-blue-50"
                 >View Detail Result</button>
               </div>
