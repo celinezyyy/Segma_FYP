@@ -353,7 +353,9 @@ export const prepareSegmentationData = async (req, res) => {
         const featureSet = new Set(columns.map(c => c.toLowerCase()));
         // filter out id column
         featureSet.delete('customerid');
-        const availablePairs = segmentationPairs.filter(p => p.features.every(f => featureSet.has(String(f).toLowerCase())));
+        // features in segmentationPairs are objects { key, label, unit }
+        // Filter by presence of the feature key in the merged dataset columns
+        const availablePairs = segmentationPairs.filter(p => p.features.every(({ key }) => featureSet.has(String(key).toLowerCase())));
         return res.json({
           success: true,
           segmentationId: existingDoc._id,
