@@ -817,7 +817,8 @@ export const runSegmentationFlow = async (req, res) => {
 //===============================================================================================
 export const showSegmentationResultInDashboard = async (req, res) => {
   try {
-    const { segmentationId } = req.params;
+    const { segmentationId } = req.params.segmentationId;
+    const { features } = req.body;
     const seg = await segmentationModel.findById(segmentationId);
     if (!seg) 
       return res.status(404).json({ success: false, message: 'SegmentationID not found' });
@@ -832,7 +833,7 @@ export const showSegmentationResultInDashboard = async (req, res) => {
         .on('end', resolve)
         .on('error', reject);
     });
-
+// WIP : TMR continue here, use get the mergefile dataset, and then use the features to append cluster result into merge dataset
     // Get latest cluster assignments
     const latestRun = seg.runsSegmentationResult[seg.runsSegmentationResult.length - 1];
     const clusterAssignments = latestRun?.cluster_assignments || {};
