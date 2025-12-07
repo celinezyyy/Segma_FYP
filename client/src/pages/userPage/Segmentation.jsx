@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useRef } from 'react';
+import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import UserSidebar from '../../components/UserSidebar';
 import { AppContext } from '../../context/AppContext';
@@ -21,6 +21,17 @@ const Segmentation = () => {
   const [errorMsg, setErrorMsg] = useState(null);
   const [recommendedPairs, setRecommendedPairs] = useState([]);
   const resultRef = useRef(null);
+
+    // Derive feature label/unit from recommendedPairs provided by backend
+  const FEATURE_META = useMemo(() => {
+    const entries = [];
+    for (const p of recommendedPairs || []) {
+      for (const f of p.features || []) {
+        if (f && f.key) entries.push([f.key, { label: f.label, unit: f.unit }]);
+      }
+    }
+    return Object.fromEntries(entries);
+  }, [recommendedPairs]);
 
   // Scroll to result when it's rendered (handles conditional render timing)
   useEffect(() => {
@@ -193,8 +204,9 @@ const Segmentation = () => {
       const p = recommendedPairs.find((x) => x.id === selectedPairId);
       if (!p) 
         { setErrorMsg('Invalid pair selected.'); return; }
-      features = [p.features[0], p.features[1], p.features[2]]; // use all 3 features from suggested pair
-      console.log('[DEBUG] Running segmentation with suggested pair features:', features);
+      // Use feature keys, not full objects
+      features = (p.features || []).map(f => f.key).filter(Boolean);
+      console.log('[DEBUG] Running segmentation with suggested pair features (keys):', features);
     } else {
       setErrorMsg('Please choose a suggested pair or select two attributes.');
       return;
@@ -448,7 +460,19 @@ const Segmentation = () => {
                       const attrs = info?.attributes || {};
                       const selected = Array.isArray(segResult.selectedFeatures) ? segResult.selectedFeatures : [];
                       const highlights = selected
-                        .map(f => (f in attrs ? `${f}: ${attrs[f]}` : null))
+                        .map(f => {
+                          if (!(f in attrs)) 
+                            return null;
+                          const meta = FEATURE_META?.[f];
+                          const label = meta.label || f;
+                          const unit = meta.unit ? ` ${meta.unit}` : '';
+                          return (
+                            <li key={cid + f} className="text-xs text-gray-700">
+                              <span className="font-semibold">{label}</span>
+                              {`: ${attrs[f]}${unit}`}
+                            </li>
+                          );
+                        })
                         .filter(Boolean);
                       return (
                         <div key={cid} className="border rounded p-3 bg-gray-50">

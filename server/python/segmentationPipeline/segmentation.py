@@ -204,25 +204,51 @@ def run_segmentation(df: pd.DataFrame, selected_features: List[str]) -> Dict[str
 
 
 def generate_cluster_summary(df: pd.DataFrame, selected_features: List[str]) -> Dict[str, Any]:
+
+    ROUNDING_RULES = {
+        "recency": 0,
+        "daysSinceLastPurchase": 0,
+        "monetary": 2,
+        "totalSpend": 2,
+        "avgOrderValue": 2,
+        "frequency": 2,
+        "purchaseFrequency": 0,
+        "customerLifetimeMonths": 0,
+        "totalOrders": 0,
+    }
+
     clusters = sorted(df['cluster'].unique())
     out: Dict[str, Any] = {}
+
     for c in clusters:
         part = df[df['cluster'] == c]
         stats: Dict[str, Any] = {}
+
         for col in selected_features:
             if col not in part.columns:
                 continue
+
             if part[col].dtype == 'O':
+                # categorical → pick mode
                 stats[col] = str(part[col].value_counts().idxmax())
             else:
-                stats[col] = float(part[col].mean())
+                mean_val = float(part[col].mean())
+
+                # apply rounding if rule exists
+                if col in ROUNDING_RULES:
+                    decimals = ROUNDING_RULES[col]
+                    stats[col] = round(mean_val, decimals)
+                else:
+                    # default: 2 decimals (safe fallback)
+                    stats[col] = round(mean_val, 2)
+
         out[f'cluster_{c}'] = {
             'count': int(len(part)),
             'percentage': round(len(part) / len(df) * 100, 2),
             'attributes': stats
         }
-    return out
 
+    return out
 
 def run_segmentation_from_csv(csv_path: str, selected_features: List[str]) -> Dict[str, Any]:
     df = pd.read_csv(csv_path)

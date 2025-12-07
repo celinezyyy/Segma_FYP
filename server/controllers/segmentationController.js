@@ -350,12 +350,14 @@ export const prepareSegmentationData = async (req, res) => {
             }
           });
         });
-        const featureSet = new Set(columns.map(c => c.toLowerCase()));
+        const featureSet = new Set(columns.map(c => c));
         // filter out id column
         featureSet.delete('customerid');
         // features in segmentationPairs are objects { key, label, unit }
         // Filter by presence of the feature key in the merged dataset columns
-        const availablePairs = segmentationPairs.filter(p => p.features.every(({ key }) => featureSet.has(String(key).toLowerCase())));
+        // Columns were lowercased into featureSet; compare keys case-insensitively
+        const availablePairs = segmentationPairs.filter(p => p.features.every(({ key }) => featureSet.has(String(key))));
+        console.log('[DEBUG] Available segmentation pairs from existing merged file:', availablePairs);
         return res.json({
           success: true,
           segmentationId: existingDoc._id,

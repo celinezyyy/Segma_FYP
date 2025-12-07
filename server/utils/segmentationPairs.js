@@ -6,7 +6,7 @@ export const segmentationPairs = [
     features: [
       { key: "recency", label: "Recency", unit: "days since last purchase" },
       { key: "frequency", label: "Purchase Frequency", unit: "orders/month" },
-      { key: "monetary", label: "Monetary Value", unit: "RM" }
+      { key: "monetary", label: "Monetary Value", unit: "MYR" }
     ],
     benefits: [
       "Most stable",
@@ -35,14 +35,14 @@ export const segmentationPairs = [
   {
     id: "lifetime",
     label: "Customer Lifetime + Behavior",
-    tagline: "Loyalty & long-term value",
+    tagline: "Loyalty & long-teMYR value",
     features: [
       { key: "customerLifetimeMonths", label: "Customer Lifetime", unit: "months" },
       { key: "purchaseFrequency", label: "Purchase Frequency", unit: "orders/month" },
       { key: "totalSpend", label: "Total Spend", unit: "MYR" }
     ],
     benefits: [
-      "Shows long-term loyalty",
+      "Shows long-teMYR loyalty",
       "New vs returning high-value customers"
     ],
     icon: "❤️"
