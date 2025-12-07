@@ -520,7 +520,7 @@ const Segmentation = () => {
               )}
               <div className="mt-3">
                 <button
-                  onClick={()=> navigate('/segmentation/dashboard', { state: {segmentationId, selectedFeatures: segResult.selectedFeatures} })}
+                  onClick={()=> navigate('/segmentation-dashboard', { state: {segmentationId, selectedFeatures: segResult.selectedFeatures} })}
                   className="px-4 py-2 rounded border border-blue-400 text-blue-600 hover:bg-blue-50"
                 >View Detail Result</button>
               </div>
