@@ -190,10 +190,7 @@ const Segmentation = () => {
       const p = recommendedPairs.find((x) => x.id === selectedPairId);
       if (!p) 
         { setErrorMsg('Invalid pair selected.'); return; }
-      features = [p.features[0], p.features[1]];
-    } else if (customAttrA && customAttrB) {
-      if (customAttrA === customAttrB) { setErrorMsg('Please choose two different attributes.'); return; }
-      features = [customAttrA, customAttrB];
+      features = [p.features[0], p.features[1], p.features[2]]; // use all 3 features from suggested pair
     } else {
       setErrorMsg('Please choose a suggested pair or select two attributes.');
       return;
@@ -384,18 +381,6 @@ const Segmentation = () => {
                           <h4 className="text-2xl font-bold text-gray-900 mb-2">{p.label}</h4>
                           <p className="text-lg text-blue-600 font-medium mb-6">{p.tagline}</p>
 
-                          {/* Key metrics chips */}
-                          <div className="mb-6">
-                            <p className="text-sm font-semibold text-gray-700 mb-3">Key Metrics Used</p>
-                            <div className="flex flex-wrap gap-3">
-                              {p.metrics.map(m => (
-                                <span key={m} className="px-4 py-2 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                                  {m}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-
                           {/* Benefits with green checks */}
                           <ul className="space-y-3 mb-6">
                             {p.benefits.map((benefit, i) => (
@@ -405,13 +390,6 @@ const Segmentation = () => {
                               </li>
                             ))}
                           </ul>
-
-                          {/* Best for badge */}
-                          <div className="pt-4 border-t border-gray-200">
-                            <span className="inline-block px-5 py-2 bg-gray-100 text-gray-800 rounded-xl text-sm font-semibold">
-                              Best for {p.bestFor}
-                            </span>
-                          </div>
                         </div>
                       </div>
                     </label>
