@@ -1,15 +1,15 @@
-// SegmentationDashboard.jsx (or .js)
+// SegmentationDashboard.jsx
 import React, { useEffect, useState, useContext } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { AppContext } from '../../context/AppContext';
-import {
-  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
-} from 'recharts';
-import { Download, Edit2, Check, X } from 'lucide-react';
+import UserSidebar from '../../components/UserSidebar';
+import Navbar from '../../components/Navbar';
+import { PieChart, Pie, Cell, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
+import { ArrowLeft, Users, DollarSign, Clock, Calendar, MapPin, CreditCard, Sun, Moon } from 'lucide-react';
 
-const COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1'];
+// Align chart palette with app theme (blues/greens + accents)
+const COLORS = ['#2563eb', '#3b82f6', '#60a5fa', '#10b981', '#f59e0b', '#ef4444'];
 
 export default function SegmentationDashboard() {
   const location = useLocation();
@@ -17,16 +17,11 @@ export default function SegmentationDashboard() {
   const { backendUrl } = useContext(AppContext);
 
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState(null); // ← removed type
-  const [activeTab, setActiveTab] = useState('overview');
-  const [editingName, setEditingName] = useState(null); // ← no type
-  const [tempName, setTempName] = useState('');
+  const [data, setData] = useState(null);
+  const [selectedCluster, setSelectedCluster] = useState(null); // null = overview, number = specific cluster
 
   useEffect(() => {
-    if (!segmentationId || !selectedFeatures) {
-      setLoading(false);
-      return;
-    }
+    if (!segmentationId || !selectedFeatures) return;
 
     const fetchData = async () => {
       setLoading(true);
@@ -36,12 +31,25 @@ export default function SegmentationDashboard() {
           { features: selectedFeatures },
           { withCredentials: true }
         );
-
         if (res.data.success) {
-          setData(res.data.data);
+          const summaries = res.data.data.summaries;
+
+          // AUTO-GENERATE MEANINGFUL NAMES if missing
+          const namedSummaries = summaries.map((s, i) => {
+            if (s.suggestedName) return s;
+
+            const names = [
+              "Champions", "Loyal Customers", "Potential Loyalists",
+              "At Risk", "Hibernating", "Lost Customers",
+              "New Customers", "Price-Sensitive", "Occasional Buyers", "High-Value Regulars"
+            ];
+            return { ...s, suggestedName: names[i] || `Segment ${s.cluster}` };
+          });
+
+          setData({ ...res.data.data, summaries: namedSummaries });
         }
       } catch (err) {
-        console.error('Failed to load dashboard:', err);
+        console.error(err);
       } finally {
         setLoading(false);
       }
@@ -50,237 +58,154 @@ export default function SegmentationDashboard() {
     fetchData();
   }, [segmentationId, selectedFeatures, backendUrl]);
 
-  if (loading) {
+  if (loading) return <div className="p-10 text-center text-xl">Loading segments...</div>;
+  if (!data) return <div className="p-10 text-center text-red-600">No data found</div>;
+
+  const { totalCustomers, totalRevenue, summaries } = data;
+
+  // SINGLE CLUSTER VIEW
+  if (selectedCluster !== null) {
+    const seg = summaries.find(s => s.cluster === selectedCluster);
+    if (!seg) return <div>Cluster not found</div>;
+
+    const radarData = [{
+      dimension: "Recency", value: Math.max(10, 100 - seg.avgRecencyDays / 3) },
+      { dimension: "Frequency", value: seg.avgOrders * 15 },
+      { dimension: "Monetary", value: seg.avgSpend / 8 },
+      { dimension: "Lifetime", value: seg.avgLifetimeMonths * 2 },
+      { dimension: "AOV", value: seg.avgAOV / 4 }
+    ];
+
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="text-2xl text-gray-600">Loading your customer segments...</div>
-      </div>
-    );
-  }
-
-  if (!data) {
-    return (
-      <div className="p-8 text-center">
-        <p className="text-red-600 text-xl">No data found. Please run segmentation first.</p>
-      </div>
-    );
-  }
-
-  const { totalCustomers, totalRevenue, summaries, featuresUsed } = data;
-
-  // Start editing name
-  const startEdit = (segment) => {
-    setEditingName(segment.cluster);
-    setTempName(segment.suggestedName || `Segment ${segment.cluster}`);
-  };
-
-  const saveName = (segment) => {
-    segment.suggestedName = tempName;
-    setEditingName(null);
-  };
-
-  // Export CSV
-  const exportCSV = () => {
-    const headers = ['Segment Name', 'Customers', '% Customers', 'Revenue %', 'Avg Spend', 'Avg Orders', 'Recency', 'Gender', 'Age Group', 'State'];
-    const rows = summaries.map(s => [
-      s.suggestedName || `Segment ${s.cluster}`,
-      s.size,
-      `${s.sizePct}%`,
-      `${s.revenuePct}%`,
-      `RM ${s.avgSpend.toFixed(0)}`,
-      s.avgOrders.toFixed(1),
-      `${Math.round(s.avgRecencyDays)} days`,
-      `${s.topGender} (${s.genderPct}%)`,
-      `${s.topAgeGroup} (${s.agePct}%)`,
-      `${s.topState} (${s.statePct}%)`
-    ]);
-
-    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `customer_segments_${segmentationId}.csv`;
-    a.click();
-  };
-
-  // Chart data
-  const pieData = summaries.map(s => ({
-    name: s.suggestedName || `Segment ${s.cluster}`,
-    value: s.sizePct,
-    revenue: s.revenuePct
-  }));
-
-  const radarData = summaries.map(s => ({
-    segment: s.suggestedName || `Segment ${s.cluster}`,
-    Recency: Math.max(10, 100 - s.avgRecencyDays / 3),
-    Frequency: s.avgOrders * 10,
-    Monetary: s.avgSpend / 10,
-    Lifetime: s.avgLifetimeMonths * 2,
-    AOV: s.avgAOV / 5
-  }));
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Customer Segmentation Results</h1>
-              <p className="text-gray-600 mt-2">
-                <strong>{totalCustomers.toLocaleString()}</strong> customers • 
-                <strong> RM {(totalRevenue / 1000000).toFixed(2)}M</strong> revenue • 
-                <span className="ml-3 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
-                  {featuresUsed.join(' + ')}
-                </span>
-              </p>
-            </div>
+      <div className="flex min-h-screen bg-gray-50">
+        <UserSidebar />
+        <div className="flex-1 p-8 pt-20">
+          <Navbar />
+          <div className="max-w-6xl mx-auto">
             <button
-              onClick={exportCSV}
-              className="flex items-center gap-2 px-5 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium"
+              onClick={() => setSelectedCluster(null)}
+              className="mb-6 flex items-center gap-2 text-blue-600 hover:text-blue-800"
             >
-              <Download size={20} />
-              Export Results
+              <ArrowLeft size={20} /> Back to All Segments
             </button>
+          <h1 className="text-4xl font-bold text-blue-800 mb-2">{seg.suggestedName}</h1>
+          <p className="text-xl text-gray-600 mb-8">
+            {seg.size.toLocaleString()} customers • {seg.revenuePct}% of total revenue
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+            <div className="bg-white p-6 rounded-2xl shadow-lg">
+              <div className="flex items-center gap-3 mb-2">
+                <Users className="text-blue-600" />
+                <p className="text-gray-600">Segment Size</p>
+              </div>
+              <p className="text-3xl font-bold">{seg.sizePct}%</p>
+              <p className="text-sm text-gray-500">of all customers</p>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-lg">
+              <div className="flex items-center gap-3 mb-2">
+                <DollarSign className="text-green-600" />
+                <p className="text-gray-600">Avg Spend</p>
+              </div>
+              <p className="text-3xl font-bold">RM {seg.avgSpend.toFixed(0)}</p>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-lg">
+              <div className="flex items-center gap-3 mb-2">
+                <Clock className="text-blue-600" />
+                <p className="text-gray-600">Last Purchase</p>
+              </div>
+              <p className="text-3xl font-bold">{Math.round(seg.avgRecencyDays)} days ago</p>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-lg">
+              <div className="flex items-center gap-3 mb-2">
+                <Calendar className="text-orange-600" />
+                <p className="text-gray-600">Customer Lifetime</p>
+              </div>
+              <p className="text-3xl font-bold">{seg.avgLifetimeMonths.toFixed(0)} months</p>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Tabs */}
-      <div className="max-w-7xl mx-auto px-6 mt-8">
-        <div className="flex space-x-8 border-b">
-          {['overview', 'hybrid table', 'behavior'].map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`pb-4 px-2 capitalize font-medium text-lg transition ${
-                activeTab === tab
-                  ? 'text-purple-600 border-b-3 border-purple-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {tab === 'hybrid table' ? 'Hybrid Segments' : tab}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-8">
-          {/* Overview */}
-          {activeTab === 'overview' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="bg-white p-8 rounded-xl shadow-lg">
-                <h3 className="text-xl font-bold mb-4">Customer Distribution</h3>
-                <ResponsiveContainer width="100%" height={350}>
-                  <PieChart>
-                    <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={120} label>
-                      {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="bg-white p-8 rounded-xl shadow-lg">
-                <h3 className="text-xl font-bold mb-4">Revenue Contribution</h3>
-                <ResponsiveContainer width="100%" height={350}>
-                  <PieChart>
-                    <Pie data={pieData} dataKey="revenue" nameKey="name" innerRadius={70} outerRadius={120} label>
-                      {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip formatter={(v) => `${v}%`} />
-                  </PieChart>
-                </ResponsiveContainer>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="bg-white p-8 rounded-2xl shadow-lg">
+              <h3 className="text-2xl font-bold mb-6">Who Are They?</h3>
+              <div className="space-y-4 text-lg">
+                <p><strong>Age:</strong> {seg.topAgeGroup}</p>
+                <p><strong>Gender:</strong> {seg.topGender} ({seg.genderPct}%)</p>
+                <p><strong>Location:</strong> {seg.topState} → {seg.topCity}</p>
+                <p><strong>Payment:</strong> {seg.topPayment}</p>
+                <p><strong>Active Time:</strong> {seg.topDayPart === "Evening" ? <Sun className="inline" /> : <Moon className="inline" />} {seg.topDayPart}</p>
               </div>
             </div>
-          )}
 
-          {/* Hybrid Table */}
-          {activeTab === 'hybrid table' && (
-            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-              <div className="p-6 bg-purple-50">
-                <h2 className="text-2xl font-bold text-purple-900">Your Customer Segments</h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 text-left text-sm font-medium text-gray-700">
-                    <tr>
-                      <th className="p-5">Segment Name</th>
-                      <th className="p-5">Size (%)</th>
-                      <th className="p-5">Revenue (%)</th>
-                      <th className="p-5">Behavior</th>
-                      <th className="p-5">Demographic</th>
-                      <th className="p-5">Geographic</th>
-                      <th className="p-5">Best Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summaries.map((s) => (
-                      <tr key={s.cluster} className="border-t hover:bg-purple-50 transition">
-                        <td className="p-5 font-semibold text-purple-700">
-                          {editingName === s.cluster ? (
-                            <div className="flex items-center gap-2">
-                              <input
-                                value={tempName}
-                                onChange={(e) => setTempName(e.target.value)}
-                                className="px-3 py-1 border rounded-md"
-                                autoFocus
-                              />
-                              <button onClick={() => saveName(s)}><Check className="text-green-600" /></button>
-                              <button onClick={() => setEditingName(null)}><X className="text-red-600" /></button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-3">
-                              <span>{s.suggestedName || `Segment ${s.cluster}`}</span>
-                              <button onClick={() => startEdit(s)} className="text-gray-500 hover:text-purple-600">
-                                <Edit2 size={16} />
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-5">{s.sizePct}% ({s.size.toLocaleString()})</td>
-                        <td className="p-5 font-bold text-green-600">{s.revenuePct}%</td>
-                        <td className="p-5 text-sm">
-                          <div>Recency: <strong>{Math.round(s.avgRecencyDays)} days</strong></div>
-                          <div>Orders: <strong>{s.avgOrders.toFixed(1)}</strong></div>
-                          <div>AOV: <strong>RM {s.avgAOV.toFixed(0)}</strong></div>
-                        </td>
-                        <td className="p-5">{s.topAgeGroup} • {s.topGender} ({s.genderPct}%)</td>
-                        <td className="p-5">{s.topState} ({s.statePct}%)</td>
-                        <td className="p-5">{s.topDayPart}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Behavior Radar */}
-          {activeTab === 'behavior' && (
-            <div className="bg-white p-8 rounded-xl shadow-lg">
-              <h3 className="text-xl font-bold mb-6 text-center">Behavioral Comparison</h3>
-              <ResponsiveContainer width="100%" height={500}>
+            <div className="bg-white p-8 rounded-2xl shadow-lg">
+              <h3 className="text-2xl font-bold mb-6">Behavioral Profile</h3>
+              <ResponsiveContainer width="100%" height={350}>
                 <RadarChart data={radarData}>
-                  <PolarGrid stroke="#e0e0e0" />
-                  <PolarAngleAxis dataKey="segment" />
-                  <PolarRadiusAxis angle={90} domain={[0, 100]} />
-                  {radarData.map((entry, i) => (
-                    <Radar
-                      key={i}
-                      name={entry.segment}
-                      dataKey={Object.keys(entry).filter(k => k !== 'segment')}
-                      stroke={COLORS[i]}
-                      fill={COLORS[i]}
-                      fillOpacity={0.4}
-                    />
-                  ))}
-                  <Legend />
-                  <Tooltip />
+                  <PolarGrid />
+                  <PolarAngleAxis dataKey="dimension" />
+                  <PolarRadiusAxis domain={[0, 100]} />
+                  <Radar name={seg.suggestedName} dataKey="value" stroke={COLORS[seg.cluster % COLORS.length]} fill={COLORS[seg.cluster % COLORS.length]} fillOpacity={0.6} />
                 </RadarChart>
               </ResponsiveContainer>
             </div>
-          )}
+          </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // MAIN OVERVIEW: ALL CLUSTERS
+  return (
+    <div className="flex min-h-screen bg-gray-50">
+      <UserSidebar />
+      <div className="flex-1 p-8 pt-20">
+        <Navbar />
+        <div className="max-w-7xl mx-auto">
+        <h1 className="text-4xl font-bold text-center mb-4">Your Customer Segments</h1>
+        <p className="text-center text-xl text-gray-600 mb-12">
+          {totalCustomers.toLocaleString()} customers analyzed • {summaries.length} segments discovered
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {summaries.map((seg) => (
+            <div
+              key={seg.cluster}
+              onClick={() => setSelectedCluster(seg.cluster)}
+              className="bg-white rounded-3xl shadow-xl overflow-hidden cursor-pointer transform hover:scale-105 transition duration-300"
+            >
+              <div className={`h-32`} style={{ backgroundColor: COLORS[seg.cluster % COLORS.length] + '20' }}>
+                <div className="p-6 text-center">
+                  <h2 className="text-3xl font-bold text-gray-800">{seg.suggestedName}</h2>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Customers</span>
+                  <span className="text-2xl font-bold">{seg.sizePct}%</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Revenue Share</span>
+                  <span className="text-2xl font-bold text-green-600">{seg.revenuePct}%</span>
+                </div>
+
+                <div className="pt-4 border-t">
+                  <p className="text-sm text-gray-600">Avg Spend: <strong>RM {seg.avgSpend.toFixed(0)}</strong></p>
+                  <p className="text-sm text-gray-600">Last Seen: <strong>{Math.round(seg.avgRecencyDays)} days ago</strong></p>
+                  <p className="text-sm text-gray-600">Main Location: <strong>{seg.topState}</strong></p>
+                </div>
+
+                <button className="w-full mt-4 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition">
+                  View Details →
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
         </div>
       </div>
     </div>
