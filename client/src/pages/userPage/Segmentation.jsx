@@ -74,8 +74,12 @@ const Segmentation = () => {
         if (cached && cached.customerDatasetId === selectedCustomer && cached.orderDatasetId === selectedOrder && cached.segmentationId) {
           setSegmentationId(cached.segmentationId);
           setSummary(cached.summary || null);
-          setRecommendedPairs(Array.isArray(cached.availablePairs) ? cached.availablePairs : []);
-          return; // skip fetch & merge
+          const pairs = Array.isArray(cached.availablePairs) ? cached.availablePairs : [];
+          // Only short-circuit if we actually have pairs cached; otherwise refresh from server
+          if (pairs.length > 0) {
+            setRecommendedPairs(pairs);
+            return; // skip fetch & merge
+          }
         }
       }
     } catch (_) {}

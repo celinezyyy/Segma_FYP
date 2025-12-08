@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const runSegmentationSchema = new mongoose.Schema({
-  selectedPair: { features: [{ type: String }] },
+  selectedPair: [String],
   bestK: { type: Number },
   evaluation: { type: Object },
   cluster_summary: { type: Object },
