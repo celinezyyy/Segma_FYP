@@ -481,7 +481,7 @@ export const prepareSegmentationData = async (req, res) => {
     for (const row of mergedData) {
       Object.keys(row || {}).forEach(k => featureSet.add(k));
     }
-    const availablePairs = segmentationPairs.filter(p => p.features.every(f => featureSet.has(f)));
+    const availablePairs = segmentationPairs.filter(p => p.features.every(({ key }) => featureSet.has(String(key))));
     console.log('[DEBUG] Available segmentation pairs:', availablePairs);
     const summaryPayload = {
       totalCustomers: mergedData.length,
@@ -732,8 +732,8 @@ export const runSegmentationFlow = async (req, res) => {
   try {
     const segmentationId = req.params.segmentationId;
     const { features } = req.body;
-    if (!Array.isArray(features) || features.length < 2) {
-      return res.status(400).json({ message: 'Please provide features: an array of two attributes.' });
+    if (!Array.isArray(features) || features.length < 3) {
+      return res.status(400).json({ message: 'Please provide features: an array of three attributes.' });
     }
 
     const segRecord = await segmentationModel.findById(segmentationId);
@@ -743,7 +743,7 @@ export const runSegmentationFlow = async (req, res) => {
 
     // === CACHE: If a run with the same features already exists, return it directly ===
     const existingRun = (segRecord.runsSegmentationResult || []).find(r => {
-      const saved = r.selectedPair?.features || [];
+      const saved = r.selectedPair || [];
       // Must match length
       if (saved.length !== features.length) return false;
 
@@ -794,7 +794,7 @@ export const runSegmentationFlow = async (req, res) => {
     }
 
     // Persist selection metadata for caching
-    result.selectedPair = { features: features }; 
+    result.selectedPair = features;
     segRecord.runsSegmentationResult.push(result);
     await segRecord.save();
 
@@ -817,70 +817,202 @@ export const runSegmentationFlow = async (req, res) => {
 //===============================================================================================
 export const showSegmentationResultInDashboard = async (req, res) => {
   try {
-    const { segmentationId } = req.params.segmentationId;
-    const { features } = req.body;
-    const seg = await segmentationModel.findById(segmentationId);
-    if (!seg) 
-      return res.status(404).json({ success: false, message: 'SegmentationID not found' });
+    const { segmentationId } = req.params;
+    const { features } = req.body; // expected array of feature keys used for the run
 
-    // Fetch merged dataset from GridFS
+    if (!segmentationId) {
+      return res.status(400).json({ success: false, message: 'segmentationId is required' });
+    }
+    if (!Array.isArray(features) || features.length === 0) {
+      return res.status(400).json({ success: false, message: 'features (selectedPair) is required as a non-empty array' });
+    }
+
+    // Scope to current user if available on request
+    const { userId } = req;
+    const seg = userId
+      ? await segmentationModel.findOne({ _id: segmentationId, user: userId })
+      : await segmentationModel.findById(segmentationId);
+
+    if (!seg) {
+      return res.status(404).json({ success: false, message: 'Segmentation record not found' });
+    }
+    if (!seg.mergedFileId) {
+      return res.status(404).json({ success: false, message: 'Merged dataset not found for this segmentation' });
+    }
+
+    // Find the exact run that matches the requested features (order-insensitive)
+    const reqSet = new Set(features.map(String));
+    const run = (seg.runsSegmentationResult || []).find(r => {
+      const saved = (r.selectedPair || []).map(String);
+      if (saved.length !== reqSet.size) return false;
+      return saved.every(f => reqSet.has(f));
+    });
+
+    if (!run) {
+      return res.status(404).json({
+        success: false,
+        message: 'No segmentation result found for the selected features. Please run segmentation first.'
+      });
+    }
+
+    // Build a map of customerid -> cluster from assignments
+    // Python returns: cluster_assignments = [{ customerid, cluster }, ...]
+    const assignmentMap = new Map();
+    const assignments = Array.isArray(run.cluster_assignments) ? run.cluster_assignments : [];
+    for (const rec of assignments) {
+      if (rec && rec.customerid !== undefined && rec.customerid !== null) {
+        assignmentMap.set(String(rec.customerid), rec.cluster);
+      }
+    }
+
+    // ========== 4. Stream merged CSV + compute rich summaries ==========
+    const summaries = {}; // cluster → stats
+    let totalCustomers = 0;
+    let totalRevenue = 0;
+
     const bucket = getGridFSBucket();
-    const mergedData = [];
+
     await new Promise((resolve, reject) => {
       bucket.openDownloadStream(seg.mergedFileId)
         .pipe(csvParser())
-        .on('data', (row) => mergedData.push(row))
+        .on('data', (row) => {
+          const cid = row?.customerid != null ? String(row.customerid) : null;
+          const cluster = cid ? (assignmentMap.get(cid) ?? null) : null;
+          const key = cluster !== null && cluster !== undefined ? cluster : 'Unassigned';
+
+          if (!summaries[key]) {
+            summaries[key] = {
+              size: 0,
+              spend: 0,
+              orders: 0,
+              aov: 0,
+              recency: 0,
+              lifetime: 0,
+              gender: {},
+              ageGroup: {},
+              state: {},
+              city: {},
+              payment: {},
+              dayPart: {}
+            };
+          }
+
+          const s = summaries[key];
+          s.size += 1;
+          totalCustomers += 1;
+
+          const spend = parseFloat(row.totalSpend || 0);
+          s.spend += spend;
+          totalRevenue += spend;
+
+          s.orders += parseInt(row.totalOrders || 0, 10);
+          s.aov += parseFloat(row.avgOrderValue || 0);
+          s.recency += parseFloat(row.daysSinceLastPurchase || row.recency || 9999); // fallback high
+          s.lifetime += parseFloat(row.customerLifetimeMonths || 0);
+
+          // Categorical
+          if (row.gender) s.gender[row.gender] = (s.gender[row.gender] || 0) + 1;
+          if (row.ageGroup) s.ageGroup[row.ageGroup] = (s.ageGroup[row.ageGroup] || 0) + 1;
+          if (row.state) s.state[row.state] = (s.state[row.state] || 0) + 1;
+          if (row.city) s.city[row.city] = (s.city[row.city] || 0) + 1;
+          if (row.favoritePaymentMethod) s.payment[row.favoritePaymentMethod] = (s.payment[row.favoritePaymentMethod] || 0) + 1;
+          if (row.favoriteDayPart) s.dayPart[row.favoriteDayPart] = (s.dayPart[row.favoriteDayPart] || 0) + 1;
+        })
         .on('end', resolve)
         .on('error', reject);
     });
-// WIP : TMR continue here, use get the mergefile dataset, and then use the features to append cluster result into merge dataset
-    // Get latest cluster assignments
-    const latestRun = seg.runsSegmentationResult[seg.runsSegmentationResult.length - 1];
-    const clusterAssignments = latestRun?.cluster_assignments || {};
 
-    // Combine merged dataset with cluster
-    const mergedWithClusters = mergedData.map(c => ({
-      ...c,
-      cluster: clusterAssignments[c.customerid] ?? 'Unassigned'
-    }));
+    // ========== 5. Helper: get top value + percentage ==========
+    const getTop = (obj) => {
+      if (!obj || Object.keys(obj).length === 0) return { top: 'N/A', pct: 0 };
+      const entries = Object.entries(obj);
+      entries.sort((a, b) => b[1] - a[1]);
+      const pct = Number(((entries[0][1] / summaries[Object.keys(summaries).find(k => summaries[k] === obj)]?.size) * 100).toFixed(0));
+      return { top: entries[0][0], pct };
+    };
 
-    // 4️⃣ Summarize clusters
-    const clusterSummaries = {};
-    mergedWithClusters.forEach(c => {
-      const cid = c.cluster;
-      if (!clusterSummaries[cid]) clusterSummaries[cid] = { total: 0, totalSpending: 0, totalAge: 0, genderCount: {}, cityCount: {} };
+    // ========== 6. Convert to final enriched format ==========
+    const enrichedSummaries = Object.keys(summaries).map(key => {
+      const data = summaries[key];
+      const isUnassigned = key === 'Unassigned';
+      const clusterId = isUnassigned ? -1 : Number(key);
 
-      clusterSummaries[cid].total += 1;
-      clusterSummaries[cid].totalSpending += parseFloat(c.totalSpending || 0);
-      clusterSummaries[cid].totalAge += parseFloat(c.age || 0);
+      const sizePct = totalCustomers > 0 ? Number((data.size / totalCustomers * 100).toFixed(1)) : 0;
+      const revenuePct = totalRevenue > 0 ? Number((data.spend / totalRevenue * 100).toFixed(1)) : 0;
 
-      if (c.gender) clusterSummaries[cid].genderCount[c.gender] = (clusterSummaries[cid].genderCount[c.gender] || 0) + 1;
-      if (c.city) clusterSummaries[cid].cityCount[c.city] = (clusterSummaries[cid].cityCount[c.city] || 0) + 1;
+      const genderTop = getTop(data.gender);
+      const ageTop = getTop(data.ageGroup);
+      const stateTop = getTop(data.state);
+
+      return {
+        cluster: clusterId,
+        size: data.size,
+        sizePct,
+        revenue: Number(data.spend.toFixed(2)),
+        revenuePct,
+        avgSpend: Number((data.spend / data.size).toFixed(2)),
+        avgAOV: Number((data.aov / data.size).toFixed(2)),
+        avgOrders: Number((data.orders / data.size).toFixed(2)),
+        avgRecencyDays: Number((data.recency / data.size).toFixed(1)),
+        avgLifetimeMonths: Number((data.lifetime / data.size).toFixed(1)),
+        topGender: genderTop.top,
+        genderPct: genderTop.pct,
+        topAgeGroup: ageTop.top,
+        agePct: ageTop.pct,
+        topState: stateTop.top,
+        statePct: stateTop.pct,
+        topCity: getTop(data.city).top,
+        topPayment: getTop(data.payment).top,
+        topDayPart: getTop(data.dayPart).top,
+        suggestedName: null // will be added below
+      };
     });
 
-    // Convert counts to human-readable summaries
-    for (const cid in clusterSummaries) {
-      const data = clusterSummaries[cid];
-      data.avgSpending = (data.totalSpending / data.total).toFixed(2);
-      data.avgAge = (data.totalAge / data.total).toFixed(1);
-      data.topGender = Object.entries(data.genderCount).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
-      data.topCity = Object.entries(data.cityCount).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
+    // ========== 7. Auto-generate segment names (optional but looks pro) ==========
+    const isClassicRFM = features.length === 3 &&
+      features.includes('recency') &&
+      features.includes('frequency') &&
+      features.includes('monetary');
 
-      // Remove raw totals to reduce payload
-      delete data.totalSpending;
-      delete data.totalAge;
-      delete data.genderCount;
-      delete data.cityCount;
+    if (isClassicRFM) {
+      // Sort by monetary descending → classic RFM naming
+      enrichedSummaries
+        .filter(s => s.cluster !== -1)
+        .sort((a, b) => b.avgSpend - a.avgSpend);
+
+      const rfMNames = ["Champions", "Loyal Customers", "Potential Loyalists", "At Risk", "Hibernating", "Lost"];
+      enrichedSummaries.forEach((s, i) => {
+        if (s.cluster !== -1) s.suggestedName = rfMNames[i] || `Segment ${s.cluster}`;
+      });
+    } else {
+      // Generic nice names for other options
+      enrichedSummaries.forEach((s, i) => {
+        if (s.cluster !== -1) {
+          const names = ["High-Value Regulars", "Occasional Spenders", "New Explorers", "Sleeping Giants", "Price-Sensitive", "Loyal Enthusiasts"];
+          s.suggestedName = names[i] || `Segment ${s.cluster}`;
+        }
+      });
     }
 
+    // ========== 8. Final response ==========
     res.json({
       success: true,
-      mergedWithClusters,
-      clusterSummaries
+      data: {
+        totalCustomers,
+        totalRevenue: Number(totalRevenue.toFixed(2)),
+        averageSpendOverall: totalCustomers > 0 ? Number((totalRevenue / totalCustomers).toFixed(2)) : 0,
+        summaries: enrichedSummaries.filter(s => s.cluster !== -1), // hide Unassigned unless needed
+        unassignedCount: summaries['Unassigned']?.size || 0,
+        featuresUsed: features
+      }
     });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[showSegmentationResultInDashboard] Error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate dashboard data',
+      error: err.message
+    });
   }
 };
