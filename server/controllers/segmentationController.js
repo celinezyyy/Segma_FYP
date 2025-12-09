@@ -851,9 +851,20 @@ export const showSegmentationResultInDashboard = async (req, res) => {
 
     const bucket = getGridFSBucket();
 
+    // Determine availability from CSV headers
+    let includeGender = false;
+    let includeAgeGroup = false;
+
     await new Promise((resolve, reject) => {
+      const parser = csvParser();
+      parser.on('headers', (headers) => {
+        // Headers as-is; merged CSV uses camelCase 'ageGroup' when present
+        includeGender = headers.includes('gender');
+        includeAgeGroup = headers.includes('ageGroup');
+      });
+
       bucket.openDownloadStream(seg.mergedFileId)
-        .pipe(csvParser())
+        .pipe(parser)
         .on('data', (row) => {
           const cid = row?.customerid != null ? String(row.customerid) : null;
           const cluster = cid ? (assignmentMap.get(cid) ?? null) : null;
@@ -892,10 +903,12 @@ export const showSegmentationResultInDashboard = async (req, res) => {
           s.lifetime += parseFloat(row.customerLifetimeMonths);
 
           // Categorical
-          if (row.gender) 
+          if (row.gender) {
             s.gender[row.gender] = (s.gender[row.gender] || 0) + 1;
-          if (row.ageGroup) 
+          }
+          if (row.ageGroup) {
             s.ageGroup[row.ageGroup] = (s.ageGroup[row.ageGroup] || 0) + 1;
+          }
           if (row.state) 
             s.state[row.state] = (s.state[row.state] || 0) + 1;
           if (row.city) 
@@ -912,6 +925,8 @@ export const showSegmentationResultInDashboard = async (req, res) => {
         .on('end', resolve)
         .on('error', reject);
     });
+
+    // At this point, includeGender/includeAgeGroup reflect header presence
 
     // ========== 5. Helper: get top value + percentage ==========
     const getTop = (obj) => {
@@ -951,7 +966,7 @@ export const showSegmentationResultInDashboard = async (req, res) => {
       const purchaseHourTop = getTop(data.purchaseHour);   
       const favoriteItemTop = getTop(data.item);           
 
-      return {
+      const segment = {
         cluster: clusterId,
         size: data.size,
         sizePct,
@@ -963,11 +978,7 @@ export const showSegmentationResultInDashboard = async (req, res) => {
         avgRecencyDays: Number((data.recency / data.size).toFixed(1)),
         avgLifetimeMonths: Number((data.lifetime / data.size).toFixed(1)),
 
-        // Demographics & Geography
-        topGender: genderTop.top,
-        genderPct: genderTop.pct,
-        topAgeGroup: ageTop.top,
-        agePct: ageTop.pct,
+        // Geography
         topState: stateTop.top,
         statePct: stateTop.pct,
         topCity: cityTop.top,
@@ -975,13 +986,24 @@ export const showSegmentationResultInDashboard = async (req, res) => {
         // Behavioral Preferences
         topPayment: paymentTop.top,
         topDayPart: dayPartTop.top,
-        topPurchaseHour: purchaseHourTop.top !== 'N/A' ? formatHour(purchaseHourTop.top) : 'N/A',  // ← Formatted
-        purchaseHourPct: purchaseHourTop.pct,   
+        topPurchaseHour: purchaseHourTop.top !== 'N/A' ? formatHour(purchaseHourTop.top) : 'N/A',
+        purchaseHourPct: purchaseHourTop.pct,
         topFavoriteItem: favoriteItemTop.top,
-        favoriteItemPct: favoriteItemTop.pct,   
+        favoriteItemPct: favoriteItemTop.pct,
 
         suggestedName: null // will be added later
       };
+
+      if (includeGender) {
+        segment.topGender = genderTop.top;
+        segment.genderPct = genderTop.pct;
+      }
+      if (includeAgeGroup) {
+        segment.topAgeGroup = ageTop.top;
+        segment.agePct = ageTop.pct;
+      }
+
+      return segment;
     });
 
     // ========== 7. Auto-generate segment names (optional but looks pro) ==========
