@@ -56,11 +56,6 @@ const aggregateOrderData = (orderRows) => {
     if (item) {
       customerOrders[customerId].items.push(item);
     }
-    
-    // Collect payment methods (to find favorite payment method later)
-    if (paymentMethod) {
-      customerOrders[customerId].paymentMethods.push(paymentMethod);
-    }
 
     // Collect purchase time if available (e.g., "14:35:00")
     if (purchaseTime) {
@@ -113,19 +108,6 @@ const aggregateOrderData = (orderRows) => {
     } else if (data.totalOrders > 0) {
       purchaseFrequency = data.totalOrders; // Customer less than a month old
     }
-
-    // === FIND FAVORITE PAYMENT METHOD ===
-    // Count how many times each payment method was used
-    const paymentMethodCounts = {};
-    data.paymentMethods.forEach(method => {
-      paymentMethodCounts[method] = (paymentMethodCounts[method] || 0) + 1;
-    });
-    // Find the method with highest count
-    const favoritePaymentMethod = Object.keys(paymentMethodCounts).length > 0
-      ? Object.keys(paymentMethodCounts).reduce((a, b) => 
-          paymentMethodCounts[a] > paymentMethodCounts[b] ? a : b
-        )
-      : null;
 
     // === FIND FAVORITE ITEM ===
     // Count how many times each item was purchased
@@ -186,7 +168,6 @@ const aggregateOrderData = (orderRows) => {
       firstPurchaseDate: firstPurchaseDate ? firstPurchaseDate.toISOString().split('T')[0] : null,
       customerLifetimeMonths: customerLifetimeMonths || 0,
       purchaseFrequency: purchaseFrequency ? parseFloat(purchaseFrequency.toFixed(2)) : 0,
-      favoritePaymentMethod: favoritePaymentMethod,
       favoriteItem: favoriteItem,
       favoritePurchaseHour: favoritePurchaseHour,   // Optional, integer 0-23
       favoriteDayPart: favoriteDayPart,             // Optional, one of Night/Morning/Afternoon/Evening
@@ -243,7 +224,6 @@ const mergeCustomerAndOrderData = (customerRows, aggregatedOrderData) => {
       daysSinceLastPurchase: orderData.daysSinceLastPurchase || null,
       customerLifetimeMonths: orderData.customerLifetimeMonths || 0,
       purchaseFrequency: orderData.purchaseFrequency || 0,
-      favoritePaymentMethod: orderData.favoritePaymentMethod || null,
       favoriteItem: orderData.favoriteItem || null,
       favoritePurchaseHour: orderData.favoritePurchaseHour ?? null,
       favoriteDayPart: orderData.favoriteDayPart ?? null,
