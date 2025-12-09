@@ -184,7 +184,6 @@ const aggregateOrderData = (orderRows) => {
       avgOrderValue: parseFloat(avgOrderValue.toFixed(2)),
       lastPurchaseDate: lastPurchaseDate ? lastPurchaseDate.toISOString().split('T')[0] : null,  // Format: YYYY-MM-DD
       firstPurchaseDate: firstPurchaseDate ? firstPurchaseDate.toISOString().split('T')[0] : null,
-      daysSinceLastPurchase: daysSinceLastPurchase,
       customerLifetimeMonths: customerLifetimeMonths || 0,
       purchaseFrequency: purchaseFrequency ? parseFloat(purchaseFrequency.toFixed(2)) : 0,
       favoritePaymentMethod: favoritePaymentMethod,
@@ -883,8 +882,8 @@ export const showSegmentationResultInDashboard = async (req, res) => {
           if (!summaries[key]) {
             summaries[key] = {
               size: 0,
-              spend: 0,
               orders: 0,
+              spend: 0,
               aov: 0,
               recency: 0,
               lifetime: 0,
@@ -893,30 +892,42 @@ export const showSegmentationResultInDashboard = async (req, res) => {
               state: {},
               city: {},
               payment: {},
-              dayPart: {}
+              dayPart: {},
+              purchaseHour: {},   
+              item: {}
             };
           }
 
           const s = summaries[key];
-          s.size += 1;
           totalCustomers += 1;
+          s.size += 1;
 
-          const spend = parseFloat(row.totalSpend || 0);
+          s.orders += parseInt(row.totalOrders);
+          const spend = parseFloat(row.totalSpend);
           s.spend += spend;
           totalRevenue += spend;
 
-          s.orders += parseInt(row.totalOrders || 0, 10);
-          s.aov += parseFloat(row.avgOrderValue || 0);
-          s.recency += parseFloat(row.daysSinceLastPurchase || row.recency || 9999); // fallback high
-          s.lifetime += parseFloat(row.customerLifetimeMonths || 0);
+          s.aov += parseFloat(row.avgOrderValue);
+          s.recency += parseFloat(row.recency); 
+          s.lifetime += parseFloat(row.customerLifetimeMonths);
 
           // Categorical
-          if (row.gender) s.gender[row.gender] = (s.gender[row.gender] || 0) + 1;
-          if (row.ageGroup) s.ageGroup[row.ageGroup] = (s.ageGroup[row.ageGroup] || 0) + 1;
-          if (row.state) s.state[row.state] = (s.state[row.state] || 0) + 1;
-          if (row.city) s.city[row.city] = (s.city[row.city] || 0) + 1;
-          if (row.favoritePaymentMethod) s.payment[row.favoritePaymentMethod] = (s.payment[row.favoritePaymentMethod] || 0) + 1;
-          if (row.favoriteDayPart) s.dayPart[row.favoriteDayPart] = (s.dayPart[row.favoriteDayPart] || 0) + 1;
+          if (row.gender) 
+            s.gender[row.gender] = (s.gender[row.gender] || 0) + 1;
+          if (row.ageGroup) 
+            s.ageGroup[row.ageGroup] = (s.ageGroup[row.ageGroup] || 0) + 1;
+          if (row.state) 
+            s.state[row.state] = (s.state[row.state] || 0) + 1;
+          if (row.city) 
+            s.city[row.city] = (s.city[row.city] || 0) + 1;
+          if (row.favoritePaymentMethod) 
+            s.payment[row.favoritePaymentMethod] = (s.payment[row.favoritePaymentMethod] || 0) + 1;
+          if (row.favoriteDayPart) 
+            s.dayPart[row.favoriteDayPart] = (s.dayPart[row.favoriteDayPart] || 0) + 1;
+          if (row.favoriteItem) 
+            s.item[row.favoriteItem] = (s.item[row.favoriteItem] || 0) + 1;
+          if (row.favoritePurchaseHour) 
+            s.purchaseHour[row.favoritePurchaseHour] = (s.purchaseHour[row.favoritePurchaseHour] || 0) + 1;
         })
         .on('end', resolve)
         .on('error', reject);
@@ -931,6 +942,16 @@ export const showSegmentationResultInDashboard = async (req, res) => {
       return { top: entries[0][0], pct };
     };
 
+    // ========== 5.1 Helper: Format hour to 8 PM format ==========
+    const formatHour = (hourStr) => {
+      if (!hourStr || hourStr === 'N/A') return 'N/A';
+      const hour = parseInt(hourStr, 10);
+      if (isNaN(hour)) return hourStr;
+      const period = hour >= 12 ? 'PM' : 'AM';
+      const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+      return `${displayHour} ${period}`;
+    };
+
     // ========== 6. Convert to final enriched format ==========
     const enrichedSummaries = Object.keys(summaries).map(key => {
       const data = summaries[key];
@@ -940,9 +961,15 @@ export const showSegmentationResultInDashboard = async (req, res) => {
       const sizePct = totalCustomers > 0 ? Number((data.size / totalCustomers * 100).toFixed(1)) : 0;
       const revenuePct = totalRevenue > 0 ? Number((data.spend / totalRevenue * 100).toFixed(1)) : 0;
 
+      // Get top values
       const genderTop = getTop(data.gender);
       const ageTop = getTop(data.ageGroup);
       const stateTop = getTop(data.state);
+      const cityTop = getTop(data.city);
+      const paymentTop = getTop(data.payment);
+      const dayPartTop = getTop(data.dayPart);
+      const purchaseHourTop = getTop(data.purchaseHour);   
+      const favoriteItemTop = getTop(data.item);           
 
       return {
         cluster: clusterId,
@@ -955,16 +982,25 @@ export const showSegmentationResultInDashboard = async (req, res) => {
         avgOrders: Number((data.orders / data.size).toFixed(2)),
         avgRecencyDays: Number((data.recency / data.size).toFixed(1)),
         avgLifetimeMonths: Number((data.lifetime / data.size).toFixed(1)),
+
+        // Demographics & Geography
         topGender: genderTop.top,
         genderPct: genderTop.pct,
         topAgeGroup: ageTop.top,
         agePct: ageTop.pct,
         topState: stateTop.top,
         statePct: stateTop.pct,
-        topCity: getTop(data.city).top,
-        topPayment: getTop(data.payment).top,
-        topDayPart: getTop(data.dayPart).top,
-        suggestedName: null // will be added below
+        topCity: cityTop.top,
+
+        // Behavioral Preferences
+        topPayment: paymentTop.top,
+        topDayPart: dayPartTop.top,
+        topPurchaseHour: purchaseHourTop.top !== 'N/A' ? formatHour(purchaseHourTop.top) : 'N/A',  // ← Formatted
+        purchaseHourPct: purchaseHourTop.pct,   
+        topFavoriteItem: favoriteItemTop.top,
+        favoriteItemPct: favoriteItemTop.pct,   
+
+        suggestedName: null // will be added later
       };
     });
 

@@ -53,12 +53,13 @@ export const segmentationPairs = [
     tagline: "Spot churn early",
     features: [
       { key: "recency", label: "Recency", unit: "days since last purchase" },
-      { key: "daysSinceLastPurchase", label: "Days Since Last Purchase", unit: "days" },
+      { key: "favoritePurchaseHour", label: "Favorite Purchase Hour", unit: "hour of day" },
       { key: "purchaseFrequency", label: "Purchase Frequency", unit: "orders/month" }
     ],
     benefits: [
       "Detects potential churn risk",
-      "Great for time-sensitive businesses"
+      "Great for time-sensitive businesses",
+      "Incorporates timing preferences for better engagement insights"
     ],
     icon: "⏳"
   }
