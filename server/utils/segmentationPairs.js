@@ -9,11 +9,9 @@ export const segmentationPairs = [
       { key: "monetary", label: "Monetary Value", unit: "MYR" }
     ],
     benefits: [
-      "Most stable",
-      "Highly validated academically",
-      "Universal",
-      "Retail + e-commerce standard",
-      "Works well for 90% SMEs"
+      "Find VIPs, frequent buyers, and churn-risk customers",
+      "Widely used and proven in retail & e-commerce",
+      "Clear and reliable for most SMEs"
     ],
     icon: "🏆"
   },
@@ -27,8 +25,9 @@ export const segmentationPairs = [
       { key: "totalOrders", label: "Total Orders", unit: "orders" }
     ],
     benefits: [
-      "Identifies high spenders & bulk buyers",
-      "Highlights low-value or price-sensitive customers"
+      "Identify high-spending vs low-spending customers",
+      "Understand price-sensitive or bulk-buyer groups",
+      "Useful for pricing, upselling, and product strategy"
     ],
     icon: "🛍️"
   },
@@ -42,8 +41,9 @@ export const segmentationPairs = [
       { key: "totalSpend", label: "Total Spend", unit: "MYR" }
     ],
     benefits: [
-      "Shows long-term loyalty",
-      "New vs returning high-value customers"
+      "See who stays with your brand the longest",
+      "Separate new customers from loyal high-value ones",
+      "Useful for retention and membership programs"
     ],
     icon: "❤️"
   },
@@ -57,9 +57,9 @@ export const segmentationPairs = [
       { key: "purchaseFrequency", label: "Purchase Frequency", unit: "orders/month" }
     ],
     benefits: [
-      "Detects potential churn risk",
-      "Great for time-sensitive businesses",
-      "Incorporates timing preferences for better engagement insights"
+      "Detect early churn through timing patterns",
+      "Learn customers’ preferred buying hours",
+      "Useful for scheduling promotions at the right time"
     ],
     icon: "⏳"
   }
