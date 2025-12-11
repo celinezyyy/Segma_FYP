@@ -169,7 +169,7 @@ export default function SegmentationDashboard() {
       <div className="flex-1 flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 text-lg font-medium">Merging and aggregating data...</p>
+          <p className="text-gray-600 text-lg font-medium">Loading segmentation insights...</p>
           <p className="text-gray-500 text-sm mt-2">This may take a moment</p>
         </div>
       </div>);
@@ -177,7 +177,7 @@ export default function SegmentationDashboard() {
 
   const { totalCustomers, totalRevenue, averageSpendOverall, summaries } = data;
 
-  // === OVERVIEW DASHBOARD ===
+  // ==================================== OVERVIEW DASHBOARD ====================================
   if (selectedCluster === 'overview') {
     
     // Aggregate total counts across clusters
@@ -210,9 +210,9 @@ export default function SegmentationDashboard() {
                   <div className="p-3 bg-blue-100 rounded-xl">
                     <Users className="w-7 h-7 text-blue-600" />
                   </div>
-                  <p className="text-base font-medium text-gray-600">Total Customers</p>
+                  <p className="text-xl font-medium text-gray-600">Total Customers</p>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{totalCustomers.toLocaleString()}</p>
+                <p className="text-center text-2xl font-bold text-gray-900">{totalCustomers.toLocaleString()}</p>
               </div>
 
               {/* Total Revenue */}
@@ -221,9 +221,9 @@ export default function SegmentationDashboard() {
                   <div className="p-3 bg-green-100 rounded-xl">
                     <DollarSign className="w-7 h-7 text-green-600" />
                   </div>
-                  <p className="text-base font-medium text-gray-600">Total Revenue</p>
+                  <p className="text-xl font-medium text-gray-600">Total Revenue</p>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">RM {totalRevenue.toFixed(0).toLocaleString()}</p>
+                <p className="text-center text-2xl font-bold text-gray-900">RM {totalRevenue.toFixed(2).toLocaleString()}</p>
               </div>
 
               {/* Average Spend */}
@@ -232,9 +232,9 @@ export default function SegmentationDashboard() {
                   <div className="p-3 bg-purple-100 rounded-xl">
                     <TrendingUp className="w-7 h-7 text-purple-600" />
                   </div>
-                  <p className="text-base font-medium text-gray-600">Avg Spend</p>
+                  <p className="text-xl font-medium text-gray-600">Average Spend</p>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">RM {averageSpendOverall.toFixed(0)}</p>
+                <p className="text-center text-2xl font-bold text-gray-900">RM {averageSpendOverall.toFixed(2)}</p>
               </div>
 
               {/* Segments Found */}
@@ -243,9 +243,9 @@ export default function SegmentationDashboard() {
                   <div className="p-3 bg-orange-100 rounded-xl">
                     <ShoppingBag className="w-7 h-7 text-orange-600" />
                   </div>
-                  <p className="text-base font-medium text-gray-600">Segments Found</p>
+                  <p className="text-xl font-medium text-gray-600">Segments Found</p>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{summaries.length}</p>
+                <p className="text-center text-2xl font-bold text-gray-900">{summaries.length}</p>
               </div>
             </div>
 
@@ -374,7 +374,7 @@ export default function SegmentationDashboard() {
     );
   }
 
-  // === CLUSTER DETAIL DASHBOARD ===
+  // ==================================== CLUSTER DETAIL DASHBOARD ====================================
   const seg = summaries[selectedCluster];
   const genderData = seg.genders || null;
   const ageData = seg.ageGroups || null;
@@ -389,20 +389,21 @@ export default function SegmentationDashboard() {
             onClick={() => setSelectedCluster('overview')}
             className="mb-6 flex items-center gap-2 text-indigo-700 hover:text-indigo-900 font-semibold"
           >
-            <ArrowLeft size={24} /> Back to Overview
+            <ArrowLeft size={22} /> Back to Overview Dashboard
           </button>
 
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-5xl font-bold text-indigo-900">{seg.suggestedName}</h1>
-              <p className="text-2xl text-gray-700 mt-2">
-                {seg.size.toLocaleString()} customers ({seg.sizePct}%) • RM {seg.revenue.toLocaleString()} ({seg.revenuePct}% of revenue)
-              </p>
-            </div>
+          {/* Title and Select Cluster Options */}
+          <div className="relative mb-8">
+            {/* Centered Title */}
+            <h1 className="text-3xl font-bold text-center text-indigo-900 mb-4">
+              {seg.suggestedName}
+            </h1>
+
+            {/* Top-right Select */}
             <select
               value={selectedCluster}
               onChange={(e) => setSelectedCluster(Number(e.target.value))}
-              className="px-6 py-4 text-lg rounded-xl border border-gray-300 bg-white shadow-md"
+              className="px-6 py-2 text-sm rounded-xl border border-gray-300 bg-white shadow-md absolute right-0 top-0"
             >
               {summaries.map((s, i) => (
                 <option key={i} value={i}>{s.suggestedName}</option>
@@ -411,39 +412,43 @@ export default function SegmentationDashboard() {
           </div>
 
           {/* Metric Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-            <div className="bg-white p-8 rounded-3xl shadow-xl">
-              <div className="flex items-center gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
+             <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow">
+              <div className="flex items-center gap-3 mb-3">
                 <Users className="w-10 h-10 text-blue-600" />
-                <p className="text-gray-600">Customers</p>
+                <p className="text-xl font-medium text-gray-600">Customers ({seg.sizePct}%)</p>
               </div>
-              <p className="text-4xl font-bold">{seg.sizePct}%</p>
-              <p className="text-gray-500">{seg.size.toLocaleString()} people</p>
+              <p className="text-center text-2xl font-bold text-gray-900">{seg.size.toLocaleString()} people</p>
             </div>
 
-            <div className="bg-white p-8 rounded-3xl shadow-xl">
-              <div className="flex items-center gap-4 mb-4">
-                <DollarSign className="w-10 h-10 text-green-600" />
-                <p className="text-gray-600">Avg Spend</p>
-              </div>
-              <p className="text-4xl font-bold">RM {seg.avgSpend.toFixed(0)}</p>
+            <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-3 bg-green-100 rounded-xl">
+                    <DollarSign className="w-7 h-7 text-green-600" />
+                  </div>
+                  <p className="text-xl font-medium text-gray-600">Average Spend</p>
+                </div>
+                <p className="text-center text-2xl font-bold text-gray-900">RM {seg.avgSpend.toFixed(2)}</p>
             </div>
 
-            <div className="bg-white p-8 rounded-3xl shadow-xl">
-              <div className="flex items-center gap-4 mb-4">
-                <Clock className="w-10 h-10 text-purple-600" />
-                <p className="text-gray-600">Avg Recency</p>
-              </div>
-              <p className="text-4xl font-bold">{Math.round(seg.avgRecencyDays)} days</p>
+            <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-3 bg-purple-100 rounded-xl">
+                    <Clock className="w-7 h-7 text-purple-600" />
+                  </div>
+                  <p className="text-xl font-medium text-gray-600">Average Recency</p>
+                </div>
+                <p className="text-center text-2xl font-bold text-gray-900">{Math.round(seg.avgRecencyDays)} days</p>
             </div>
 
-            <div className="bg-white p-8 rounded-3xl shadow-xl">
-              <div className="flex items-center gap-4 mb-4">
-                <ShoppingBag className="w-10 h-10 text-orange-600" />
-                <p className="text-gray-600">Top Product</p>
-              </div>
-              <p className="text-2xl font-bold">{seg.topFavoriteItem || 'N/A'}</p>
-              <p className="text-gray-500">{seg.favoriteItemPct}% prefer</p>
+            <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-3 bg-purple-100 rounded-xl">
+                    <ShoppingBag className="w-7 h-7 text-orange-600" />
+                  </div>
+                  <p className="text-xl font-medium text-gray-600">Top Product</p>
+                </div>
+                <p className="text-xl font-bold">{seg.topFavoriteItem}</p>
             </div>
           </div>
 
