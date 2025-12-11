@@ -1,6 +1,6 @@
 // SegmentationDashboard.jsx
 import React, { useEffect, useState, useContext, useMemo, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { AppContext } from '../../context/AppContext';
 import UserSidebar from '../../components/UserSidebar';
@@ -24,6 +24,7 @@ const COLORS = ['#1d4ed8', '#0ea5e9', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6'
 
 export default function SegmentationDashboard() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { segmentationId, selectedFeatures } = location.state || {};
   const { backendUrl } = useContext(AppContext);
 
@@ -346,7 +347,9 @@ export default function SegmentationDashboard() {
               {summaries.map((seg, idx) => (
                 <div
                   key={seg.cluster}
-                  onClick={() => setSelectedCluster(idx)}
+                  onClick={() => {
+                    navigate(`/segmentation/${segmentationId}/cluster/${idx}`, { state: { segmentationId, clusterIndex: idx, selectedFeatures } });
+                  }}
                   className="bg-white rounded-3xl shadow-2xl overflow-hidden cursor-pointer transform hover:scale-105 transition duration-300 border border-gray-200"
                 >
                   <div className={`h-40 bg-gradient-to-br ${COLORS[idx % COLORS.length]} to-indigo-600 opacity-90 flex items-center justify-center`}>
@@ -373,156 +376,4 @@ export default function SegmentationDashboard() {
       </div>
     );
   }
-
-  // ==================================== CLUSTER DETAIL DASHBOARD ====================================
-  const seg = summaries[selectedCluster];
-  const genderData = seg.genders || null;
-  const ageData = seg.ageGroups || null;
-
-  return (
-    <div className="flex min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <UserSidebar />
-      <div className="flex-1 p-6 pt-24">
-        <Navbar />
-        <div className="max-w-7xl mx-auto">
-          <button
-            onClick={() => setSelectedCluster('overview')}
-            className="mb-6 flex items-center gap-2 text-indigo-700 hover:text-indigo-900 font-semibold"
-          >
-            <ArrowLeft size={22} /> Back to Overview Dashboard
-          </button>
-
-          {/* Title and Select Cluster Options */}
-          <div className="relative mb-8">
-            {/* Centered Title */}
-            <h1 className="text-3xl font-bold text-center text-indigo-900 mb-4">
-              {seg.suggestedName}
-            </h1>
-
-            {/* Top-right Select */}
-            <select
-              value={selectedCluster}
-              onChange={(e) => setSelectedCluster(Number(e.target.value))}
-              className="px-6 py-2 text-sm rounded-xl border border-gray-300 bg-white shadow-md absolute right-0 top-0"
-            >
-              {summaries.map((s, i) => (
-                <option key={i} value={i}>{s.suggestedName}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Metric Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
-             <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow">
-              <div className="flex items-center gap-3 mb-3">
-                <Users className="w-10 h-10 text-blue-600" />
-                <p className="text-xl font-medium text-gray-600">Customers ({seg.sizePct}%)</p>
-              </div>
-              <p className="text-center text-2xl font-bold text-gray-900">{seg.size.toLocaleString()} people</p>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-3 bg-green-100 rounded-xl">
-                    <DollarSign className="w-7 h-7 text-green-600" />
-                  </div>
-                  <p className="text-xl font-medium text-gray-600">Average Spend</p>
-                </div>
-                <p className="text-center text-2xl font-bold text-gray-900">RM {seg.avgSpend.toFixed(2)}</p>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-3 bg-purple-100 rounded-xl">
-                    <Clock className="w-7 h-7 text-purple-600" />
-                  </div>
-                  <p className="text-xl font-medium text-gray-600">Average Recency</p>
-                </div>
-                <p className="text-center text-2xl font-bold text-gray-900">{Math.round(seg.avgRecencyDays)} days</p>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-3 bg-purple-100 rounded-xl">
-                    <ShoppingBag className="w-7 h-7 text-orange-600" />
-                  </div>
-                  <p className="text-xl font-medium text-gray-600">Top Product</p>
-                </div>
-                <p className="text-xl font-bold">{seg.topFavoriteItem}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Products by Revenue */}
-            <div className="bg-white p-8 rounded-3xl shadow-xl">
-              <h3 className="text-2xl font-bold mb-6 text-gray-800">Top Products by Revenue</h3>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={(seg.items || []).slice(0, 10)} layout="horizontal">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" tickFormatter={(v) => `RM${(v / 1000).toFixed(0)}k`} />
-                  <YAxis dataKey="name" type="category" width={120} />
-                  <Tooltip formatter={(v) => `RM ${v.toLocaleString()}`} />
-                  <Bar dataKey="revenue" fill="#10b981" radius={[0, 8, 8, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Geographic Distribution */}
-            <div className="bg-white p-8 rounded-3xl shadow-xl">
-              <h3 className="text-2xl font-bold mb-6 text-gray-800">Top States by Revenue</h3>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={(seg.states || []).slice(0, 10)} layout="horizontal">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" tickFormatter={(v) => `RM${(v / 1000).toFixed(0)}k`} />
-                  <YAxis dataKey="name" type="category" width={100} />
-                  <Tooltip formatter={(v) => `RM ${v.toLocaleString()}`} />
-                  <Bar dataKey="revenue" fill="#3b82f6" radius={[0, 8, 8, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Optional Demographics */}
-            {genderData && (
-              <div className="bg-white p-8 rounded-3xl shadow-xl lg:col-span-2">
-                <h3 className="text-2xl font-bold mb-6 text-gray-800">Gender Breakdown</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={genderData}
-                      dataKey="pct"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={100}
-                      label={(entry) => `${entry.name} ${entry.pct}%`}
-                    >
-                      {genderData.map((entry, i) => (
-                        <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-
-            {ageData && (
-              <div className="bg-white p-8 rounded-3xl shadow-xl lg:col-span-2">
-                <h3 className="text-2xl font-bold mb-6 text-gray-800">Age Group Distribution</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={ageData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip formatter={(v) => `${v}%`} />
-                    <Bar dataKey="pct" fill="#8b5cf6" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 }
