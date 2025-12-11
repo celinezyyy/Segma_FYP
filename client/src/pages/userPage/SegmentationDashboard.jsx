@@ -127,6 +127,19 @@ export default function SegmentationDashboard() {
     const fetchData = async () => {
       setLoading(true);
       try {
+        const featuresKey = Array.isArray(selectedFeatures) ? selectedFeatures.join(',') : String(selectedFeatures);
+        const cacheKey = `segmentationDashboard:${segmentationId}:${featuresKey}`;
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          // Optional: simple TTL in ms (e.g., 5 minutes)
+          const ttlMs = 5 * 60 * 1000;
+          if (parsed && parsed.timestamp && Date.now() - parsed.timestamp < ttlMs) {
+            setData(parsed.payload);
+            return; // use cache; skip network
+          }
+        }
+
         const res = await axios.post(
           `${backendUrl}/api/segmentation/${segmentationId}/dashboard`,
           { features: selectedFeatures },
@@ -137,7 +150,10 @@ export default function SegmentationDashboard() {
             ...s,
             suggestedName: s.suggestedName || `Segment ${i + 1}`
           }));
-          setData({ ...res.data.data, summaries });
+          const payload = { ...res.data.data, summaries };
+          setData(payload);
+          // cache the result for faster subsequent loads
+          localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), payload }));
         }
       } catch (err) {
         console.error(err);
@@ -148,7 +164,15 @@ export default function SegmentationDashboard() {
     fetchData();
   }, [segmentationId, selectedFeatures, backendUrl]);
 
-  if (loading) return <div className="p-20 text-center text-2xl text-gray-600">Loading segmentation insights...</div>;
+  if (loading) 
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 text-lg font-medium">Merging and aggregating data...</p>
+          <p className="text-gray-500 text-sm mt-2">This may take a moment</p>
+        </div>
+      </div>);
   if (!data) return <div className="p-20 text-center text-red-600 text-xl">No segmentation data available</div>;
 
   const { totalCustomers, totalRevenue, averageSpendOverall, summaries } = data;
