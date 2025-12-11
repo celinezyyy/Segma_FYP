@@ -88,11 +88,11 @@ export default function SegmentationDashboard() {
   const xTickAngle = useMemo(() => {
     if (!stateCount || !stateChartWidth) return 0;
     const pxPerLabel = stateChartWidth / Math.max(1, stateCount);
-    return pxPerLabel < 80 ? -30 : 0;
+    return pxPerLabel < 90 ? -30 : 0;
   }, [stateCount, stateChartWidth]);
 
   const stateChartMargin = useMemo(
-    () => ({ top: 20, right: 30, left: 20, bottom: xTickAngle ? 80 : 5 }),
+    () => ({ top: 20, right: 30, left: 20, bottom: xTickAngle ? 90 : 5 }),
     [xTickAngle]
   );
 
@@ -180,18 +180,19 @@ export default function SegmentationDashboard() {
   // === OVERVIEW DASHBOARD ===
   if (selectedCluster === 'overview') {
     
-//====================
-    // Aggregate top items
-    const itemAgg = {};
+    // Aggregate total counts across clusters
+    const productCounts = {};
     summaries.forEach(s => {
       (s.items || []).forEach(it => {
-        itemAgg[it.name] = (itemAgg[it.name] || 0) + it.revenue;
+        productCounts[it.name] = (productCounts[it.name] || 0) + it.count;
       });
     });
-    const topProducts = Object.entries(itemAgg)
-      .map(([name, revenue]) => ({ name, revenue }))
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 10);
+
+    // Convert to array and sort top 5
+    const topProducts = Object.entries(productCounts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
 
     return (
       <div className="flex min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -292,7 +293,11 @@ export default function SegmentationDashboard() {
                         labelFormatter={(label) => label}
                         formatter={(value) => `RM ${value.toLocaleString()}`}
                       />
-                    <Legend />
+                    <Legend 
+                      layout="horizontal"
+                      verticalAlign="bottom"
+                      align="center"
+                    />
                     {summaries.map((s, idx) => (
                       <Bar
                         key={s.cluster}
@@ -312,15 +317,25 @@ export default function SegmentationDashboard() {
               </div>
 
               <div className="bg-white p-8 rounded-3xl shadow-xl">
-                <h3 className="text-2xl font-bold mb-6 text-gray-800">Most Popular Products (Revenue)</h3>
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={topProducts} layout="horizontal">
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" tickFormatter={(v) => `RM${(v / 1000).toFixed(0)}k`} />
-                    <YAxis dataKey="name" type="category" width={120} />
-                    <Tooltip formatter={(v) => `RM ${v.toLocaleString()}`} />
-                    <Bar dataKey="revenue" fill="#10b981" radius={[0, 8, 8, 0]} />
-                  </BarChart>
+                <h3 className="text-2xl font-bold mb-6 text-gray-800">Top 5 Best Selling Products</h3>
+                <ResponsiveContainer width="100%" height={500}>
+                  <PieChart>
+                    <Pie
+                      data={topProducts}
+                      dataKey="count"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={120}
+                      label={(entry) => `${entry.name} (${entry.count})`}
+                    >
+                      {topProducts.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => `${value} orders`} />
+                    <Legend />
+                  </PieChart>
                 </ResponsiveContainer>
               </div>
             </div>
