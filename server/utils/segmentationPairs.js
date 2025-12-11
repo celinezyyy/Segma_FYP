@@ -42,7 +42,7 @@ export const segmentationPairs = [
       { key: "totalSpend", label: "Total Spend", unit: "MYR" }
     ],
     benefits: [
-      "Shows long-teMYR loyalty",
+      "Shows long-term loyalty",
       "New vs returning high-value customers"
     ],
     icon: "❤️"

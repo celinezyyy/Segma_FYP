@@ -391,14 +391,14 @@ const Segmentation = () => {
             </h3>
 
             {recommendedPairs.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-6xl mx-auto">
                 {recommendedPairs.map(p => {
                   const selected = selectedPairId === p.id;
 
                   return (
                     <label
                       key={p.id}
-                      className={`relative cursor-pointer rounded-2xl border-2 p-8 transition-all duration-300 ${
+                      className={`relative cursor-pointer rounded-2xl border-2 p-5 transition-all duration-300 ${
                         selected
                           ? "border-blue-600 bg-blue-50/70 shadow-2xl ring-4 ring-blue-200 scale-105"
                           : "border-gray-200 bg-white shadow-lg hover:shadow-2xl hover:scale-102"
@@ -416,9 +416,9 @@ const Segmentation = () => {
                         </div>
                       )}
 
-                      <div className="flex gap-6 items-start">
+                      <div className="flex gap-5 items-start">
                         {/* Icon */}
-                        <div className="text-6xl flex-shrink-0">{p.icon}</div>
+                        <div className="text-5xl flex-shrink-0">{p.icon}</div>
 
                         <div className="flex-1">
                           {/* Title + tagline */}
@@ -426,7 +426,7 @@ const Segmentation = () => {
                           <p className="text-lg text-blue-600 font-medium mb-6">{p.tagline}</p>
 
                           {/* Benefits with green checks */}
-                          <ul className="space-y-3 mb-6">
+                          <ul className="space-y-2 mb-6">
                             {p.benefits.map((benefit, i) => (
                               <li key={i} className="flex items-center gap-3 text-gray-700">
                                 <span className="text-green-600 text-xl font-bold">✔</span>
