@@ -26,16 +26,13 @@ const aggregateOrderData = (orderRows) => {
         totalOrders: 0,          // Count of orders
         purchaseDates: [],       // Array of purchase dates for recency calculation
         items: [],               // Array of items purchased
-        paymentMethods: [],      // Array of payment methods used
       };
     }
 
     // Extract values from the row (all lowercase column names from cleaning)
     const spend = parseFloat(row['total spend']) || 0;  // Convert to number, default to 0
-    const quantity = parseInt(row['purchase quantity']) || 0;
     const purchaseDate = row['purchase date'];  // Format: YYYY-MM-DD from cleaning
     const item = row['purchase item'];
-    const paymentMethod = row['transaction method'];
     const purchaseTime = row['purchase time']; // Optional: derived by cleaning if time info exists
 
     // Add this order to the customer's order history
@@ -221,7 +218,6 @@ const mergeCustomerAndOrderData = (customerRows, aggregatedOrderData) => {
       avgOrderValue: orderData.avgOrderValue || 0,
       lastPurchaseDate: orderData.lastPurchaseDate || null,
       firstPurchaseDate: orderData.firstPurchaseDate || null,
-      daysSinceLastPurchase: orderData.daysSinceLastPurchase || null,
       customerLifetimeMonths: orderData.customerLifetimeMonths || 0,
       purchaseFrequency: orderData.purchaseFrequency || 0,
       favoriteItem: orderData.favoriteItem || null,
@@ -453,8 +449,6 @@ export const prepareSegmentationData = async (req, res) => {
     } catch (csvErr) {
       console.warn('Failed to store merged CSV in GridFS:', csvErr?.message);
     }
-//WIP
-    // Persist availablePairs and summary snapshot on the record for quick reads
     // Build recommended pairs based on available features in merged data
     const featureSet = new Set();
     for (const row of mergedData) {
@@ -870,6 +864,9 @@ export const showSegmentationResultInDashboard = async (req, res) => {
           const cluster = cid ? (assignmentMap.get(cid) ?? null) : null;
           const key = cluster !== null && cluster !== undefined ? cluster : 'Unassigned';
 
+          row.cluster = key;
+          console.log("[DEBUG] After assign cluster result to dataset:", row);
+
           if (!summaries[key]) {
             summaries[key] = {
               size: 0,
@@ -882,21 +879,21 @@ export const showSegmentationResultInDashboard = async (req, res) => {
               ageGroup: {},
               state: {},
               city: {},
-              payment: {},
               dayPart: {},
               purchaseHour: {},   
-              item: {}
+              item: {},
+              stateSpend: {}
             };
           }
 
           const s = summaries[key];
-          totalCustomers += 1;
-          s.size += 1;
-
+          totalCustomers += 1;  // for overview size
+          
+          s.size += 1;  // for cluster size
           s.orders += parseInt(row.totalOrders);
           const spend = parseFloat(row.totalSpend);
           s.spend += spend;
-          totalRevenue += spend;
+          totalRevenue += spend;  // for overview size
 
           s.aov += parseFloat(row.avgOrderValue);
           s.recency += parseFloat(row.recency); 
@@ -906,21 +903,31 @@ export const showSegmentationResultInDashboard = async (req, res) => {
           if (row.gender) {
             s.gender[row.gender] = (s.gender[row.gender] || 0) + 1;
           }
+
           if (row.ageGroup) {
             s.ageGroup[row.ageGroup] = (s.ageGroup[row.ageGroup] || 0) + 1;
           }
-          if (row.state) 
+
+          // Accumulate customer count AND actual spend per state
+          if (row.state) {
+            if (!s.stateSpend) s.stateSpend = {};  // new object for spend
             s.state[row.state] = (s.state[row.state] || 0) + 1;
+            s.stateSpend[row.state] = (s.stateSpend[row.state] || 0) + parseFloat(row.totalSpend || 0);
+          }
+
           if (row.city) 
             s.city[row.city] = (s.city[row.city] || 0) + 1;
-          if (row.favoritePaymentMethod) 
-            s.payment[row.favoritePaymentMethod] = (s.payment[row.favoritePaymentMethod] || 0) + 1;
+
           if (row.favoriteDayPart) 
             s.dayPart[row.favoriteDayPart] = (s.dayPart[row.favoriteDayPart] || 0) + 1;
-          if (row.favoriteItem) 
-            s.item[row.favoriteItem] = (s.item[row.favoriteItem] || 0) + 1;
+
           if (row.favoritePurchaseHour) 
             s.purchaseHour[row.favoritePurchaseHour] = (s.purchaseHour[row.favoritePurchaseHour] || 0) + 1;
+
+          if (row.favoriteItem) {
+            s.item[row.favoriteItem] = (s.item[row.favoriteItem] || 0) + 1;
+          }
+          
         })
         .on('end', resolve)
         .on('error', reject);
@@ -930,7 +937,8 @@ export const showSegmentationResultInDashboard = async (req, res) => {
 
     // ========== 5. Helper: get top value + percentage ==========
     const getTop = (obj) => {
-      if (!obj || Object.keys(obj).length === 0) return { top: 'N/A', pct: 0 };
+      if (!obj || Object.keys(obj).length === 0) 
+        return { top: 'N/A', pct: 0 };
       const entries = Object.entries(obj);
       entries.sort((a, b) => b[1] - a[1]);
       const pct = Number(((entries[0][1] / summaries[Object.keys(summaries).find(k => summaries[k] === obj)]?.size) * 100).toFixed(0));
@@ -957,14 +965,13 @@ export const showSegmentationResultInDashboard = async (req, res) => {
       const revenuePct = totalRevenue > 0 ? Number((data.spend / totalRevenue * 100).toFixed(1)) : 0;
 
       // Get top values
-      const genderTop = getTop(data.gender);
-      const ageTop = getTop(data.ageGroup);
-      const stateTop = getTop(data.state);
-      const cityTop = getTop(data.city);
-      const paymentTop = getTop(data.payment);
+      // const genderTop = getTop(data.gender);
+      // const ageTop = getTop(data.ageGroup);
+      // const stateTop = getTop(data.state);
+      // const cityTop = getTop(data.city);
       const dayPartTop = getTop(data.dayPart);
       const purchaseHourTop = getTop(data.purchaseHour);   
-      const favoriteItemTop = getTop(data.item);           
+      // const favoriteItemTop = getTop(data.item);           
 
       const segment = {
         cluster: clusterId,
@@ -978,30 +985,56 @@ export const showSegmentationResultInDashboard = async (req, res) => {
         avgRecencyDays: Number((data.recency / data.size).toFixed(1)),
         avgLifetimeMonths: Number((data.lifetime / data.size).toFixed(1)),
 
-        // Geography
-        topState: stateTop.top,
-        statePct: stateTop.pct,
-        topCity: cityTop.top,
+        // state vs total revenue breakdown
+        states: Object.entries(data.state || {}).map(([name, count]) => ({
+          name,
+          count,
+          pct: Number((count / data.size * 100).toFixed(1)),
+          revenue: Number((data.stateSpend?.[name] || 0).toFixed(2))
+        })).sort((a, b) => b.revenue - a.revenue),
+
+       // item vs total count breakdown (top 5 favorite items)
+        items: Object.entries(data.item || {})
+          .map(([name, count]) => ({
+            name,
+            count,
+          }))
+          .sort((a, b) => b.count - a.count) // sort by count descending
+          .slice(0, 5), // only keep top 5
+
+        // city vs total customer count breakdown (top 10 cities)
+        cities: Object.entries(data.city || {})
+          .map(([name, count]) => ({
+            name,
+            count,
+            pct: Number((count / data.size * 100).toFixed(1))
+          }))
+          .sort((a, b) => b.count - a.count) // sort by customer count
+          .slice(0, 10), // take top 10
+
+        // // Geography
+        // topState: stateTop.top,
+        // statePct: stateTop.pct,
+        // topCity: cityTop.top,
 
         // Behavioral Preferences
-        topPayment: paymentTop.top,
         topDayPart: dayPartTop.top,
         topPurchaseHour: purchaseHourTop.top !== 'N/A' ? formatHour(purchaseHourTop.top) : 'N/A',
         purchaseHourPct: purchaseHourTop.pct,
-        topFavoriteItem: favoriteItemTop.top,
-        favoriteItemPct: favoriteItemTop.pct,
+        // topFavoriteItem: favoriteItemTop.top,
+        // favoriteItemPct: favoriteItemTop.pct,
 
         suggestedName: null // will be added later
       };
 
-      if (includeGender) {
-        segment.topGender = genderTop.top;
-        segment.genderPct = genderTop.pct;
-      }
-      if (includeAgeGroup) {
-        segment.topAgeGroup = ageTop.top;
-        segment.agePct = ageTop.pct;
-      }
+      // if (includeGender) {
+      //   segment.topGender = genderTop.top;
+      //   segment.genderPct = genderTop.pct;
+      // }
+      // if (includeAgeGroup) {
+      //   segment.topAgeGroup = ageTop.top;
+      //   segment.agePct = ageTop.pct;
+      // }
 
       return segment;
     });
