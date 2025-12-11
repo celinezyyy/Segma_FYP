@@ -899,6 +899,7 @@ export const showSegmentationResultInDashboard = async (req, res) => {
           s.recency += parseFloat(row.recency); 
           s.lifetime += parseFloat(row.customerLifetimeMonths);
 
+          // Demographics
           // Categorical
           if (row.gender) {
             s.gender[row.gender] = (s.gender[row.gender] || 0) + 1;
@@ -908,6 +909,7 @@ export const showSegmentationResultInDashboard = async (req, res) => {
             s.ageGroup[row.ageGroup] = (s.ageGroup[row.ageGroup] || 0) + 1;
           }
 
+          // Geography
           // Accumulate customer count AND actual spend per state
           if (row.state) {
             if (!s.stateSpend) s.stateSpend = {};  // new object for spend
@@ -918,6 +920,7 @@ export const showSegmentationResultInDashboard = async (req, res) => {
           if (row.city) 
             s.city[row.city] = (s.city[row.city] || 0) + 1;
 
+          // Behavioral
           if (row.favoriteDayPart) 
             s.dayPart[row.favoriteDayPart] = (s.dayPart[row.favoriteDayPart] || 0) + 1;
 
@@ -961,24 +964,21 @@ export const showSegmentationResultInDashboard = async (req, res) => {
       const isUnassigned = key === 'Unassigned';
       const clusterId = isUnassigned ? -1 : Number(key);
 
-      const sizePct = totalCustomers > 0 ? Number((data.size / totalCustomers * 100).toFixed(1)) : 0;
-      const revenuePct = totalRevenue > 0 ? Number((data.spend / totalRevenue * 100).toFixed(1)) : 0;
-
       // Get top values
-      // const genderTop = getTop(data.gender);
-      // const ageTop = getTop(data.ageGroup);
-      // const stateTop = getTop(data.state);
-      // const cityTop = getTop(data.city);
+      const genderTop = getTop(data.gender);
+      const ageTop = getTop(data.ageGroup);
+      const stateTop = getTop(data.state);
+      const cityTop = getTop(data.city);
       const dayPartTop = getTop(data.dayPart);
       const purchaseHourTop = getTop(data.purchaseHour);   
-      // const favoriteItemTop = getTop(data.item);           
+      const favoriteItemTop = getTop(data.item);           
 
       const segment = {
         cluster: clusterId,
         size: data.size,
-        sizePct,
+        sizePct: totalCustomers > 0 ? Number((data.size / totalCustomers * 100).toFixed(1)) : 0,
         revenue: Number(data.spend.toFixed(2)),
-        revenuePct,
+        revenuePct: totalRevenue > 0 ? Number((data.spend / totalRevenue * 100).toFixed(1)) : 0,
         avgSpend: Number((data.spend / data.size).toFixed(2)),
         avgAOV: Number((data.aov / data.size).toFixed(2)),
         avgOrders: Number((data.orders / data.size).toFixed(2)),
@@ -1013,28 +1013,28 @@ export const showSegmentationResultInDashboard = async (req, res) => {
           .slice(0, 10), // take top 10
 
         // // Geography
-        // topState: stateTop.top,
-        // statePct: stateTop.pct,
-        // topCity: cityTop.top,
+        topState: stateTop.top,
+        statePct: stateTop.pct,
+        topCity: cityTop.top,
 
         // Behavioral Preferences
         topDayPart: dayPartTop.top,
         topPurchaseHour: purchaseHourTop.top !== 'N/A' ? formatHour(purchaseHourTop.top) : 'N/A',
         purchaseHourPct: purchaseHourTop.pct,
-        // topFavoriteItem: favoriteItemTop.top,
-        // favoriteItemPct: favoriteItemTop.pct,
+        topFavoriteItem: favoriteItemTop.top,
+        favoriteItemPct: favoriteItemTop.pct,
 
         suggestedName: null // will be added later
       };
 
-      // if (includeGender) {
-      //   segment.topGender = genderTop.top;
-      //   segment.genderPct = genderTop.pct;
-      // }
-      // if (includeAgeGroup) {
-      //   segment.topAgeGroup = ageTop.top;
-      //   segment.agePct = ageTop.pct;
-      // }
+      if (includeGender) {
+        segment.topGender = genderTop.top;
+        segment.genderPct = genderTop.pct;
+      }
+      if (includeAgeGroup) {
+        segment.topAgeGroup = ageTop.top;
+        segment.agePct = ageTop.pct;
+      }
 
       return segment;
     });

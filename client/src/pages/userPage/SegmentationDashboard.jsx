@@ -1,5 +1,5 @@
 // SegmentationDashboard.jsx
-import React, { useEffect, useState, useContext } from 'react';
+import React, { useEffect, useState, useContext, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { AppContext } from '../../context/AppContext';
@@ -20,7 +20,7 @@ import {
 } from 'recharts';
 import { ArrowLeft, Users, DollarSign, ShoppingBag, MapPin, Clock, TrendingUp } from 'lucide-react';
 
-const COLORS = ['#2563eb', '#3b82f6', '#60a5fa', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+const COLORS = ['#1d4ed8', '#0ea5e9', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
 export default function SegmentationDashboard() {
   const location = useLocation();
@@ -30,6 +30,96 @@ export default function SegmentationDashboard() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [selectedCluster, setSelectedCluster] = useState('overview'); // 'overview' or cluster index
+  const stateChartWrapperRef = useRef(null);
+  const [stateChartWidth, setStateChartWidth] = useState(0);
+  const [selectedStateFilter, setSelectedStateFilter] = useState(null);
+  const [stateSortOrder, setStateSortOrder] = useState('desc'); // 'asc' | 'desc'
+
+  // Compute Top States by Revenue across clusters (always call hooks at top level)
+  const stateStackData = useMemo(() => {
+    const summariesLocal = data?.summaries || [];
+    if (!summariesLocal.length) return [];
+
+    // 1. Collect all unique states
+    const allStatesSet = new Set();
+    summariesLocal.forEach(s => {
+      (s.states || []).forEach(st => allStatesSet.add(st.name));
+    });
+    const allStates = Array.from(allStatesSet);
+
+    // 2. Build chart data
+    const chartData = allStates.map(stateName => {
+      const row = { state: stateName };
+      summariesLocal.forEach(s => {
+        const st = (s.states || []).find(x => x.name === stateName);
+        row[`cluster_${s.cluster}`] = st ? st.revenue : 0;
+      });
+      return row;
+    });
+
+    // 3. Sort by total revenue descending
+    chartData.sort((a, b) => {
+      const sumA = Object.keys(a).filter(k => k.startsWith('cluster_')).reduce((acc, key) => acc + a[key], 0);
+      const sumB = Object.keys(b).filter(k => k.startsWith('cluster_')).reduce((acc, key) => acc + b[key], 0);
+      return sumB - sumA;
+    });
+
+    // 4. Take top 10 states
+    return chartData.slice(0, 10);
+  }, [data?.summaries]);
+
+  // Observe chart container width for dynamic tick sizing
+  useEffect(() => {
+    const el = stateChartWrapperRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const w = entry.contentRect?.width || el.clientWidth || 0;
+        setStateChartWidth(w);
+      }
+    });
+    ro.observe(el);
+    // set initial width
+    setStateChartWidth(el.clientWidth || 0);
+    return () => ro.disconnect();
+  }, []);
+
+  const stateCount = stateStackData.length;
+  const xTickAngle = useMemo(() => {
+    if (!stateCount || !stateChartWidth) return 0;
+    const pxPerLabel = stateChartWidth / Math.max(1, stateCount);
+    return pxPerLabel < 80 ? -30 : 0;
+  }, [stateCount, stateChartWidth]);
+
+  const stateChartMargin = useMemo(
+    () => ({ top: 20, right: 30, left: 20, bottom: xTickAngle ? 80 : 5 }),
+    [xTickAngle]
+  );
+
+  // Filter state data when a bar is clicked
+  const stateSortedData = useMemo(() => {
+    const arr = [...stateStackData];
+    const sum = (row) => Object.keys(row)
+      .filter(k => k.startsWith('cluster_'))
+      .reduce((acc, k) => acc + (row[k] || 0), 0);
+    arr.sort((a, b) => {
+      const sa = sum(a);
+      const sb = sum(b);
+      return stateSortOrder === 'asc' ? sa - sb : sb - sa;
+    });
+    return arr.slice(0, 10);
+  }, [stateStackData, stateSortOrder]);
+
+  const filteredStateStackData = useMemo(
+    () => (selectedStateFilter ? stateSortedData.filter(d => d.state === selectedStateFilter) : stateSortedData),
+    [stateSortedData, selectedStateFilter]
+  );
+
+  const handleStateBarClick = (entry) => {
+    const stateName = entry?.payload?.state;
+    if (!stateName) return;
+    setSelectedStateFilter(prev => (prev === stateName ? null : stateName));
+  };
 
   useEffect(() => {
     if (!segmentationId || !selectedFeatures) return;
@@ -65,18 +155,8 @@ export default function SegmentationDashboard() {
 
   // === OVERVIEW DASHBOARD ===
   if (selectedCluster === 'overview') {
-    // Aggregate top states across all clusters
-    const stateAgg = {};
-    summaries.forEach(s => {
-      (s.states || []).forEach(st => {
-        stateAgg[st.name] = (stateAgg[st.name] || 0) + st.revenue;
-      });
-    });
-    const topStates = Object.entries(stateAgg)
-      .map(([name, revenue]) => ({ name, revenue }))
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 10);
-
+    
+//====================
     // Aggregate top items
     const itemAgg = {};
     summaries.forEach(s => {
@@ -145,18 +225,66 @@ export default function SegmentationDashboard() {
             </div>
 
             {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-16">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-16">
               <div className="bg-white p-8 rounded-3xl shadow-xl">
-                <h3 className="text-2xl font-bold mb-6 text-gray-800">Top States by Revenue</h3>
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={topStates} layout="horizontal">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-2xl font-bold text-gray-800">States by Revenue</h3>
+                  <div className="flex items-center gap-3">
+                    <label className="text-sm text-gray-600">Sort:</label>
+                    <button
+                      onClick={() => setStateSortOrder(o => (o === 'asc' ? 'desc' : 'asc'))}
+                      className="px-3 py-1 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
+                      title="Toggle sort order"
+                    >
+                      {stateSortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                    </button>
+                    {selectedStateFilter && (
+                      <>
+                        <span className="text-sm text-gray-600">Filtered: <strong>{selectedStateFilter}</strong></span>
+                        <button
+                          onClick={() => setSelectedStateFilter(null)}
+                          className="px-3 py-1 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
+                        >
+                          Clear
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div ref={stateChartWrapperRef} className="w-full">
+                  <ResponsiveContainer width="100%" height={500}>
+                    <BarChart data={filteredStateStackData} margin={stateChartMargin}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" tickFormatter={(v) => `RM${(v / 1000).toFixed(0)}k`} />
-                    <YAxis dataKey="name" type="category" width={100} />
-                    <Tooltip formatter={(v) => `RM ${v.toLocaleString()}`} />
-                    <Bar dataKey="revenue" fill="#2563eb" radius={[0, 8, 8, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                      <XAxis
+                        dataKey="state"
+                        interval={0}
+                        tick={{ angle: -35, textAnchor: 'end' }}
+                        height={70}
+                        tickMargin={10}
+                        tickFormatter={(v) => (typeof v === 'string' && v.length > 12 ? v.slice(0, 11) + '…' : v)}
+                    />
+                    <YAxis />
+                      <Tooltip
+                        labelFormatter={(label) => label}
+                        formatter={(value) => `RM ${value.toLocaleString()}`}
+                      />
+                    <Legend />
+                    {summaries.map((s, idx) => (
+                      <Bar
+                        key={s.cluster}
+                        dataKey={`cluster_${s.cluster}`}
+                        stackId="a"
+                           fill={COLORS[idx % COLORS.length]}
+                           stroke="#ffffff"
+                           strokeWidth={1}
+                        name={s.suggestedName || `Cluster ${s.cluster}`}
+                          onClick={handleStateBarClick}
+                          cursor="pointer"
+                      />
+                    ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
 
               <div className="bg-white p-8 rounded-3xl shadow-xl">
