@@ -79,7 +79,8 @@ const DatasetSelection = () => {
       Swal.fire({
         icon: 'warning',
         title: 'Selection Required',
-        text: 'Please select one Customer and one Order dataset.'
+        text: 'Please select one Customer and one Order dataset.',
+        confirmButtonColor: '#3b82f6',
       });
       return;
     }
@@ -202,7 +203,8 @@ const DatasetSelection = () => {
                   Swal.fire({
                     icon: 'warning',
                     title: 'Selection Required',
-                    text: 'Please select one Customer dataset before proceeding.'
+                    text: 'Please select one Customer dataset before proceeding.',
+                    confirmButtonColor: '#3b82f6',
                   });
                 } else {
                   setActiveTab('order');
