@@ -5,7 +5,7 @@ import { AppContext } from '../../context/AppContext';
 import UserSidebar from '../../components/UserSidebar';
 import Navbar from '../../components/Navbar';
 import { ArrowLeft, Users, DollarSign, ShoppingBag, Clock } from 'lucide-react';
-import { ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend } from 'recharts';
 
 const COLORS = ['#1d4ed8', '#0ea5e9', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
@@ -170,65 +170,62 @@ export default function SegmentationClusterDashboard() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="bg-white p-8 rounded-3xl shadow-xl">
-              <h3 className="text-2xl font-bold mb-6 text-gray-800">Top Products by Revenue</h3>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={(seg.items || []).slice(0, 10)} layout="horizontal">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" tickFormatter={(v) => `RM${(v / 1000).toFixed(0)}k`} />
-                  <YAxis dataKey="name" type="category" width={120} />
-                  <Tooltip formatter={(v) => `RM ${v.toLocaleString()}`} />
-                  <Bar dataKey="revenue" fill="#10b981" radius={[0, 8, 8, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="bg-white p-8 rounded-3xl shadow-xl">
-              <h3 className="text-2xl font-bold mb-6 text-gray-800">Top States by Revenue</h3>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={(seg.states || []).slice(0, 10)} layout="horizontal">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" tickFormatter={(v) => `RM${(v / 1000).toFixed(0)}k`} />
-                  <YAxis dataKey="name" type="category" width={100} />
-                  <Tooltip formatter={(v) => `RM ${v.toLocaleString()}`} />
-                  <Bar dataKey="revenue" fill="#3b82f6" radius={[0, 8, 8, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            {genderData && (
-              <div className="bg-white p-8 rounded-3xl shadow-xl lg:col-span-2">
-                <h3 className="text-2xl font-bold mb-6 text-gray-800">Gender Breakdown</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie data={genderData} dataKey="pct" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={(e) => `${e.name} ${e.pct}%`}>
-                      {genderData.map((entry, i) => (
-                        <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-
-            {ageData && (
-              <div className="bg-white p-8 rounded-3xl shadow-xl lg:col-span-2">
-                <h3 className="text-2xl font-bold mb-6 text-gray-800">Age Group Distribution</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={ageData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip formatter={(v) => `${v}%`} />
-                    <Bar dataKey="pct" fill="#8b5cf6" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </div>
+        
         </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* States by Revenue (match overview style) */}
+            <div className="bg-white p-8 rounded-3xl shadow-xl">
+              <h3 className="text-2xl font-bold mb-6 text-gray-800">States by Revenue</h3>
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={(seg.states || []).slice(0, 10)} margin={{ top: 20, right: 30, left: 20, bottom: 70 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="name"
+                    interval={0}
+                    tick={{ angle: -35, textAnchor: 'end' }}
+                    height={70}
+                    tickMargin={10}
+                    tickFormatter={(v) => (typeof v === 'string' && v.length > 12 ? v.slice(0, 11) + '…' : v)}
+                  />
+                  <YAxis tickFormatter={(v) => `RM${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip formatter={(v) => `RM ${Number(v).toLocaleString()}`} />
+                  <Legend layout="horizontal" verticalAlign="bottom" align="center" />
+                  <Bar dataKey="revenue" fill="#3b82f6" name="Revenue" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Top 5 Best Selling Products (by count, match overview style) */}
+            <div className="bg-white p-8 rounded-3xl shadow-xl">
+              <h3 className="text-2xl font-bold mb-6 text-gray-800">Top 5 Best Selling Products</h3>
+              <ResponsiveContainer width="100%" height={400}>
+                <PieChart>
+                  <Pie
+                    data={(seg.items || [])
+                      .map(it => ({ name: it.name, count: it.count }))
+                      .sort((a, b) => b.count - a.count)
+                      .slice(0, 5)}
+                    dataKey="count"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={120}
+                    label={(entry) => `${entry.name} (${entry.count})`}
+                  >
+                    {(seg.items || [])
+                      .sort((a, b) => b.count - a.count)
+                      .slice(0, 5)
+                      .map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => `${value} orders`} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div> 
       </div>
     </div>
   );
