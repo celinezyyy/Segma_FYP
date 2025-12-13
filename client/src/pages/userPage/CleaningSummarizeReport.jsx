@@ -298,17 +298,17 @@ const DataQualityReport = () => {
     <div className="flex min-h-screen bg-gray-50">
       <UserSidebar />
       <main className="flex-grow px-4 md:px-8 pt-20 pb-20">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-4xl font-bold mb-8 text-center text-[#2C3E50] flex items-center justify-center gap-3">
-            <span className="text-5xl">📊</span>
-            Data Quality Report
+        <div className="max-w-full mx-auto">
+          <h1 className="text-2xl font-bold mb-5 text-center text-[#2C3E50] flex items-center justify-center gap-3">
+            <span className="text-2xl">📊</span>
+            Summarize Cleaning Report
           </h1>
 
           {/* Tab Navigation */}
           <div className="mb-6 flex justify-center">
             <div className="flex border-2 border-[#C3E5F1] rounded-lg overflow-hidden shadow-sm">
               <button
-                className={`px-8 py-3 font-semibold transition-all ${
+                className={`px-8 py-2 font-semibold transition-all ${
                   activeTab === 'customer' 
                     ? 'bg-[#C3E5F1] text-[#2C3E50]' 
                     : 'bg-white text-gray-600 hover:bg-gray-50'
@@ -318,7 +318,7 @@ const DataQualityReport = () => {
                 👤 Customer Report
               </button>
               <button
-                className={`px-8 py-3 font-semibold transition-all border-l-2 border-[#C3E5F1] ${
+                className={`px-8 py-2 font-semibold transition-all border-l-2 border-[#C3E5F1] ${
                   activeTab === 'order' 
                     ? 'bg-[#C3E5F1] text-[#2C3E50]' 
                     : 'bg-white text-gray-600 hover:bg-gray-50'

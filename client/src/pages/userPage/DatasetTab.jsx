@@ -375,7 +375,7 @@ const DatasetTab = () => {
                     <td className="py-3 px-6 text-center">
                       {dataset.isClean ? (
                         <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
-                          ✓ Cleaned
+                          ✓ Checked
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-semibold">
