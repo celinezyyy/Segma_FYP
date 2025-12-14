@@ -801,7 +801,7 @@ export const showSegmentationResultInDashboard = async (req, res) => {
   console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> ENTRY: showSegmentationResultInDashboard function >>>>>>>>>>>>>>>>>>>>>>>>');
   try {
     const { segmentationId } = req.params;
-    const { features } = req.body; // expected array of feature keys used for the run
+    const { features } = req.body;
 
     if (!segmentationId) {
       return res.status(400).json({ success: false, message: 'segmentationId is required' });
@@ -810,59 +810,37 @@ export const showSegmentationResultInDashboard = async (req, res) => {
       return res.status(400).json({ success: false, message: 'features (selectedPair) is required as a non-empty array' });
     }
 
-    // Scope to current user if available on request
     const { userId } = req;
     const seg = userId
       ? await segmentationModel.findOne({ _id: segmentationId, user: userId })
       : await segmentationModel.findById(segmentationId);
 
-    if (!seg) {
-      return res.status(404).json({ success: false, message: 'Segmentation record not found' });
-    }
-    if (!seg.mergedFileId) {
-      return res.status(404).json({ success: false, message: 'Merged dataset not found for this segmentation' });
-    }
+    if (!seg) return res.status(404).json({ success: false, message: 'Segmentation record not found' });
+    if (!seg.mergedFileId) return res.status(404).json({ success: false, message: 'Merged dataset not found' });
 
-    // Find the exact run that matches the requested features (order-insensitive)
     const reqSet = new Set(features.map(String));
     const run = (seg.runsSegmentationResult || []).find(r => {
       const saved = (r.selectedPair || []).map(String);
-      if (saved.length !== reqSet.size) return false;
-      return saved.every(f => reqSet.has(f));
+      return saved.length === reqSet.size && saved.every(f => reqSet.has(f));
     });
+    if (!run) return res.status(404).json({ success: false, message: 'No segmentation result found for the selected features. Please run segmentation first.' });
 
-    if (!run) {
-      return res.status(404).json({
-        success: false,
-        message: 'No segmentation result found for the selected features. Please run segmentation first.'
-      });
-    }
-
-    // Build a map of customerid -> cluster from assignments
-    // Python returns: cluster_assignments = [{ customerid, cluster }, ...]
+    // Map customer -> cluster
     const assignmentMap = new Map();
-    const assignments = Array.isArray(run.cluster_assignments) ? run.cluster_assignments : [];
-    for (const rec of assignments) {
-      if (rec && rec.customerid !== undefined && rec.customerid !== null) {
-        assignmentMap.set(String(rec.customerid), rec.cluster);
-      }
+    for (const rec of run.cluster_assignments || []) {
+      if (rec?.customerid != null) assignmentMap.set(String(rec.customerid), rec.cluster);
     }
 
-    // ========== 4. Stream merged CSV + compute rich summaries ==========
-    const summaries = {}; // cluster → stats
+    const summaries = {};
     let totalCustomers = 0;
     let totalRevenue = 0;
-
-    const bucket = getGridFSBucket();
-
-    // Determine availability from CSV headers
     let includeGender = false;
     let includeAgeGroup = false;
 
+    const bucket = getGridFSBucket();
     await new Promise((resolve, reject) => {
       const parser = csvParser();
       parser.on('headers', (headers) => {
-        // Headers as-is; merged CSV uses camelCase 'ageGroup' when present
         includeGender = headers.includes('gender');
         includeAgeGroup = headers.includes('ageGroup');
       });
@@ -872,93 +850,48 @@ export const showSegmentationResultInDashboard = async (req, res) => {
         .on('data', (row) => {
           const cid = row?.customerid != null ? String(row.customerid) : null;
           const cluster = cid ? (assignmentMap.get(cid) ?? null) : null;
-          const key = cluster !== null && cluster !== undefined ? cluster : 'Unassigned';
-
-          row.cluster = key;
-          // console.log("[DEBUG] After assign cluster result to dataset:", row);
+          const key = cluster != null ? cluster : 'Unassigned';
 
           if (!summaries[key]) {
             summaries[key] = {
-              size: 0,
-              orders: 0,
-              spend: 0,
-              aov: 0,
-              recency: 0,
-              lifetime: 0,
-              gender: {},
-              ageGroup: {},
-              state: {},
-              city: {},
-              dayPart: {},
-              purchaseHour: {},   
-              item: {},
-              stateSpend: {}
+              size: 0, orders: 0, spend: 0, aov: 0, recency: 0, lifetime: 0,
+              gender: {}, ageGroup: {}, state: {}, city: {}, dayPart: {}, purchaseHour: {}, item: {}, stateSpend: {}
             };
           }
 
           const s = summaries[key];
-          totalCustomers += 1;  // for overview size
-          
-          s.size += 1;  // for cluster size
-          s.orders += parseInt(row.totalOrders);
-          const spend = parseFloat(row.totalSpend);
+          totalCustomers += 1;
+          s.size += 1;
+          s.orders += parseInt(row.totalOrders || 0);
+          const spend = parseFloat(row.totalSpend || 0);
           s.spend += spend;
-          totalRevenue += spend;  // for overview size
+          totalRevenue += spend;
+          s.aov += parseFloat(row.avgOrderValue || 0);
+          s.recency += parseFloat(row.recency || 0);
+          s.lifetime += parseFloat(row.customerLifetimeMonths || 0);
 
-          s.aov += parseFloat(row.avgOrderValue);
-          s.recency += parseFloat(row.recency); 
-          s.lifetime += parseFloat(row.customerLifetimeMonths);
-
-          // Demographics
-          // Categorical
-          if (row.gender) {
-            s.gender[row.gender] = (s.gender[row.gender] || 0) + 1;
-          }
-
-          if (row.ageGroup) {
-            s.ageGroup[row.ageGroup] = (s.ageGroup[row.ageGroup] || 0) + 1;
-          }
-
-          // Geography
-          // Accumulate customer count AND actual spend per state
+          if (row.gender) s.gender[row.gender] = (s.gender[row.gender] || 0) + 1;
+          if (row.ageGroup) s.ageGroup[row.ageGroup] = (s.ageGroup[row.ageGroup] || 0) + 1;
           if (row.state) {
-            if (!s.stateSpend) s.stateSpend = {};  // new object for spend
             s.state[row.state] = (s.state[row.state] || 0) + 1;
-            s.stateSpend[row.state] = (s.stateSpend[row.state] || 0) + parseFloat(row.totalSpend || 0);
+            s.stateSpend[row.state] = (s.stateSpend[row.state] || 0) + spend;
           }
-
-          if (row.city) 
-            s.city[row.city] = (s.city[row.city] || 0) + 1;
-
-          // Behavioral
-          if (row.favoriteDayPart) 
-            s.dayPart[row.favoriteDayPart] = (s.dayPart[row.favoriteDayPart] || 0) + 1;
-
-          if (row.favoritePurchaseHour) 
-            s.purchaseHour[row.favoritePurchaseHour] = (s.purchaseHour[row.favoritePurchaseHour] || 0) + 1;
-
-          if (row.favoriteItem) {
-            s.item[row.favoriteItem] = (s.item[row.favoriteItem] || 0) + 1;
-          }
-          
+          if (row.city) s.city[row.city] = (s.city[row.city] || 0) + 1;
+          if (row.favoriteDayPart) s.dayPart[row.favoriteDayPart] = (s.dayPart[row.favoriteDayPart] || 0) + 1;
+          if (row.favoritePurchaseHour) s.purchaseHour[row.favoritePurchaseHour] = (s.purchaseHour[row.favoritePurchaseHour] || 0) + 1;
+          if (row.favoriteItem) s.item[row.favoriteItem] = (s.item[row.favoriteItem] || 0) + 1;
         })
         .on('end', resolve)
         .on('error', reject);
     });
 
-    // At this point, includeGender/includeAgeGroup reflect header presence
-
-    // ========== 5. Helper: get top value + percentage ==========
-    const getTop = (obj) => {
-      if (!obj || Object.keys(obj).length === 0) 
-        return { top: 'N/A', pct: 0 };
-      const entries = Object.entries(obj);
-      entries.sort((a, b) => b[1] - a[1]);
-      const pct = Number(((entries[0][1] / summaries[Object.keys(summaries).find(k => summaries[k] === obj)]?.size) * 100).toFixed(0));
+    const getTop = (obj, clusterSize) => {
+      if (!obj || Object.keys(obj).length === 0) return { top: 'N/A', pct: 0 };
+      const entries = Object.entries(obj).sort((a, b) => b[1] - a[1]);
+      const pct = Number(((entries[0][1] / clusterSize) * 100).toFixed(1));
       return { top: entries[0][0], pct };
     };
 
-    // ========== 5.1 Helper: Format hour to 8 PM format ==========
     const formatHour = (hourStr) => {
       if (!hourStr || hourStr === 'N/A') return 'N/A';
       const hour = parseInt(hourStr, 10);
@@ -968,74 +901,57 @@ export const showSegmentationResultInDashboard = async (req, res) => {
       return `${displayHour} ${period}`;
     };
 
-    // ========== 6. Convert to final enriched format ==========
+    const activePair = detectPair(features);
+
+    // Enrich clusters
     const enrichedSummaries = Object.keys(summaries).map(key => {
       const data = summaries[key];
       const isUnassigned = key === 'Unassigned';
       const clusterId = isUnassigned ? -1 : Number(key);
 
-      // Get top values
-      const genderTop = getTop(data.gender);
-      const ageTop = getTop(data.ageGroup);
-      const stateTop = getTop(data.state);
-      const cityTop = getTop(data.city);
-      const dayPartTop = getTop(data.dayPart);
-      const purchaseHourTop = getTop(data.purchaseHour);   
-      const favoriteItemTop = getTop(data.item);           
+      const genderTop = getTop(data.gender, data.size);
+      const ageTop = getTop(data.ageGroup, data.size);
+      const stateTop = getTop(data.state, data.size);
+      const cityTop = getTop(data.city, data.size);
+      const dayPartTop = getTop(data.dayPart, data.size);
+      const purchaseHourTop = getTop(data.purchaseHour, data.size);
+      const favoriteItemTop = getTop(data.item, data.size);
 
       const segment = {
         cluster: clusterId,
         size: data.size,
-        sizePct: totalCustomers > 0 ? Number((data.size / totalCustomers * 100).toFixed(1)) : 0,
+        sizePct: totalCustomers ? Number((data.size / totalCustomers * 100).toFixed(1)) : 0,
         revenue: Number(data.spend.toFixed(2)),
-        revenuePct: totalRevenue > 0 ? Number((data.spend / totalRevenue * 100).toFixed(1)) : 0,
+        revenuePct: totalRevenue ? Number((data.spend / totalRevenue * 100).toFixed(1)) : 0,
         avgSpend: Number((data.spend / data.size).toFixed(2)),
         avgAOV: Number((data.aov / data.size).toFixed(2)),
         avgOrders: Number((data.orders / data.size).toFixed(2)),
         avgRecencyDays: Number((data.recency / data.size).toFixed(1)),
         avgLifetimeMonths: Number((data.lifetime / data.size).toFixed(1)),
 
-        // state vs total revenue breakdown
         states: Object.entries(data.state || {}).map(([name, count]) => ({
-          name,
-          count,
+          name, count,
           pct: Number((count / data.size * 100).toFixed(1)),
           revenue: Number((data.stateSpend?.[name] || 0).toFixed(2))
         })).sort((a, b) => b.revenue - a.revenue),
 
-       // item vs total count breakdown (top 5 favorite items)
-        items: Object.entries(data.item || {})
-          .map(([name, count]) => ({
-            name,
-            count,
-            pct: Number((count / data.size * 100).toFixed(1)),
-          }))
-          .sort((a, b) => b.count - a.count) // sort by count descending
-          .slice(0, 5), // only keep top 5
+        items: Object.entries(data.item || {}).map(([name, count]) => ({
+          name, count, pct: Number((count / data.size * 100).toFixed(1))
+        })).sort((a, b) => b.count - a.count).slice(0, 5),
 
-        // city vs total customer count breakdown (top 10 cities)
-        cities: Object.entries(data.city || {})
-          .map(([name, count]) => ({
-            name,
-            count,
-            pct: Number((count / data.size * 100).toFixed(1))
-          }))
-          .sort((a, b) => b.count - a.count) // sort by customer count
-          .slice(0, 10), // take top 10
+        cities: Object.entries(data.city || {}).map(([name, count]) => ({
+          name, count, pct: Number((count / data.size * 100).toFixed(1))
+        })).sort((a, b) => b.count - a.count).slice(0, 10),
 
-        // // Geography
         topState: stateTop.top,
         statePct: stateTop.pct,
         topCity: cityTop.top,
 
-        // Behavioral Preferences
         topDayPart: dayPartTop.top,
         topPurchaseHour: purchaseHourTop.top !== 'N/A' ? formatHour(purchaseHourTop.top) : 'N/A',
         purchaseHourPct: purchaseHourTop.pct,
         topFavoriteItem: favoriteItemTop.top,
-        favoriteItemPct: favoriteItemTop.pct,
-
-        suggestedName: null // will be added later
+        favoriteItemPct: favoriteItemTop.pct
       };
 
       if (includeGender) {
@@ -1047,54 +963,152 @@ export const showSegmentationResultInDashboard = async (req, res) => {
         segment.agePct = ageTop.pct;
       }
 
+      // ---------------- Dynamic interpretation ----------------
+      const interpretation = interpretClusterDynamic(segment, Object.values(summaries).filter((_, i) => i !== 'Unassigned'), activePair);
+      segment.segmentType = interpretation.segmentType;
+      segment.keyInsight = interpretation.keyInsight;
+      segment.recommendedAction = interpretation.recommendedAction;
+
       return segment;
     });
 
-    // ========== 7. Auto-generate segment names (optional but looks pro) ==========
-    const isClassicRFM = features.length === 3 &&
-      features.includes('recency') &&
-      features.includes('frequency') &&
-      features.includes('monetary');
+    // ---------------- Suggested Names (generic, distinct per pair) ----------------
+    const namePools = {
+      rfm: ["Champions", "Loyal Customers", "Potential Loyalists", "At Risk", "Hibernating", "Lost"],
+      spending: ["High-Value Regulars", "Occasional Spenders", "New Explorers", "Sleeping Giants", "Price-Sensitive", "Loyal Enthusiasts"],
+      lifetime: ["Loyal Customers", "Growing Customers", "New Customers", "Steady Contributors", "Emerging", "Occasional"],
+      timebased: ["Active Customers", "Occasional Buyers", "Inactive Customers", "Weekend Shoppers", "Morning Buyers", "Evening Buyers"],
+      generic: ["Segment A", "Segment B", "Segment C", "Segment D", "Segment E"]
+    };
 
-    if (isClassicRFM) {
-      // Sort by monetary descending → classic RFM naming
-      enrichedSummaries
-        .filter(s => s.cluster !== -1)
-        .sort((a, b) => b.avgSpend - a.avgSpend);
-
-      const rfMNames = ["Champions", "Loyal Customers", "Potential Loyalists", "At Risk", "Hibernating", "Lost"];
-      enrichedSummaries.forEach((s, i) => {
-        if (s.cluster !== -1) s.suggestedName = rfMNames[i] || `Segment ${s.cluster}`;
+    enrichedSummaries
+      .filter(s => s.cluster !== -1)
+      .forEach((s, i) => {
+        s.suggestedName = namePools[activePair]?.[i] || `Segment ${s.cluster}`;
       });
-    } else {
-      // Generic nice names for other options
-      enrichedSummaries.forEach((s, i) => {
-        if (s.cluster !== -1) {
-          const names = ["High-Value Regulars", "Occasional Spenders", "New Explorers", "Sleeping Giants", "Price-Sensitive", "Loyal Enthusiasts"];
-          s.suggestedName = names[i] || `Segment ${s.cluster}`;
-        }
-      });
-    }
 
-    // ========== 8. Final response ==========
     res.json({
       success: true,
       data: {
         totalCustomers,
         totalRevenue: Number(totalRevenue.toFixed(2)),
-        averageSpendOverall: totalCustomers > 0 ? Number((totalRevenue / totalCustomers).toFixed(2)) : 0,
-        summaries: enrichedSummaries.filter(s => s.cluster !== -1), // hide Unassigned unless needed
+        averageSpendOverall: totalCustomers ? Number((totalRevenue / totalCustomers).toFixed(2)) : 0,
+        summaries: enrichedSummaries.filter(s => s.cluster !== -1),
         unassignedCount: summaries['Unassigned']?.size || 0,
         featuresUsed: features
       }
     });
-    console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> EXIT: showSegmentationResultInDashboard function >>>>>>>>>>>>>>>>>>>>>>>>');
+
+    console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> ENTRY: showSegmentationResultInDashboard function >>>>>>>>>>>>>>>>>>>>>>>>');
   } catch (err) {
     console.error('[showSegmentationResultInDashboard] Error:', err);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to generate dashboard data',
-      error: err.message
-    });
+    res.status(500).json({ success: false, message: 'Failed to generate dashboard data', error: err.message });
   }
+};
+
+
+const detectPair = (features = []) => {
+  const f = new Set(features);
+
+  if (['recency', 'frequency', 'monetary'].every(x => f.has(x))) return 'rfm';
+  if (['totalSpend', 'avgOrderValue', 'totalOrders'].every(x => f.has(x))) return 'spending';
+  if (['customerLifetimeMonths', 'purchaseFrequency', 'totalSpend'].every(x => f.has(x))) return 'lifetime';
+  if (['recency', 'favoritePurchaseHour', 'purchaseFrequency'].every(x => f.has(x))) return 'timebased';
+
+  return 'generic';
+};
+
+// Compute cluster-relative interpretation dynamically
+const interpretClusterDynamic = (cluster, allClusters, pair) => {
+  const { avgSpend, avgOrders, avgRecencyDays, avgLifetimeMonths } = cluster;
+
+  // Helper: get percentile rank of this cluster for a given metric
+  const percentileRank = (value, allValues) => {
+    const sorted = [...allValues].sort((a, b) => a - b);
+    const index = sorted.findIndex(v => v >= value);
+    return index / (sorted.length - 1 || 1);
+  };
+
+  // Collect all clusters' metrics
+  const allSpend = allClusters.map(c => c.avgSpend);
+  const allOrders = allClusters.map(c => c.avgOrders);
+  const allRecency = allClusters.map(c => c.avgRecencyDays);
+  const allLifetime = allClusters.map(c => c.avgLifetimeMonths);
+
+  // Percentile positions (0–1)
+  const spendPct = percentileRank(avgSpend, allSpend);
+  const ordersPct = percentileRank(avgOrders, allOrders);
+  const recencyPct = 1 - percentileRank(avgRecencyDays, allRecency); // lower recency = more recent
+  const lifetimePct = percentileRank(avgLifetimeMonths, allLifetime);
+
+  // Interpretation based on pair
+  let segmentType = '';
+  let keyInsight = '';
+  let recommendedAction = '';
+
+  if (pair === 'rfm') {
+    if (spendPct > 0.7 && ordersPct > 0.7 && recencyPct > 0.7) {
+      segmentType = 'VIP Customers';
+      keyInsight = 'High spending, frequent, and recently active customers.';
+      recommendedAction = 'Reward with loyalty perks and exclusive offers.';
+    } else if (recencyPct < 0.3) {
+      segmentType = 'Churn Risk';
+      keyInsight = 'Customers have not purchased recently and show declining engagement.';
+      recommendedAction = 'Run reactivation campaigns or personalized discounts.';
+    } else {
+      segmentType = 'Regular Customers';
+      keyInsight = 'Moderate purchase behavior with stable engagement.';
+      recommendedAction = 'Encourage repeat purchases with bundles or promotions.';
+    }
+  }
+
+  if (pair === 'spending') {
+    if (spendPct > 0.7 && ordersPct <= 0.5) {
+      segmentType = 'Premium Buyers';
+      keyInsight = 'High spend per customer with fewer but valuable purchases.';
+      recommendedAction = 'Upsell premium products and personalized recommendations.';
+    } else if (ordersPct > 0.7 && spendPct < 0.3) {
+      segmentType = 'Price-Sensitive Buyers';
+      keyInsight = 'Frequent purchases but lower overall spending.';
+      recommendedAction = 'Offer bundles, discounts, or loyalty points.';
+    } else {
+      segmentType = 'Average Spenders';
+      keyInsight = 'Balanced spending and purchase frequency.';
+      recommendedAction = 'Maintain engagement with seasonal promotions.';
+    }
+  }
+
+  if (pair === 'lifetime') {
+    if (lifetimePct > 0.7 && ordersPct > 0.7) {
+      segmentType = 'Loyal Customers';
+      keyInsight = 'Long-term customers with consistent purchasing behavior.';
+      recommendedAction = 'Introduce membership or referral programs.';
+    } else if (lifetimePct < 0.3) {
+      segmentType = 'New Customers';
+      keyInsight = 'Recently acquired customers still exploring the brand.';
+      recommendedAction = 'Onboard with welcome offers and product education.';
+    } else {
+      segmentType = 'Growing Customers';
+      keyInsight = 'Customers showing potential for long-term value.';
+      recommendedAction = 'Nurture with targeted engagement campaigns.';
+    }
+  }
+
+  if (pair === 'timebased') {
+    if (recencyPct > 0.7) {
+      segmentType = 'Active Customers';
+      keyInsight = 'Customers are actively purchasing in recent periods.';
+      recommendedAction = 'Maintain engagement with timely promotions.';
+    } else if (recencyPct < 0.3) {
+      segmentType = 'Inactive Customers';
+      keyInsight = 'Long gap since last purchase indicates disengagement.';
+      recommendedAction = 'Trigger reminder or win-back campaigns.';
+    } else {
+      segmentType = 'Occasional Buyers';
+      keyInsight = 'Irregular purchase timing patterns.';
+      recommendedAction = 'Send reminders based on preferred purchase hours.';
+    }
+  }
+
+  return { segmentType, keyInsight, recommendedAction };
 };
