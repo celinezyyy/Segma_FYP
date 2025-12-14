@@ -59,8 +59,8 @@ export default function SegmentationDashboard() {
       recommendedAction,
     } = seg;
 
-    const currency = useMemo(() => new Intl.NumberFormat('en-MY', { style: 'currency', currency: 'MYR', maximumFractionDigits: 0 }), []);
-    const percentFmt = v => `${(Number(v) || 0).toFixed(0)}%`;
+    const currency = useMemo(() => new Intl.NumberFormat('en-MY', { style: 'currency', currency: 'MYR', maximumFractionDigits: 2 }), []);
+    const percentFmt = v => `${(Number(v) || 0).toFixed(2)}%`;
 
     return (
       <div
@@ -73,7 +73,7 @@ export default function SegmentationDashboard() {
       >
         {/* Header gradient uses Tailwind arbitrary color from hex */}
         <div className={`h-36 bg-gradient-to-br from-[${COLORS[idx % COLORS.length]}] to-indigo-600 flex items-center justify-between px-6`}>
-          <h3 className="text-2xl md:text-3xl font-bold text-white">{suggestedName}</h3>
+          <h3 className="text-2xl md:text-3xl font-bold text-black">{suggestedName}</h3>
           {segmentType && (
             <span className="ml-3 text-xs md:text-sm px-3 py-1 rounded-full bg-white/20 text-white backdrop-blur">
               {segmentType}
