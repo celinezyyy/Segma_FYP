@@ -66,6 +66,9 @@ const UserHome = () => {
           icon: 'success',
           title: 'Uploaded!',
           text: `${type} dataset template uploaded successfully.`,
+          showConfirmButton: false,
+          timer: 2000,
+
         });
         setSelectedFiles((prev) => ({ ...prev, [type]: null }));
       } else {

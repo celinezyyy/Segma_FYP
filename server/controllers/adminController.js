@@ -1,9 +1,9 @@
 import userModel from '../models/userModel.js';
-import DatasetTemplate from '../models/datasetTemplateModel.js';
+import datasetTemplate from '../models/datasetTemplateModel.js';
 import feedbackModel from '../models/feedbackModel.js';
 import datasetModel from '../models/datasetModel.js';
+import segmentationModel from '../models/segmentationModel.js';
 import { getGridFSBucket } from '../utils/gridfs.js'; 
-import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -31,20 +31,38 @@ export const adminDeleteUserAccount = async (req, res) => {
       return res.status(400).json({ success: false, message: "No User Found" });
     }
 
-    console.log('🔍 Deleting userId:', userId);
+    console.log('Deleting userId:', userId);
 
-    // 1. Find all datasets of this user
-    const datasets = await datasetModel.find({ user: userId });
+    // 1. Find all datasets and segmentations of this user
     const bucket = getGridFSBucket();
+    const datasets = await datasetModel.find({ user: userId });
+    const segmentations = await segmentationModel.find({ user: userId });
 
     for (const dataset of datasets) {
       try {
-        await bucket.delete(dataset.fileId);
+        if (dataset.fileId) {
+          await bucket.delete(dataset.fileId);
+        }
       } catch (err) {
         if (err.code !== 'ENOENT') {
-          console.error(`⚠️ Failed to delete GridFS file with ID ${dataset.fileId}:`, err.message);
+          console.error(`⚠️ Failed to delete GridFS dataset file with ID ${dataset.fileId}:`, err.message);
         } else {
-          console.warn(`⚠️ File with ID ${dataset.fileId} already missing`);
+          console.warn(`⚠️ Dataset file with ID ${dataset.fileId} already missing`);
+        }
+      }
+    }
+
+    // 2. Delete any merged files created by segmentations
+    for (const seg of segmentations) {
+      try {
+        if (seg.mergedFileId) {
+          await bucket.delete(seg.mergedFileId);
+        }
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          console.error(`⚠️ Failed to delete GridFS merged file with ID ${seg.mergedFileId}:`, err.message);
+        } else {
+          console.warn(`⚠️ Merged file with ID ${seg.mergedFileId} already missing`);
         }
       }
     }
@@ -52,6 +70,8 @@ export const adminDeleteUserAccount = async (req, res) => {
     // 3. Delete from DB
     await feedbackModel.deleteMany({ user: userId });
     await datasetModel.deleteMany({ user: userId });
+    await segmentationModel.deleteMany({ user: userId });
+    await datasetTemplate.deleteMany({ uploadedBy: userId });
     await userModel.findByIdAndDelete(userId);
 
     res.status(200).json({ success: true, message: "User and data deleted successfully" });
@@ -151,20 +171,24 @@ export const getHomeCardsInfo = async (req, res) => {
 export const uploadTemplate = async (req, res) => {
   try {
     const { type } = req.params;
-
+    const { userId } = req;
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'No file uploaded' });
     }
 
-    // Remove old template of this type
-    await DatasetTemplate.findOneAndDelete({ type });
+    // Remove old template for this user & type, only if it exists
+    const existing = await datasetTemplate.findOne({ uploadedBy: userId, type });
+    if (existing) {
+      await datasetTemplate.deleteOne({ _id: existing._id });
+    }
 
     // Save new one
-    const newTemplate = new DatasetTemplate({
+    const newTemplate = new datasetTemplate({
+      uploadedBy: userId,
       type,
       fileName: req.file.originalname,
       mimetype: req.file.mimetype,
-      data: req.file.buffer,   
+      data: req.file.buffer,
     });
 
     await newTemplate.save();

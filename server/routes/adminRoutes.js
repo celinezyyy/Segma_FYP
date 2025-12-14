@@ -20,6 +20,7 @@ adminRouter.get('/feedback-list', userAuth, adminAuth, getFeedbackList);
 adminRouter.put('/feedback/:id/mark-in-process', userAuth, markFeedbackAsInProcess);
 adminRouter.put('/feedback/:id/mark-completed', userAuth, markFeedbackAsCompleted);
 adminRouter.get('/home-cards-info', userAuth, getHomeCardsInfo);
-adminRouter.post('/upload-dataset-template/:type', upload.single('file'), uploadTemplate);
+// Ensure uploader identity is set by auth before multer processes file
+adminRouter.post('/upload-dataset-template/:type', userAuth, adminAuth, upload.single('file'), uploadTemplate);
 
 export default adminRouter;

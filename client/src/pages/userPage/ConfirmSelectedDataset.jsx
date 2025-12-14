@@ -128,7 +128,7 @@ const ConfirmSelectedDataset = () => {
 
         Swal.fire({ 
             title: 'Perform Data Checking?', 
-            text: 'We will clean and validate both datasets. This may take a few moments depending on size.', 
+            text: 'We will check and validate both datasets. This may take a few moments.', 
             icon: 'question', 
             showCancelButton: true, 
             confirmButtonColor: '#66a868ff', 

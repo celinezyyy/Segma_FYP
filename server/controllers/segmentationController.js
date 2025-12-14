@@ -865,7 +865,7 @@ export const showSegmentationResultInDashboard = async (req, res) => {
           const key = cluster !== null && cluster !== undefined ? cluster : 'Unassigned';
 
           row.cluster = key;
-          console.log("[DEBUG] After assign cluster result to dataset:", row);
+          // console.log("[DEBUG] After assign cluster result to dataset:", row);
 
           if (!summaries[key]) {
             summaries[key] = {
@@ -998,6 +998,7 @@ export const showSegmentationResultInDashboard = async (req, res) => {
           .map(([name, count]) => ({
             name,
             count,
+            pct: Number((count / data.size * 100).toFixed(1)),
           }))
           .sort((a, b) => b.count - a.count) // sort by count descending
           .slice(0, 5), // only keep top 5
