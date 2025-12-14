@@ -48,30 +48,74 @@ export default function SegmentationDashboard() {
   );
 
   const SegmentCard = ({ seg, idx }) => {
-    const { suggestedName, sizePct, revenuePct, avgSpend, topState, segmentType, keyInsight, recommendedAction } = seg;
+    const {
+      suggestedName,
+      sizePct,
+      revenuePct,
+      avgSpend,
+      topState,
+      segmentType,
+      keyInsight,
+      recommendedAction,
+    } = seg;
+
+    const currency = useMemo(() => new Intl.NumberFormat('en-MY', { style: 'currency', currency: 'MYR', maximumFractionDigits: 0 }), []);
+    const percentFmt = v => `${(Number(v) || 0).toFixed(0)}%`;
 
     return (
       <div
         onClick={() => {
-          navigate(`/segmentation/${segmentationId}/cluster/${idx}`, { state: { segmentationId, clusterIndex: idx, selectedFeatures } });
+          navigate(`/segmentation/${segmentationId}/cluster/${idx}`, {
+            state: { segmentationId, clusterIndex: idx, selectedFeatures },
+          });
         }}
-        className="bg-white rounded-3xl shadow-2xl overflow-hidden cursor-pointer transform hover:scale-105 transition duration-300 border border-gray-200"
+        className="bg-white rounded-3xl shadow-2xl overflow-hidden cursor-pointer hover:shadow-indigo-200 transform hover:scale-105 transition duration-300 border border-gray-200"
       >
-        <div className={`h-40 bg-gradient-to-br ${COLORS[idx % COLORS.length]} to-indigo-600 opacity-90 flex items-center justify-center`}>
-          <h3 className="text-3xl font-bold text-white text-center px-6">{suggestedName}</h3>
+        {/* Header gradient uses Tailwind arbitrary color from hex */}
+        <div className={`h-36 bg-gradient-to-br from-[${COLORS[idx % COLORS.length]}] to-indigo-600 flex items-center justify-between px-6`}>
+          <h3 className="text-2xl md:text-3xl font-bold text-white">{suggestedName}</h3>
+          {segmentType && (
+            <span className="ml-3 text-xs md:text-sm px-3 py-1 rounded-full bg-white/20 text-white backdrop-blur">
+              {segmentType}
+            </span>
+          )}
         </div>
-        <div className="p-8 space-y-4">
-          <div className="flex justify-between"><span className="text-gray-600">Customers</span><span className="font-bold text-xl">{sizePct}%</span></div>
-          <div className="flex justify-between"><span className="text-gray-600">Revenue Share</span><span className="font-bold text-xl text-green-600">{revenuePct}%</span></div>
-          <div className="flex justify-between"><span className="text-gray-600">Avg Spend</span><span className="font-bold">RM {avgSpend.toFixed(0)}</span></div>
-          <div className="text-sm text-gray-600">Top Location: <strong>{topState || 'N/A'}</strong></div>
 
-          {/* --- New section for differentiation --- */}
-          {segmentType && <div className="text-sm text-purple-700 font-semibold">Type: {segmentType}</div>}
-          {keyInsight && <div className="text-sm text-gray-700 italic">Insight: {keyInsight}</div>}
-          {recommendedAction && <div className="text-sm text-green-700">Action: {recommendedAction}</div>}
+        <div className="p-6 md:p-8 space-y-5">
+          {/* Key stats */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center">
+              <div className="text-xs text-gray-600">Customers</div>
+              <div className="text-xl font-bold text-gray-900">{percentFmt(sizePct)}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xs text-gray-600">Revenue Share</div>
+              <div className="text-xl font-bold text-green-600">{percentFmt(revenuePct)}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xs text-gray-600">Avg Spend</div>
+              <div className="text-xl font-bold text-gray-900">{currency.format(avgSpend || 0)}</div>
+            </div>
+          </div>
 
-          <button className="w-full mt-4 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition">
+          {/* Context bullets */}
+          <ul className="space-y-2">
+            <li className="text-sm text-gray-700">
+              <span className="font-medium text-gray-600">Top Location:</span> <span className="font-semibold">{topState || 'N/A'}</span>
+            </li>
+            {keyInsight && (
+              <li className="text-sm text-gray-700">
+                <span className="font-medium text-gray-600">Insight:</span> <span className="italic">{keyInsight}</span>
+              </li>
+            )}
+            {recommendedAction && (
+              <li className="text-sm text-gray-700">
+                <span className="font-medium text-gray-600">Recommended Action:</span> <span className="text-green-700 font-semibold">{recommendedAction}</span>
+              </li>
+            )}
+          </ul>
+
+          <button className="w-full mt-2 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition">
             View Detailed Profile →
           </button>
         </div>
