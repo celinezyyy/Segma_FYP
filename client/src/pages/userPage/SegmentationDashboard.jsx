@@ -202,18 +202,33 @@ export default function SegmentationDashboard() {
   const stateChartData = useMemo(() => {
     const allStatesSet = new Set();
     summaries.forEach(s => (s.states || []).forEach(st => allStatesSet.add(st.name)));
-    const allStates = Array.from(allStatesSet);
+    let allStates = Array.from(allStatesSet);
+
+    // Apply filter if a state is selected
+    if (selectedStateFilter) {
+      allStates = allStates.filter(name => name === selectedStateFilter);
+    }
+
     const chartData = allStates.map(stateName => {
       const row = { state: stateName };
-      summaries.forEach(s => { const st = (s.states || []).find(x => x.name === stateName); row[`cluster_${s.cluster}`] = st?.revenue || 0; });
+      summaries.forEach(s => {
+        const st = (s.states || []).find(x => x.name === stateName);
+        row[`cluster_${s.cluster}`] = st?.revenue || 0;
+      });
+      // Precompute total for sorting
+      row.__total = Object.keys(row)
+        .filter(k => k.startsWith('cluster_'))
+        .reduce((acc, key) => acc + (row[key] || 0), 0);
       return row;
     });
+
     chartData.sort((a, b) => {
-      const sum = r => Object.keys(r).filter(k => k.startsWith('cluster_')).reduce((acc, key) => acc + r[key], 0);
-      return sum(b) - sum(a);
+      return stateSortOrder === 'asc' ? a.__total - b.__total : b.__total - a.__total;
     });
-    return chartData.slice(0, 10);
-  }, [summaries]);
+
+    const sliced = chartData.slice(0, 10).map(({ __total, ...rest }) => rest);
+    return sliced;
+  }, [summaries, selectedStateFilter, stateSortOrder]);
 
   const handleStateBarClick = entry => {
     const stateName = entry?.payload?.state;
@@ -255,7 +270,18 @@ export default function SegmentationDashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-16">
               {/* States by Revenue */}
               <div className="bg-white p-8 rounded-3xl shadow-xl" ref={stateChartWrapperRef}>
-                <h3 className="text-2xl font-bold mb-6 text-gray-800">States by Revenue</h3>
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-2xl font-bold text-gray-800">States by Revenue</h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="px-3 py-2 text-sm rounded-md border border-gray-300 hover:border-gray-400 bg-gray-50 hover:bg-gray-100"
+                      onClick={() => setStateSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
+                      title="Toggle sort order"
+                    >
+                      Sort: {stateSortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                    </button>
+                  </div>
+                </div>
                 <ResponsiveContainer width="100%" height={500}>
                   <BarChart data={stateChartData}>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -264,7 +290,17 @@ export default function SegmentationDashboard() {
                     <Tooltip formatter={v => `RM ${v.toLocaleString()}`} />
                     <Legend />
                     {summaries.map((s, idx) => (
-                      <Bar key={s.cluster} dataKey={`cluster_${s.cluster}`} stackId="a" fill={COLORS[idx % COLORS.length]} stroke="#fff" strokeWidth={1} name={s.suggestedName || `Cluster ${s.cluster}`} onClick={handleStateBarClick} cursor="pointer" />
+                      <Bar
+                        key={s.cluster}
+                        dataKey={`cluster_${s.cluster}`}
+                        stackId="a"
+                        fill={COLORS[idx % COLORS.length]}
+                        stroke="#fff"
+                        strokeWidth={1}
+                        name={s.suggestedName || `Cluster ${s.cluster}`}
+                        onClick={handleStateBarClick}
+                        cursor="pointer"
+                      />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
