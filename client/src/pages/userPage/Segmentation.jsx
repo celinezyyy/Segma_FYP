@@ -261,21 +261,23 @@ const Segmentation = () => {
       Swal.close();
 
       if (data.success) {
-        setSegResult({
-          bestK: data.bestK,
-          clusterSummary: data.clusterSummary,
-          assignments: data.assignments,
-          selectedFeatures: features,
-          totalProfiles: summary?.totalCustomers || null,
-        });
-        // Scroll handled by useEffect on segResult
-        Swal.fire({
+        // Show success popup briefly before redirecting
+        await Swal.fire({
           icon: 'success',
           title: 'Segmentation Complete',
-          text: `${(data.bestK)} clusters generated`,
-          timer: 2500,
+          text: `${data.bestK} clusters found! Redirecting to dashboard...`,
+          timer: 2000,
           showConfirmButton: false,
         });
+
+        // Navigate directly to segmentation dashboard with context
+        navigate('/segmentation-dashboard', {
+          state: {
+            segmentationId,
+            selectedFeatures: features,
+          },
+        });
+        return;
       } else {
         const msg = data.message || 'Segmentation failed.';
         setErrorMsg(msg);
@@ -462,74 +464,6 @@ const Segmentation = () => {
               );
             })()}
           </div>
-          {/* Segmentation Result */}
-          {segResult && (
-            console.log('[DEBUG] Rendering segmentation result:', segResult),
-            <div ref={resultRef} className="mt-8 bg-white rounded-lg shadow-md p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-800">Segmentation Result (K={segResult.bestK})</h2>
-              </div>
-              {/* Simple, user-friendly summary */}
-              <div className="mb-4 p-4 border rounded bg-blue-50 text-sm text-gray-800">
-                <p className="mb-1">
-                  We have identidy <span className="font-semibold">{segResult.bestK}</span> customer clusters!
-                </p>
-              </div>
-              
-              {/* Compact per-cluster highlights based on selected attributes */}
-              {segResult.clusterSummary && (
-                <div className="mt-4">
-                  <h3 className="font-semibold text-gray-700 mb-2">Cluster Highlights</h3>
-                  <div className="grid md:grid-cols-2 gap-3">
-                    {Object.entries(segResult.clusterSummary).map(([cid, info]) => {
-                      const attrs = info?.attributes || {};
-                      const selected = Array.isArray(segResult.selectedFeatures) ? segResult.selectedFeatures : [];
-                      const highlights = selected
-                        .map(f => {
-                          if (!(f in attrs)) 
-                            return null;
-                          const meta = FEATURE_META?.[f];
-                          const label = meta.label || f;
-                          const unit = meta.unit ? ` ${meta.unit}` : '';
-                          return (
-                            <li key={cid + f} className="text-xs text-gray-700">
-                              <span className="font-semibold">{label}</span>
-                              {`: ${attrs[f]}${unit}`}
-                            </li>
-                          );
-                        })
-                        .filter(Boolean);
-                      return (
-                        <div key={cid} className="border rounded p-3 bg-gray-50">
-                          <div className="flex justify-between">
-                            <span className="font-medium text-gray-800">
-                              Cluster {parseInt(cid.replace('cluster_', ''), 10) + 1}
-                            </span>
-                            <span className="text-xs text-gray-600">{info?.count} customers</span>
-                          </div>
-                          <div className="mt-2 text-xs text-gray-700">
-                            {highlights.length > 0 ? (
-                              <ul className="list-disc ml-4">
-                                {highlights.map(h => <li key={cid+String(h)}>{h}</li>)}
-                              </ul>
-                            ) : (
-                              <span className="text-gray-500">No clear attribute highlight for this cluster.</span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              <div className="mt-3">
-                <button
-                  onClick={()=> navigate('/segmentation-dashboard', { state: {segmentationId, selectedFeatures: segResult.selectedFeatures} })}
-                  className="px-4 py-2 rounded border border-blue-400 text-blue-600 hover:bg-blue-50"
-                >View Detail Result</button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

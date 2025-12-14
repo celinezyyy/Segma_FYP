@@ -18,7 +18,7 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { Users, DollarSign, ShoppingBag, TrendingUp } from 'lucide-react';
+import { Users, DollarSign, ShoppingBag, TrendingUp, ArrowLeft } from 'lucide-react';
 
 const COLORS = ['#1d4ed8', '#0ea5e9', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
@@ -257,6 +257,12 @@ export default function SegmentationDashboard() {
         <div className="flex-1 p-6 pt-24">
           <Navbar />
           <div className="max-w-7xl mx-auto">
+            <button
+              onClick={() => navigate(-1)}
+              className="mb-4 flex items-center gap-2 text-indigo-700 hover:text-indigo-900 font-semibold"
+            >
+              <ArrowLeft size={20} /> Back to Segmentation
+            </button>
             <h1 className="text-3xl font-bold text-center text-indigo-900 mb-2">Customer Segmentation Dashboard Overview</h1>
             {activePair && <p className="text-center text-gray-700 mb-6">Pair selected: <strong>{pairDescriptions[activePair].title}</strong> — {pairDescriptions[activePair].summary}</p>}
 
