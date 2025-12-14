@@ -75,9 +75,9 @@ export const uploadDataset = async (req, res) => {
         htmlMsg += `<p><b>Missing required columns:</b></p><ul>${missing.map(c => `<li>${c}</li>`).join('')}</ul>`;
       }
 
-      if (extra.length > 0) {
-        htmlMsg += `<p><b>Unexpected extra columns found:</b></p><ul>${extra.map(c => `<li>${c}</li>`).join('')}</ul>`;
-      }
+      // if (extra.length > 0) {
+      //   htmlMsg += `<p><b>Unexpected extra columns found:</b></p><ul>${extra.map(c => `<li>${c}</li>`).join('')}</ul>`;
+      // }
 
       htmlMsg += '</div>';
 
