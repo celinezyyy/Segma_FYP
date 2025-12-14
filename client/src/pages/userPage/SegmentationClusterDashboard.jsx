@@ -19,6 +19,12 @@ export default function SegmentationClusterDashboard() {
   const [stateSortOrder, setStateSortOrder] = useState('desc'); // 'asc' | 'desc'
   const [selectedStateFilter, setSelectedStateFilter] = useState(null);
 
+  // Ensure the page starts at the top when navigating here
+  useEffect(() => {
+    // Instant scroll to top to avoid retaining previous scroll position
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, []);
+
   // Prefer params but allow state fallback if user navigated programmatically
   const clusterIndex = useMemo(() => {
     const fromState = location.state?.clusterIndex;
