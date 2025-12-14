@@ -247,8 +247,21 @@ export const resetPassword = async (req, res) => {
 // Check is user authenticatedAdd commentMore actions
 export const isAuthenticated = async (req, res) => {
     try {
-        return res.json({success:true});
+        // Ensure the token corresponds to an existing user
+        const user = await userModel.findById(req.userId).select('_id role');
+
+        if (!user) {
+            // Optional: clear invalid/stale token
+            res.clearCookie('token', {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+            });
+            return res.json({ success: false, message: 'User not found' });
+        }
+
+        return res.json({ success: true, userId: user._id, role: user.role });
     } catch (error) {
-        res.json({success:false, message: error.message});
+        res.json({ success: false, message: error.message });
     }
 }
