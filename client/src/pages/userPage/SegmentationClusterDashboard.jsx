@@ -16,6 +16,8 @@ export default function SegmentationClusterDashboard() {
   const { backendUrl } = useContext(AppContext);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
+  const [stateSortOrder, setStateSortOrder] = useState('desc'); // 'asc' | 'desc'
+  const [selectedStateFilter, setSelectedStateFilter] = useState(null);
 
   // Prefer params but allow state fallback if user navigated programmatically
   const clusterIndex = useMemo(() => {
@@ -90,6 +92,61 @@ export default function SegmentationClusterDashboard() {
     fetchData();
   }, [segmentationId, backendUrl, location.state]);
 
+  // Infer active pair id from selectedFeatures
+  const activePair = useMemo(() => {
+    const selectedFeatures = location.state?.selectedFeatures;
+    const keys = Array.isArray(selectedFeatures) ? selectedFeatures.map(String) : [];
+    const PAIRS = {
+      rfm: ['recency', 'frequency', 'monetary'],
+      spending: ['totalSpend', 'avgOrderValue', 'totalOrders'],
+      lifetime: ['customerLifetimeMonths', 'purchaseFrequency', 'totalSpend'],
+      timebased: ['recency', 'favoritePurchaseHour', 'purchaseFrequency'],
+    };
+    const keySet = new Set(keys);
+    for (const [id, feats] of Object.entries(PAIRS)) {
+      if (feats.every(f => keySet.has(f))) return id;
+    }
+    return null;
+  }, [location.state]);
+
+  // Safe current segment reference for charts (ensure hooks run before early returns)
+  const currentSeg = data?.summaries?.[clusterIndex] || null;
+
+  const handleStateBarClick = entry => {
+    const stateName = entry?.payload?.name;
+    if (!stateName) return;
+    setSelectedStateFilter(prev => (prev === stateName ? null : stateName));
+  };
+
+  const statesChartData = useMemo(() => {
+    const baseStates = (currentSeg?.states || []).map(s => ({ name: s.name, revenue: s.revenue }));
+    let states = baseStates;
+    if (selectedStateFilter) {
+      states = states.filter(s => s.name === selectedStateFilter);
+    }
+    states.sort((a, b) => (stateSortOrder === 'asc' ? a.revenue - b.revenue : b.revenue - a.revenue));
+    return states.slice(0, 10);
+  }, [currentSeg, selectedStateFilter, stateSortOrder]);
+
+  const pairDescriptions = {
+    rfm: {
+      title: 'Classic RFM',
+      tips: 'High R & F with strong M often indicate VIPs; low R suggests churn risk.',
+    },
+    spending: {
+      title: 'Spending Behavior',
+      tips: 'High totalSpend/AOV clusters are premium; low AOV with high orders may be bargain hunters.',
+    },
+    lifetime: {
+      title: 'Customer Lifetime + Behavior',
+      tips: 'Long lifetime with high frequency indicates loyalty; short lifetime needs onboarding/retention.',
+    },
+    timebased: {
+      title: 'Time-based Behavior',
+      tips: 'Use preferred hours/day-parts for promotions; rising recency indicates churn risk.',
+    },
+  };
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-screen bg-gray-50">
@@ -105,13 +162,14 @@ export default function SegmentationClusterDashboard() {
     return <div className="p-20 text-center text-red-600 text-xl">No data available</div>;
   }
 
-  const seg = data.summaries?.[clusterIndex];
+  const seg = currentSeg;
   if (!seg) {
     return <div className="p-20 text-center text-red-600 text-xl">Invalid cluster index</div>;
   }
 
   const genderData = seg.genders || null;
   const ageData = seg.ageGroups || null;
+
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -127,7 +185,10 @@ export default function SegmentationClusterDashboard() {
           </button>
 
           <div className="relative mb-8">
-            <h1 className="text-3xl font-bold text-center text-indigo-900 mb-4">{seg.suggestedName}</h1>
+            <h1 className="text-3xl font-bold text-center text-indigo-900 mb-1">{seg.suggestedName}</h1>
+            {activePair && (
+              <p className="text-center text-gray-700">Pair: <strong>{pairDescriptions[activePair].title}</strong> — {pairDescriptions[activePair].tips}</p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
@@ -149,7 +210,7 @@ export default function SegmentationClusterDashboard() {
               <p className="text-center text-2xl font-bold text-gray-900">RM {seg.avgSpend.toFixed(2)}</p>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow">
+            <div className={`bg-white p-5 rounded-2xl shadow-lg border ${activePair === 'rfm' || activePair === 'timebased' ? 'border-indigo-300' : 'border-gray-200'} hover:shadow-xl transition-shadow`}>
               <div className="flex items-center gap-3 mb-3">
                 <div className="p-3 bg-purple-100 rounded-xl">
                   <Clock className="w-7 h-7 text-purple-600" />
@@ -169,16 +230,27 @@ export default function SegmentationClusterDashboard() {
               <p className="text-xl font-bold">{seg.topFavoriteItem}</p>
             </div>
           </div>
-
-        
         </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Keep charts within same container width as top cards */}
+          <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {/* States by Revenue (match overview style) */}
             <div className="bg-white p-8 rounded-3xl shadow-xl">
-              <h3 className="text-2xl font-bold mb-6 text-gray-800">States by Revenue</h3>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-gray-800">States by Revenue</h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="px-3 py-2 text-sm rounded-md border border-gray-300 hover:border-gray-400 bg-gray-50 hover:bg-gray-100"
+                    onClick={() => setStateSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
+                    title="Toggle sort order"
+                  >
+                    Sort: {stateSortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                  </button>
+                </div>
+              </div>
               <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={(seg.states || []).slice(0, 10)} margin={{ top: 20, right: 30, left: 20, bottom: 70 }}>
+                <BarChart data={statesChartData} margin={{ top: 20, right: 30, left: 20, bottom: 70 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis
                     dataKey="name"
@@ -191,7 +263,7 @@ export default function SegmentationClusterDashboard() {
                   <YAxis tickFormatter={(v) => `RM${(v / 1000).toFixed(0)}k`} />
                   <Tooltip formatter={(v) => `RM ${Number(v).toLocaleString()}`} />
                   <Legend layout="horizontal" verticalAlign="bottom" align="center" />
-                  <Bar dataKey="revenue" fill="#3b82f6" name="Revenue" />
+                  <Bar dataKey="revenue" fill="#3b82f6" name="Revenue" onClick={handleStateBarClick} cursor="pointer" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -225,6 +297,7 @@ export default function SegmentationClusterDashboard() {
                 </PieChart>
               </ResponsiveContainer>
             </div>
+          </div>
           </div> 
       </div>
     </div>
