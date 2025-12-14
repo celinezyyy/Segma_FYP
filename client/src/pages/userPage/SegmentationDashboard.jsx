@@ -18,7 +18,7 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { ArrowLeft, Users, DollarSign, ShoppingBag, MapPin, Clock, TrendingUp } from 'lucide-react';
+import { Users, DollarSign, ShoppingBag, TrendingUp } from 'lucide-react';
 
 const COLORS = ['#1d4ed8', '#0ea5e9', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
@@ -31,95 +31,73 @@ export default function SegmentationDashboard() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [selectedCluster, setSelectedCluster] = useState('overview'); // 'overview' or cluster index
-  const stateChartWrapperRef = useRef(null);
-  const [stateChartWidth, setStateChartWidth] = useState(0);
   const [selectedStateFilter, setSelectedStateFilter] = useState(null);
   const [stateSortOrder, setStateSortOrder] = useState('desc'); // 'asc' | 'desc'
+  const stateChartWrapperRef = useRef(null);
+  const [stateChartWidth, setStateChartWidth] = useState(0);
 
-  // Compute Top States by Revenue across clusters (always call hooks at top level)
-  const stateStackData = useMemo(() => {
-    const summariesLocal = data?.summaries || [];
-    if (!summariesLocal.length) return [];
-
-    // 1. Collect all unique states
-    const allStatesSet = new Set();
-    summariesLocal.forEach(s => {
-      (s.states || []).forEach(st => allStatesSet.add(st.name));
-    });
-    const allStates = Array.from(allStatesSet);
-
-    // 2. Build chart data
-    const chartData = allStates.map(stateName => {
-      const row = { state: stateName };
-      summariesLocal.forEach(s => {
-        const st = (s.states || []).find(x => x.name === stateName);
-        row[`cluster_${s.cluster}`] = st ? st.revenue : 0;
-      });
-      return row;
-    });
-
-    // 3. Sort by total revenue descending
-    chartData.sort((a, b) => {
-      const sumA = Object.keys(a).filter(k => k.startsWith('cluster_')).reduce((acc, key) => acc + a[key], 0);
-      const sumB = Object.keys(b).filter(k => k.startsWith('cluster_')).reduce((acc, key) => acc + b[key], 0);
-      return sumB - sumA;
-    });
-
-    // 4. Take top 10 states
-    return chartData.slice(0, 10);
-  }, [data?.summaries]);
-
-  // Observe chart container width for dynamic tick sizing
-  useEffect(() => {
-    const el = stateChartWrapperRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        const w = entry.contentRect?.width || el.clientWidth || 0;
-        setStateChartWidth(w);
-      }
-    });
-    ro.observe(el);
-    // set initial width
-    setStateChartWidth(el.clientWidth || 0);
-    return () => ro.disconnect();
-  }, []);
-
-  const stateCount = stateStackData.length;
-  const xTickAngle = useMemo(() => {
-    if (!stateCount || !stateChartWidth) return 0;
-    const pxPerLabel = stateChartWidth / Math.max(1, stateCount);
-    return pxPerLabel < 90 ? -30 : 0;
-  }, [stateCount, stateChartWidth]);
-
-  const stateChartMargin = useMemo(
-    () => ({ top: 20, right: 30, left: 20, bottom: xTickAngle ? 90 : 5 }),
-    [xTickAngle]
+  // ---------------- Components ----------------
+  const MetricCard = ({ title, value, icon, bgColor }) => (
+    <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow">
+      <div className="flex items-center gap-3 mb-3">
+        <div className={`p-3 ${bgColor} rounded-xl`}>{icon}</div>
+        <p className="text-xl font-medium text-gray-600">{title}</p>
+      </div>
+      <p className="text-center text-2xl font-bold text-gray-900">{value}</p>
+    </div>
   );
 
-  // Filter state data when a bar is clicked
-  const stateSortedData = useMemo(() => {
-    const arr = [...stateStackData];
-    const sum = (row) => Object.keys(row)
-      .filter(k => k.startsWith('cluster_'))
-      .reduce((acc, k) => acc + (row[k] || 0), 0);
-    arr.sort((a, b) => {
-      const sa = sum(a);
-      const sb = sum(b);
-      return stateSortOrder === 'asc' ? sa - sb : sb - sa;
-    });
-    return arr.slice(0, 10);
-  }, [stateStackData, stateSortOrder]);
+  const SegmentCard = ({ seg, idx }) => {
+    const { suggestedName, sizePct, revenuePct, avgSpend, topState, segmentType, keyInsight, recommendedAction } = seg;
 
-  const filteredStateStackData = useMemo(
-    () => (selectedStateFilter ? stateSortedData.filter(d => d.state === selectedStateFilter) : stateSortedData),
-    [stateSortedData, selectedStateFilter]
-  );
+    return (
+      <div
+        onClick={() => {
+          navigate(`/segmentation/${segmentationId}/cluster/${idx}`, { state: { segmentationId, clusterIndex: idx, selectedFeatures } });
+        }}
+        className="bg-white rounded-3xl shadow-2xl overflow-hidden cursor-pointer transform hover:scale-105 transition duration-300 border border-gray-200"
+      >
+        <div className={`h-40 bg-gradient-to-br ${COLORS[idx % COLORS.length]} to-indigo-600 opacity-90 flex items-center justify-center`}>
+          <h3 className="text-3xl font-bold text-white text-center px-6">{suggestedName}</h3>
+        </div>
+        <div className="p-8 space-y-4">
+          <div className="flex justify-between"><span className="text-gray-600">Customers</span><span className="font-bold text-xl">{sizePct}%</span></div>
+          <div className="flex justify-between"><span className="text-gray-600">Revenue Share</span><span className="font-bold text-xl text-green-600">{revenuePct}%</span></div>
+          <div className="flex justify-between"><span className="text-gray-600">Avg Spend</span><span className="font-bold">RM {avgSpend.toFixed(0)}</span></div>
+          <div className="text-sm text-gray-600">Top Location: <strong>{topState || 'N/A'}</strong></div>
 
-  const handleStateBarClick = (entry) => {
-    const stateName = entry?.payload?.state;
-    if (!stateName) return;
-    setSelectedStateFilter(prev => (prev === stateName ? null : stateName));
+          {/* --- New section for differentiation --- */}
+          {segmentType && <div className="text-sm text-purple-700 font-semibold">Type: {segmentType}</div>}
+          {keyInsight && <div className="text-sm text-gray-700 italic">Insight: {keyInsight}</div>}
+          {recommendedAction && <div className="text-sm text-green-700">Action: {recommendedAction}</div>}
+
+          <button className="w-full mt-4 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition">
+            View Detailed Profile →
+          </button>
+        </div>
+      </div>
+    );
+  };
+  
+  // ---------------- Hooks / Data ----------------
+  const activePair = useMemo(() => {
+    const keys = Array.isArray(selectedFeatures) ? selectedFeatures.map(String) : [];
+    const PAIRS = {
+      rfm: ['recency', 'frequency', 'monetary'],
+      spending: ['totalSpend', 'avgOrderValue', 'totalOrders'],
+      lifetime: ['customerLifetimeMonths', 'purchaseFrequency', 'totalSpend'],
+      timebased: ['recency', 'favoritePurchaseHour', 'purchaseFrequency'],
+    };
+    const keySet = new Set(keys);
+    for (const [id, feats] of Object.entries(PAIRS)) if (feats.every(f => keySet.has(f))) return id;
+    return null;
+  }, [selectedFeatures]);
+
+  const pairDescriptions = {
+    rfm: { title: 'Classic RFM', summary: 'Ranks customers by recency, frequency and monetary value to find VIPs and churn risks.', kpis: ['Average Spend', 'Average Recency', 'Revenue Share'] },
+    spending: { title: 'Spending Behavior', summary: 'Focuses on total spend, AOV and order count to spot high vs low spenders.', kpis: ['Average Spend', 'Order Count', 'Top Product'] },
+    lifetime: { title: 'Customer Lifetime + Behavior', summary: 'Highlights loyal long-term customers and their spend/frequency patterns.', kpis: ['Average Spend', 'Purchase Frequency', 'Customer Lifetime'] },
+    timebased: { title: 'Time-based Behavior', summary: 'Surfaces churn risks and preferred buying hours/days.', kpis: ['Average Recency', 'Favorite Purchase Hour', 'Purchase Frequency'] },
   };
 
   useEffect(() => {
@@ -133,67 +111,86 @@ export default function SegmentationDashboard() {
         const cached = localStorage.getItem(cacheKey);
         if (cached) {
           const parsed = JSON.parse(cached);
-          // Optional: simple TTL in ms (e.g., 5 minutes)
-          const ttlMs = 5 * 60 * 1000;
-          if (parsed && parsed.timestamp && Date.now() - parsed.timestamp < ttlMs) {
+          if (parsed?.timestamp && Date.now() - parsed.timestamp < 5 * 60 * 1000) {
             setData(parsed.payload);
-            return; // use cache; skip network
+            return;
           }
         }
 
-        const res = await axios.post(
-          `${backendUrl}/api/segmentation/${segmentationId}/dashboard`,
-          { features: selectedFeatures },
-          { withCredentials: true }
-        );
+        const res = await axios.post(`${backendUrl}/api/segmentation/${segmentationId}/dashboard`, { features: selectedFeatures }, { withCredentials: true });
         if (res.data.success) {
-          const summaries = res.data.data.summaries.map((s, i) => ({
-            ...s,
-            suggestedName: s.suggestedName || `Segment ${i + 1}`
-          }));
-          const payload = { ...res.data.data, summaries };
-          setData(payload);
-          // cache the result for faster subsequent loads
-          localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), payload }));
+          const summaries = res.data.data.summaries.map((s, i) => ({ ...s, suggestedName: s.suggestedName || `Segment ${i + 1}` }));
+          setData({ ...res.data.data, summaries });
+          localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), payload: { ...res.data.data, summaries } }));
         }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
+      } catch (err) { console.error(err); } 
+      finally { setLoading(false); }
     };
+
     fetchData();
   }, [segmentationId, selectedFeatures, backendUrl]);
 
-  if (loading) 
-    return (
-      <div className="flex-1 flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 text-lg font-medium">Loading segmentation insights...</p>
-          <p className="text-gray-500 text-sm mt-2">This may take a moment</p>
-        </div>
-      </div>);
+  useEffect(() => {
+    const el = stateChartWrapperRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const w = entry.contentRect?.width || el.clientWidth || 0;
+        setStateChartWidth(w);
+      }
+    });
+    ro.observe(el);
+    setStateChartWidth(el.clientWidth || 0);
+    return () => ro.disconnect();
+  }, []);
+
+  // ---------------- Computed Data ----------------
+  const { totalCustomers = 0, totalRevenue = 0, averageSpendOverall = 0, summaries = [] } = data || {};
+
+  const productCounts = useMemo(() => {
+    const counts = {};
+    summaries.forEach(s => (s.items || []).forEach(it => counts[it.name] = (counts[it.name] || 0) + it.count));
+    return counts;
+  }, [summaries]);
+
+  const topProducts = useMemo(() => Object.entries(productCounts).map(([name, count]) => ({ name, count })).sort((a,b) => b.count - a.count).slice(0,5), [productCounts]);
+
+  const stateChartData = useMemo(() => {
+    const allStatesSet = new Set();
+    summaries.forEach(s => (s.states || []).forEach(st => allStatesSet.add(st.name)));
+    const allStates = Array.from(allStatesSet);
+    const chartData = allStates.map(stateName => {
+      const row = { state: stateName };
+      summaries.forEach(s => { const st = (s.states || []).find(x => x.name === stateName); row[`cluster_${s.cluster}`] = st?.revenue || 0; });
+      return row;
+    });
+    chartData.sort((a, b) => {
+      const sum = r => Object.keys(r).filter(k => k.startsWith('cluster_')).reduce((acc, key) => acc + r[key], 0);
+      return sum(b) - sum(a);
+    });
+    return chartData.slice(0, 10);
+  }, [summaries]);
+
+  const handleStateBarClick = entry => {
+    const stateName = entry?.payload?.state;
+    if (!stateName) return;
+    setSelectedStateFilter(prev => (prev === stateName ? null : stateName));
+  };
+
+  if (loading) return (
+    <div className="flex-1 flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
+        <p className="text-gray-600 text-lg font-medium">Loading segmentation insights...</p>
+        <p className="text-gray-500 text-sm mt-2">This may take a moment</p>
+      </div>
+    </div>
+  );
   if (!data) return <div className="p-20 text-center text-red-600 text-xl">No segmentation data available</div>;
 
-  const { totalCustomers, totalRevenue, averageSpendOverall, summaries } = data;
-
-  // ==================================== OVERVIEW DASHBOARD ====================================
+  // ---------------- Render Overview ----------------
   if (selectedCluster === 'overview') {
-    
-    // Aggregate total counts across clusters
-    const productCounts = {};
-    summaries.forEach(s => {
-      (s.items || []).forEach(it => {
-        productCounts[it.name] = (productCounts[it.name] || 0) + it.count;
-      });
-    });
-
-    // Convert to array and sort top 5
-    const topProducts = Object.entries(productCounts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
+    const pairKPIs = pairDescriptions[activePair]?.kpis || ['Average Spend', 'Average Recency', 'Revenue Share'];
 
     return (
       <div className="flex min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -201,140 +198,43 @@ export default function SegmentationDashboard() {
         <div className="flex-1 p-6 pt-24">
           <Navbar />
           <div className="max-w-7xl mx-auto">
-            <h1 className="text-3xl font-bold text-center text-indigo-900 mb-4">Customer Segmentation Dashboard Overview</h1>
+            <h1 className="text-3xl font-bold text-center text-indigo-900 mb-2">Customer Segmentation Dashboard Overview</h1>
+            {activePair && <p className="text-center text-gray-700 mb-6">Pair selected: <strong>{pairDescriptions[activePair].title}</strong> — {pairDescriptions[activePair].summary}</p>}
 
-            {/* Metric Cards - Refined & Compact Version */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
-              {/* Total Customers */}
-              <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-3 bg-blue-100 rounded-xl">
-                    <Users className="w-7 h-7 text-blue-600" />
-                  </div>
-                  <p className="text-xl font-medium text-gray-600">Total Customers</p>
-                </div>
-                <p className="text-center text-2xl font-bold text-gray-900">{totalCustomers.toLocaleString()}</p>
-              </div>
-
-              {/* Total Revenue */}
-              <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-3 bg-green-100 rounded-xl">
-                    <DollarSign className="w-7 h-7 text-green-600" />
-                  </div>
-                  <p className="text-xl font-medium text-gray-600">Total Revenue</p>
-                </div>
-                <p className="text-center text-2xl font-bold text-gray-900">RM {totalRevenue.toFixed(2).toLocaleString()}</p>
-              </div>
-
-              {/* Average Spend */}
-              <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-3 bg-purple-100 rounded-xl">
-                    <TrendingUp className="w-7 h-7 text-purple-600" />
-                  </div>
-                  <p className="text-xl font-medium text-gray-600">Average Spend</p>
-                </div>
-                <p className="text-center text-2xl font-bold text-gray-900">RM {averageSpendOverall.toFixed(2)}</p>
-              </div>
-
-              {/* Segments Found */}
-              <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-3 bg-orange-100 rounded-xl">
-                    <ShoppingBag className="w-7 h-7 text-orange-600" />
-                  </div>
-                  <p className="text-xl font-medium text-gray-600">Segments Found</p>
-                </div>
-                <p className="text-center text-2xl font-bold text-gray-900">{summaries.length}</p>
-              </div>
+              <MetricCard title="Total Customers" value={totalCustomers.toLocaleString()} icon={<Users className="w-7 h-7 text-blue-600" />} bgColor="bg-blue-100" />
+              <MetricCard title="Total Revenue" value={`RM ${totalRevenue.toFixed(2).toLocaleString()}`} icon={<DollarSign className="w-7 h-7 text-green-600" />} bgColor="bg-green-100" />
+              <MetricCard title={pairKPIs[0]} value={pairKPIs[0]==='Average Spend' ? `RM ${averageSpendOverall.toFixed(2)}` : summaries.length} icon={<TrendingUp className="w-7 h-7 text-purple-600" />} bgColor="bg-purple-100" />
+              <MetricCard title="Segments Found" value={summaries.length} icon={<ShoppingBag className="w-7 h-7 text-orange-600" />} bgColor="bg-orange-100" />
             </div>
 
-            {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-16">
-              <div className="bg-white p-8 rounded-3xl shadow-xl">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-2xl font-bold text-gray-800">States by Revenue</h3>
-                  <div className="flex items-center gap-3">
-                    <label className="text-sm text-gray-600">Sort:</label>
-                    <button
-                      onClick={() => setStateSortOrder(o => (o === 'asc' ? 'desc' : 'asc'))}
-                      className="px-3 py-1 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
-                      title="Toggle sort order"
-                    >
-                      {stateSortOrder === 'asc' ? 'Ascending' : 'Descending'}
-                    </button>
-                    {selectedStateFilter && (
-                      <>
-                        <span className="text-sm text-gray-600">Filtered: <strong>{selectedStateFilter}</strong></span>
-                        <button
-                          onClick={() => setSelectedStateFilter(null)}
-                          className="px-3 py-1 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
-                        >
-                          Clear
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div ref={stateChartWrapperRef} className="w-full">
-                  <ResponsiveContainer width="100%" height={500}>
-                    <BarChart data={filteredStateStackData} margin={stateChartMargin}>
+              {/* States by Revenue */}
+              <div className="bg-white p-8 rounded-3xl shadow-xl" ref={stateChartWrapperRef}>
+                <h3 className="text-2xl font-bold mb-6 text-gray-800">States by Revenue</h3>
+                <ResponsiveContainer width="100%" height={500}>
+                  <BarChart data={stateChartData}>
                     <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="state"
-                        interval={0}
-                        tick={{ angle: -35, textAnchor: 'end' }}
-                        height={70}
-                        tickMargin={10}
-                        tickFormatter={(v) => (typeof v === 'string' && v.length > 12 ? v.slice(0, 11) + '…' : v)}
-                    />
+                    <XAxis dataKey="state" tick={{ angle: -35, textAnchor: 'end' }} height={70} />
                     <YAxis />
-                      <Tooltip
-                        labelFormatter={(label) => label}
-                        formatter={(value) => `RM ${value.toLocaleString()}`}
-                      />
-                    <Legend 
-                      layout="horizontal"
-                      verticalAlign="bottom"
-                      align="center"
-                    />
+                    <Tooltip formatter={v => `RM ${v.toLocaleString()}`} />
+                    <Legend />
                     {summaries.map((s, idx) => (
-                      <Bar
-                        key={s.cluster}
-                        dataKey={`cluster_${s.cluster}`}
-                        stackId="a"
-                           fill={COLORS[idx % COLORS.length]}
-                           stroke="#ffffff"
-                           strokeWidth={1}
-                        name={s.suggestedName || `Cluster ${s.cluster}`}
-                          onClick={handleStateBarClick}
-                          cursor="pointer"
-                      />
+                      <Bar key={s.cluster} dataKey={`cluster_${s.cluster}`} stackId="a" fill={COLORS[idx % COLORS.length]} stroke="#fff" strokeWidth={1} name={s.suggestedName || `Cluster ${s.cluster}`} onClick={handleStateBarClick} cursor="pointer" />
                     ))}
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
 
+              {/* Top Products */}
               <div className="bg-white p-8 rounded-3xl shadow-xl">
                 <h3 className="text-2xl font-bold mb-6 text-gray-800">Top 5 Best Selling Products</h3>
                 <ResponsiveContainer width="100%" height={500}>
                   <PieChart>
-                    <Pie
-                      data={topProducts}
-                      dataKey="count"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={120}
-                      label={(entry) => `${entry.name} (${entry.count})`}
-                    >
-                      {topProducts.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
+                    <Pie data={topProducts} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={120} label={entry => `${entry.name} (${entry.count})`}>
+                      {topProducts.map((entry, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
                     </Pie>
-                    <Tooltip formatter={(value) => `${value} orders`} />
+                    <Tooltip formatter={v => `${v} orders`} />
                     <Legend />
                   </PieChart>
                 </ResponsiveContainer>
@@ -345,30 +245,7 @@ export default function SegmentationDashboard() {
             <h2 className="text-3xl font-bold text-center mt-16 mb-10 text-indigo-900">Explore Individual Segments</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {summaries.map((seg, idx) => (
-                <div
-                  key={seg.cluster}
-                  onClick={() => {
-                    navigate(`/segmentation/${segmentationId}/cluster/${idx}`, { state: { segmentationId, clusterIndex: idx, selectedFeatures } });
-                  }}
-                  className="bg-white rounded-3xl shadow-2xl overflow-hidden cursor-pointer transform hover:scale-105 transition duration-300 border border-gray-200"
-                >
-                  <div className={`h-40 bg-gradient-to-br ${COLORS[idx % COLORS.length]} to-indigo-600 opacity-90 flex items-center justify-center`}>
-                    <h3 className="text-3xl font-bold text-white text-center px-6">{seg.suggestedName}</h3>
-                  </div>
-                  <div className="p-8">
-                    <div className="space-y-4">
-                      <div className="flex justify-between"><span className="text-gray-600">Customers</span><span className="font-bold text-xl">{seg.sizePct}%</span></div>
-                      <div className="flex justify-between"><span className="text-gray-600">Revenue Share</span><span className="font-bold text-xl text-green-600">{seg.revenuePct}%</span></div>
-                      <div className="flex justify-between"><span className="text-gray-600">Avg Spend</span><span className="font-bold">RM {seg.avgSpend.toFixed(0)}</span></div>
-                      <div className="pt-4 border-t text-sm text-gray-600">
-                        Top Location: <strong>{seg.topState || 'N/A'}</strong>
-                      </div>
-                    </div>
-                    <button className="w-full mt-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition">
-                      View Detailed Profile →
-                    </button>
-                  </div>
-                </div>
+                <SegmentCard key={seg.cluster} seg={seg} idx={idx} pairDescription={pairDescriptions[activePair]} />
               ))}
             </div>
           </div>
