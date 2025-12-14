@@ -256,6 +256,7 @@ const mergeCustomerAndOrderData = (customerRows, aggregatedOrderData) => {
 };
 
 export const prepareSegmentationData = async (req, res) => {
+  console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> ENTRY: prepareSegmentationData function >>>>>>>>>>>>>>>>>>>>>>>>');
   try {
     const { userId } = req;
     const { customerDatasetId, orderDatasetId } = req.body;
@@ -328,9 +329,6 @@ export const prepareSegmentationData = async (req, res) => {
         const featureSet = new Set(columns.map(c => c));
         // filter out id column
         featureSet.delete('customerid');
-        // features in segmentationPairs are objects { key, label, unit }
-        // Filter by presence of the feature key in the merged dataset columns
-        // Columns were lowercased into featureSet; compare keys case-insensitively
         const availablePairs = segmentationPairs.filter(p => p.features.every(({ key }) => featureSet.has(String(key))));
         console.log('[DEBUG] Available segmentation pairs from existing merged file:', availablePairs);
         return res.json({
@@ -379,13 +377,17 @@ export const prepareSegmentationData = async (req, res) => {
 
     // === STEP 1: AGGREGATE ORDER DATA ===
     // Group all orders by customerid and calculate behavioral metrics
+    console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> ENTRY: aggregateOrderData function >>>>>>>>>>>>>>>>>>>>>>>>>>');
     const aggregatedOrderData = aggregateOrderData(orderRows);
     console.log(`[LOG - STEP 1: AGGREGATE ORDER DATA] - Aggregated order data for ${Object.keys(aggregatedOrderData).length} customers`);
+    console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> EXIT: aggregateOrderData function >>>>>>>>>>>>>>>>>>>>>>>>>>');
 
     // === STEP 2: MERGE CUSTOMER AND ORDER DATA ===
     // Combine demographics (from customer CSV) with behavior (from aggregated orders)
+    console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> ENTRY: mergeCustomerAndOrderData function >>>>>>>>>>>>>>>>>>>>>>>>>>');
     const mergedData = mergeCustomerAndOrderData(customerRows, aggregatedOrderData);
     console.log(`[LOG - STEP 2: MERGE CUSTOMER AND ORDER DATA] - Merged data: ${mergedData.length} customer profiles created`);
+    console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> EXIT: mergeCustomerAndOrderData function >>>>>>>>>>>>>>>>>>>>>>>>>>');
 
     // === CREATE OR REUSE SEGMENTATION RECORD WITHOUT STORING JSON ===
     let segRecord = existingDoc;
@@ -455,7 +457,7 @@ export const prepareSegmentationData = async (req, res) => {
       Object.keys(row || {}).forEach(k => featureSet.add(k));
     }
     const availablePairs = segmentationPairs.filter(p => p.features.every(({ key }) => featureSet.has(String(key))));
-    console.log('[DEBUG] Available segmentation pairs:', availablePairs);
+    // console.log('[DEBUG] Available segmentation pairs:', availablePairs);
     const summaryPayload = {
       totalCustomers: mergedData.length,
       totalOrders: orderRows.length,
@@ -471,6 +473,7 @@ export const prepareSegmentationData = async (req, res) => {
 
     // === RETURN RESULTS TO FRONTEND (include segmentationId for client usage) ===
     console.log('[LOG - STEP 4: DONE MERGING] Saved segmentation record:', segRecord._id);
+    console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> EXIT: /prepare route, (prepareSegmentationData) >>>>>>>>>>>>>>>>>>>>>>>>>>');
     res.json({ success: true, segmentationId: segRecord._id, summary: summaryPayload, availablePairs });
 
   } catch (error) {
@@ -486,6 +489,7 @@ export const prepareSegmentationData = async (req, res) => {
 //===============================================================================================
 // Download merge dataset
 export const downloadMergedCsv = async (req, res) => {
+  console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> ENTRY: downloadMergedCsv function >>>>>>>>>>>>>>>>>>>>>>>>');
   try {
     const { userId } = req;
     const { segmentationId } = req.body;
@@ -516,6 +520,7 @@ export const downloadMergedCsv = async (req, res) => {
     });
 
     downloadStream.pipe(res);
+    console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> EXIT: downloadMergedCsv function >>>>>>>>>>>>>>>>>>>>>>>>');
   } catch (err) {
     console.error('Download merged CSV failed:', err);
     res.status(500).json({ success: false, message: 'Server error downloading merged CSV' });
@@ -702,6 +707,7 @@ function runSegmentationPython(csvPath, features, debugFlag) {
 }
 
 export const runSegmentationFlow = async (req, res) => {
+  console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> ENTRY: runSegmentationFlow function >>>>>>>>>>>>>>>>>>>>>>>>');
   try {
     const segmentationId = req.params.segmentationId;
     const { features } = req.body;
@@ -733,6 +739,7 @@ export const runSegmentationFlow = async (req, res) => {
         selectedFeatures: features,
       };
       console.log('[DEBUG] Use back segment result, already run before.');
+      console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> EXIT: runSegmentationFlow function >>>>>>>>>>>>>>>>>>>>>>>>');
       return res.json(responsePayload);
     }
 
@@ -759,8 +766,10 @@ export const runSegmentationFlow = async (req, res) => {
     const debugFlag = true;
     let result;
     try {
+      console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> ENTRY: runSegmentationPython function >>>>>>>>>>>>>>>>>>>>>>>>');
       result = await runSegmentationPython(tempCsv, features, debugFlag);
-      console.log('[DEBUG]========================', result);
+      console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> EXIT: runSegmentationPython function >>>>>>>>>>>>>>>>>>>>>>>>');
+      console.log('[DEBUG: result return after clustering done]:', result);
     } catch (pyErr) {
       console.error('[SEGMENTATION RUN] Python invocation failed:', pyErr.message);
       return res.status(500).json({ message: 'Segmentation run failed', error: pyErr.message, debug: true });
@@ -779,7 +788,7 @@ export const runSegmentationFlow = async (req, res) => {
       assignments: result.cluster_assignments,
       selectedFeatures: features,
     };
-
+    console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> EXIT: runSegmentationFlow function >>>>>>>>>>>>>>>>>>>>>>>>');
     return res.json(responsePayload);
   } catch (err) {
     console.error('[Segmentation run error]', err);
@@ -789,6 +798,7 @@ export const runSegmentationFlow = async (req, res) => {
 
 //===============================================================================================
 export const showSegmentationResultInDashboard = async (req, res) => {
+  console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> ENTRY: showSegmentationResultInDashboard function >>>>>>>>>>>>>>>>>>>>>>>>');
   try {
     const { segmentationId } = req.params;
     const { features } = req.body; // expected array of feature keys used for the run
@@ -1078,7 +1088,7 @@ export const showSegmentationResultInDashboard = async (req, res) => {
         featuresUsed: features
       }
     });
-
+    console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> EXIT: showSegmentationResultInDashboard function >>>>>>>>>>>>>>>>>>>>>>>>');
   } catch (err) {
     console.error('[showSegmentationResultInDashboard] Error:', err);
     res.status(500).json({
