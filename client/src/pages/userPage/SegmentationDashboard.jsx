@@ -18,7 +18,7 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { Users, DollarSign, ShoppingBag, TrendingUp, ArrowLeft } from 'lucide-react';
+import { Users, DollarSign, ShoppingBag, TrendingUp, ArrowLeft, Save, FileText } from 'lucide-react';
 
 const COLORS = ['#1d4ed8', '#0ea5e9', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
@@ -250,6 +250,30 @@ export default function SegmentationDashboard() {
   // ---------------- Render Overview ----------------
   if (selectedCluster === 'overview') {
     const pairKPIs = pairDescriptions[activePair]?.kpis || ['Average Spend', 'Average Recency', 'Revenue Share'];
+    const handleSaveReport = async () => {
+      try {
+        if (!segmentationId || !Array.isArray(summaries) || summaries.length === 0) return;
+        const payload = {
+          segmentationId,
+          features: Array.isArray(selectedFeatures) ? selectedFeatures : [],
+          pair: activePair ? { id: activePair, label: pairDescriptions[activePair]?.title, tagline: pairDescriptions[activePair]?.summary } : {},
+          bestK: summaries.length,
+          kpis: { totalCustomers, totalRevenue, averageSpendOverall },
+          clusters: summaries,
+          generatePdf: true,
+        };
+        const res = await axios.post(`${backendUrl}/api/reports`, payload, { withCredentials: true });
+        const id = res?.data?.data?.id;
+        const pdf = res?.data?.data?.pdf;
+        if (id) {
+          if (pdf?.fileId) {
+            window.open(`${backendUrl}/api/reports/${id}/pdf`, '_blank');
+          }
+        }
+      } catch (e) {
+        console.error('Failed to save report', e);
+      }
+    };
 
     return (
       <div className="flex min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -257,6 +281,14 @@ export default function SegmentationDashboard() {
         <div className="flex-1 p-6 pt-24">
           <Navbar />
           <div className="max-w-7xl mx-auto">
+                        <div className="mb-3 flex items-center justify-end gap-3">
+                          <button onClick={handleSaveReport} className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100">
+                            <Save size={16} /> Save Report (PDF)
+                          </button>
+                          <button onClick={() => navigate('/reports')} className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50">
+                            <FileText size={16} /> View Reports
+                          </button>
+                        </div>
             <button
               onClick={() => navigate(-1)}
               className="mb-4 flex items-center gap-2 text-indigo-700 hover:text-indigo-900 font-semibold"

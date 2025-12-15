@@ -1,0 +1,100 @@
+import React, { useContext, useEffect, useState } from 'react';
+import axios from 'axios';
+import UserSidebar from '../../components/UserSidebar';
+import Navbar from '../../components/Navbar';
+import { AppContext } from '../../context/AppContext';
+
+export default function Reports() {
+  const { backendUrl } = useContext(AppContext);
+  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState([]);
+
+  const fetchReports = async () => {
+    try {
+      setLoading(true);
+      const res = await axios.get(`${backendUrl}/api/reports`, { withCredentials: true });
+      setItems(Array.isArray(res?.data?.data) ? res.data.data : []);
+    } catch (e) {
+      console.error('Failed to load reports', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchReports(); }, []);
+
+  const handleDelete = async (id) => {
+    try {
+      await axios.delete(`${backendUrl}/api/reports/${id}`, { withCredentials: true });
+      fetchReports();
+    } catch (e) {
+      console.error('Failed to delete report', e);
+    }
+  };
+  // Inline edit removed per request
+
+  return (
+    <div className="flex min-h-screen">
+      <UserSidebar />
+      <main className="flex-grow px-4 md:px-8 pt-20 pb-20 min-h-[calc(100vh-5rem)] relative">
+        <Navbar />
+        <h1 className="text-2xl font-bold mb-6 text-center text-[#2C3E50]">Reports</h1>
+
+        {loading ? (
+          <div className="bg-white p-8 rounded-2xl shadow">
+            <p className="text-gray-600">Loading reports...</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto bg-white shadow-lg rounded-lg border-2 border-[#C3E5F1] w-full">
+            <table className="min-w-full text-left text-[#2C3E50]">
+              <thead className="bg-[#C3E5F1] text-sm uppercase">
+                <tr>
+                  <th className="py-3 px-6 w-12">No.</th>
+                  <th className="py-3 px-6">Title</th>
+                  <th className="py-3 px-6">Created</th>
+                  <th className="py-3 px-6 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(!items || items.length === 0) ? (
+                  <tr>
+                    <td colSpan="4" className="py-6 text-center text-gray-500">
+                      No reports saved yet.
+                    </td>
+                  </tr>
+                ) : (
+                  items.map((r, index) => (
+                    <tr key={r._id} className="border-t hover:bg-gray-50 transition">
+                      <td className="py-3 px-6 text-gray-600">{index + 1}</td>
+                      <td className="py-3 px-6 truncate max-w-xs">{r?.title || r?.pair?.label || 'Segmentation Report'}</td>
+                      <td className="py-3 px-6">{new Date(r.createdAt || Date.now()).toLocaleString()}</td>
+                      <td className="py-3 px-6 text-center">
+                        <div className="flex justify-center gap-2 items-center">
+                          {/* Edit removed */}
+                          <a
+                            href={`${backendUrl}/api/reports/${r._id}/pdf`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 border border-blue-600 px-3 py-1 rounded hover:bg-blue-50 transition text-sm"
+                          >
+                            Open PDF
+                          </a>
+                          <button
+                            onClick={() => handleDelete(r._id)}
+                            className="text-red-600 border border-red-600 px-3 py-1 rounded hover:bg-red-50 transition text-sm"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
