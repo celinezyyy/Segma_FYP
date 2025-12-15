@@ -10,6 +10,7 @@ import userRouter from "./routes/userRoutes.js";
 import adminRouter from "./routes/adminRoutes.js";
 import datasetRouter from "./routes/datasetRoutes.js";
 import segmentationRouter from "./routes/segmentationRoutes.js";
+import reportRouter from "./routes/reportRoutes.js";
 import { initGridFS } from "./utils/gridfs.js";
 
 // npm run server
@@ -74,5 +75,6 @@ app.use('/api/user', userRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/dataset', datasetRouter);
 app.use('/api/segmentation', segmentationRouter);
+app.use('/api/reports', reportRouter);
 
 // server.listen(port, () => console.log(`Server started on PORT: ${port}`));
