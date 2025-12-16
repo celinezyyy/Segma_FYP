@@ -210,17 +210,17 @@ const FeedbackList = () => {
                     <div className="flex flex-col md:flex-row md:space-x-2 space-y-2 md:space-y-0">
                       <button
                         onClick={() => handleViewFeedback(feedback)}
-                        className="py-1 px-3 rounded bg-blue-500 text-white text-sm hover:bg-blue-600"
+                        className="text-blue-600 border border-blue-600 px-3 py-1 rounded hover:bg-blue-50 transition text-sm"
                       >
                         View
                       </button>
                       <button
                         onClick={() => handleMarkAsCompleted(feedback._id)}
                         disabled={feedback.status === 'Solved'}
-                        className={`py-1 px-3 rounded text-white text-sm ${
+                        className={`px-3 py-1 rounded text-sm border transition ${
                           feedback.status === 'Solved'
-                            ? 'bg-green-300 cursor-not-allowed'
-                            : 'bg-green-500 hover:bg-green-600'
+                            ? 'text-green-300 border-green-300 cursor-not-allowed bg-white'
+                            : 'text-green-600 border-green-600 hover:bg-green-50'
                         }`}
                       >
                         {feedback.status === 'Solved'
