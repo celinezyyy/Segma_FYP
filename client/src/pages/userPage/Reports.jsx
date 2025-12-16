@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useState } from 'react';
 import axios from 'axios';
+import Swal from 'sweetalert2';
 import UserSidebar from '../../components/UserSidebar';
 import Navbar from '../../components/Navbar';
 import { AppContext } from '../../context/AppContext';
@@ -24,11 +25,24 @@ export default function Reports() {
   useEffect(() => { fetchReports(); }, []);
 
   const handleDelete = async (id) => {
+    const confirm = await Swal.fire({
+      title: 'Delete report?',
+      text: 'Are you sure you want to delete this report? This action cannot be undone.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, delete it',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+    });
+    if (!confirm.isConfirmed) return;
     try {
       await axios.delete(`${backendUrl}/api/reports/${id}`, { withCredentials: true });
-      fetchReports();
+      setItems(prev => prev.filter(x => x._id !== id));
+      Swal.fire({ icon: 'success', title: 'Deleted', showConfirmButton: false, timer: 1200 });
     } catch (e) {
       console.error('Failed to delete report', e);
+      Swal.fire({ icon: 'error', title: 'Delete failed', text: e.response?.data?.message || 'Please try again', showConfirmButton: false, timer: 1800 });
     }
   };
   // Inline edit removed per request
@@ -77,7 +91,7 @@ export default function Reports() {
                             rel="noreferrer"
                             className="text-blue-600 border border-blue-600 px-3 py-1 rounded hover:bg-blue-50 transition text-sm"
                           >
-                            Open PDF
+                            Open Report
                           </a>
                           <button
                             onClick={() => handleDelete(r._id)}
