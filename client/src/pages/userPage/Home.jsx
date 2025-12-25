@@ -44,7 +44,7 @@ const Home = () => {
       {/* Strength message */}
       <div className="mt-16 mb-20 max-w-5xl px-10 py-14 mx-auto text-center bg-gradient-to-br from-slate-100 to-white rounded-2xl shadow-xl border border-slate-200">
         <h2 className="text-4xl font-extrabold mb-6 text-slate-900 tracking-tight">
-          Why Our System Stands Out
+          Why Our System Stands Out ?
         </h2>
         <p className="text-lg text-slate-700 leading-relaxed max-w-3xl mx-auto">
           Our platform empowers you to understand your customers deeply, make smarter marketing decisions, and grow your business effectively.
