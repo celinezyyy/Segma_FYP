@@ -49,7 +49,7 @@ const Home = () => {
         <p className="text-lg text-slate-700 leading-relaxed max-w-3xl mx-auto">
           Our platform empowers you to understand your customers deeply, make smarter marketing decisions, and grow your business effectively.
           Combining advanced technology with simplicity, we turn complex data into clear, actionable insights —
-          so you can focus on what matters most: <span className="font-semibold text-sky-600">YOUR SUCCESS</span>.
+          so you can focus on what matters most: <br /><span className="font-semibold text-sky-600">YOUR SUCCESS</span>.
         </p>
       </div>
       <Footer />
