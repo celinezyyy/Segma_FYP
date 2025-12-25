@@ -139,7 +139,7 @@ export const deleteReport = async (req, res) => {
     // Attempt to remove PDF if present
     if (doc.pdfFileId) {
       try {
-        const bucket = getGridFSBucket();
+        const bucket = getReportsBucket();
         await bucket.delete(new Types.ObjectId(String(doc.pdfFileId)));
       } catch (e) {
         console.warn('[deleteReport] Failed to delete PDF from GridFS:', e?.message);
