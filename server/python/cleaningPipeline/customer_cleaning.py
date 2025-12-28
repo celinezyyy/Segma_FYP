@@ -327,8 +327,9 @@ def standardize_location(df):
 # Only handle for customerid and location fields
 def handle_missing_values_customer(df):
     print("[LOG - STAGE 5] Running handle_missing_values...")
-
-    API_KEY = "68f8ce9a38c3f632237334dyiedb96e"
+    # moe acc geoAPI: 68f8ce9a38c3f632237334dyiedb96e
+    #siswa acc geoAPI(Currently use this): 69512949ee2fd401068815gcid6e3dd
+    API_KEY = "69512949ee2fd401068815gcid6e3dd"
     GEOCODE_URL = "https://geocode.maps.co/search"
     SLEEP_TIME = 1.2
     cache = {}  # ⚡ moved outside loops
