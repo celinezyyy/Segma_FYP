@@ -2,9 +2,11 @@ import userModel from "../models/userModel.js";
 import { sendOtpEmail } from '../controllers/authController.js';
 import feedbackModel from '../models/feedbackModel.js';
 import datasetModel from "../models/datasetModel.js";
-import { getGridFSBucket } from '../utils/gridfs.js';
+import { getGridFSBucket, getReportsBucket } from '../utils/gridfs.js';
 import datasetTemplate from "../models/datasetTemplateModel.js";
 import segmentationModel from "../models/segmentationModel.js";
+import reportModel from "../models/reportModel.js";
+import { Types } from "mongoose";
 
 export const getUserData = async (req, res) => {
     try {
@@ -90,6 +92,21 @@ export const deleteAccount = async (req, res) => {
 
     // Step 1: Get all datasets and segmentations linked to the user
     const bucket = getGridFSBucket();
+    const reportBucket = getReportsBucket();
+
+    console.log("Deleting reports...");
+    const reports = await reportModel.find({ userId });
+    for (const report of reports) {
+      try { 
+        if (report.pdfFileId) {
+          await reportBucket.delete(report.pdfFileId);
+        }
+      } catch (e) {
+        console.warn('[deleteAccount] Failed to delete report PDF from GridFS:', e?.message);
+      }
+    }
+    await reportModel.deleteMany({ userId });   
+    
     const datasets = await datasetModel.find({ user: userId });
     const segFilter = { user: userId };
     const segmentations = await segmentationModel.find(segFilter, { _id: 1, mergedFileId: 1 }).lean();
@@ -125,15 +142,24 @@ export const deleteAccount = async (req, res) => {
     }
 
     // Step 3: Delete from MongoDB
+    console.log("Deleted feedbacks...");
     await feedbackModel.deleteMany({ user: userId });
+
+    console.log("Deleted datasets...");
     await datasetModel.deleteMany({ user: userId });
+
+    console.log("Deleted segmentations...");
     await segmentationModel.deleteMany({ user: userId });
-    // Also delete any dataset templates uploaded by this user (admin self-delete supported)
-    await datasetTemplate.deleteMany({ uploadedBy: userId });
+    
+    console.log("Deleted dataset templates...");
+    await datasetTemplate.deleteMany({ uploadedBy: userId }); // Also delete any dataset templates uploaded by this user (admin self-delete supported)
+    
+    console.log("Deleted user account...");
     await userModel.findByIdAndDelete(userId);
 
     res.clearCookie('token'); // Clear login cookie
     res.status(200).json({ success: true, message: "Account deleted successfully with dataset and segmentation cleanup" });
+    console.log(`Account deleted successfully with dataset and segmentation cleanup for userId: ${userId}`);
     console.log(">>>>>>>>>>>>>>>>>EXIT: /delete-account route");
   } catch (err) {
     console.error("Delete account error:", err.message);
