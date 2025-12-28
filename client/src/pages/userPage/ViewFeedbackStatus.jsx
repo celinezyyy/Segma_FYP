@@ -11,6 +11,7 @@ const ViewFeedbackStatus = () => {
   const [sortConfig, setSortConfig] = useState({ key: 'submittedAt', direction: 'desc' });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedFeedback, setSelectedFeedback] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const statusMap = {
     New: 'Pending Review',
@@ -70,6 +71,23 @@ const ViewFeedbackStatus = () => {
     return 0;
   });
 
+  const filteredFeedbacks = sortedFeedbacks.filter((f) => {
+    const q = (searchQuery || '').toLowerCase();
+    if (!q) return true;
+    const subject = (f.subject || '').toLowerCase();
+    const description = (f.description || '').toLowerCase();
+    const status = (f.status || '').toLowerCase();
+    const statusLabel = (statusMap[f.status] || '').toLowerCase();
+    const submitted = new Date(f.submittedAt).toLocaleString().toLowerCase();
+    return (
+      subject.includes(q) ||
+      description.includes(q) ||
+      status.includes(q) ||
+      statusLabel.includes(q) ||
+      submitted.includes(q)
+    );
+  });
+
   const handleViewFeedback = (feedback) => {
     setSelectedFeedback(feedback);
     setIsModalOpen(true);
@@ -91,6 +109,16 @@ const ViewFeedbackStatus = () => {
       <main className="flex-grow px-4 md:px-8 pt-20 min-h-[calc(100vh-5rem)]">
         <h2 className="text-3xl font-bold mb-6 text-[#1f3f66] text-center">My Feedback Status</h2>
 
+        <div className="mb-6 flex flex-wrap items-center justify-end">
+          <input
+            type="text"
+            placeholder="Search feedback..."
+            className="border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value.toLowerCase())}
+          />
+        </div>
+
         <div className="overflow-x-auto bg-white shadow-lg rounded-lg border-2 border-[#C3E5F1]">
           <table className="min-w-full text-left text-[#2C3E50]">
             <thead className="bg-[#C3E5F1] text-sm uppercase text-[#2C3E50]">
@@ -111,7 +139,7 @@ const ViewFeedbackStatus = () => {
               </tr>
             </thead>
             <tbody>
-              {sortedFeedbacks.map((feedback, index) => (
+              {filteredFeedbacks.map((feedback, index) => (
                 <tr key={feedback._id} className="hover:bg-gray-50 transition">
                   <td className="py-3 px-6 text-gray-600">{index + 1}</td>
                   <td className="py-3 px-4 border-b">{truncate(feedback.subject, 50)}</td>
@@ -130,10 +158,10 @@ const ViewFeedbackStatus = () => {
                   </td>
                 </tr>
               ))}
-              {feedbacks.length === 0 && (
+              {filteredFeedbacks.length === 0 && (
                 <tr>
                   <td colSpan="6" className="text-center py-6 text-gray-500">
-                    No feedback submitted.
+                    No feedback found.
                   </td>
                 </tr>
               )}

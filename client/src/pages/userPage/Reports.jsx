@@ -9,6 +9,7 @@ export default function Reports() {
   const { backendUrl } = useContext(AppContext);
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchReports = async () => {
     try {
@@ -54,6 +55,17 @@ export default function Reports() {
         <Navbar />
         <h1 className="text-2xl font-bold mb-6 text-center text-[#2C3E50]">Reports</h1>
 
+        {/* Top bar with search (mirrors dataset page style) */}
+        <div className="mb-6 flex flex-wrap items-center justify-end">
+          <input
+            type="text"
+            placeholder="Search reports..."
+            className="border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value.toLowerCase())}
+          />
+        </div>
+
         {loading ? (
           <div className="bg-white p-8 rounded-2xl shadow">
             <p className="text-gray-600">Loading reports...</p>
@@ -70,14 +82,21 @@ export default function Reports() {
                 </tr>
               </thead>
               <tbody>
-                {(!items || items.length === 0) ? (
+                {(() => {
+                  const q = searchQuery || '';
+                  const filtered = (items || []).filter((r) => {
+                    const title = (r?.title || r?.pair?.label || 'Segmentation Report').toLowerCase();
+                    const created = new Date(r.createdAt || Date.now()).toLocaleString().toLowerCase();
+                    return title.includes(q) || created.includes(q);
+                  });
+                  return filtered.length === 0 ? (
                   <tr>
                     <td colSpan="4" className="py-6 text-center text-gray-500">
-                      No reports saved yet.
+                      No reports found.
                     </td>
                   </tr>
                 ) : (
-                  items.map((r, index) => (
+                  filtered.map((r, index) => (
                     <tr key={r._id} className="border-t hover:bg-gray-50 transition">
                       <td className="py-3 px-6 text-gray-600">{index + 1}</td>
                       <td className="py-3 px-6 truncate max-w-xs">{r?.title || r?.pair?.label || 'Segmentation Report'}</td>
@@ -103,7 +122,7 @@ export default function Reports() {
                       </td>
                     </tr>
                   ))
-                )}
+                ); })()}
               </tbody>
             </table>
           </div>
