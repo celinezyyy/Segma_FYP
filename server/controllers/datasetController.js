@@ -9,6 +9,7 @@ import { getGridFSBucket } from '../utils/gridfs.js';
 import { spawn } from 'child_process';
 import fs from 'fs';
 import os from 'os';
+import XLSX from 'xlsx';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,6 +25,7 @@ export const uploadDataset = async (req, res) => {
     const { userId } = req;
     const { type } = req.params;
     const { originalname } = req.file;
+    const ext = path.extname(originalname || '').toLowerCase();
 
     const formattedType = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
 
@@ -47,19 +49,40 @@ export const uploadDataset = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid dataset type' });
     }
 
-    // --- Parse CSV headers ---
-    const stream = Readable.from(req.file.buffer);
-    const headers = await new Promise((resolve, reject) => {
-      stream
-        .pipe(csvParser())
-        .on('headers', (headers) => {
-          // Remove BOM and trim
-          const cleaned = headers.map(h => h.trim().replace(/^\uFEFF/, ''));
-          console.log('Headers received:', cleaned);
-          resolve(cleaned); // ✅ Use cleaned headers
-        })
-        .on('error', reject);
-    });
+    // --- Parse headers (CSV or XLSX) ---
+    let headers = [];
+    let contentBuffer = null; // what we'll save to GridFS (always CSV)
+    if (ext === '.xlsx') {
+      try {
+        const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+        const sheetName = wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+        const rawHeaders = Array.isArray(rows) && rows.length ? rows[0] : [];
+        headers = rawHeaders.map(h => String(h ?? '').trim().replace(/^\uFEFF/, ''));
+        console.log('Headers received (xlsx):', headers);
+        // Convert sheet to CSV string and buffer for storage
+        const csvText = XLSX.utils.sheet_to_csv(ws);
+        contentBuffer = Buffer.from(csvText, 'utf-8');
+      } catch (e) {
+        console.error('Failed to parse XLSX:', e);
+        return res.status(400).json({ success: false, message: 'Invalid .xlsx file' });
+      }
+    } else {
+      // default assume CSV
+      const stream = Readable.from(req.file.buffer);
+      headers = await new Promise((resolve, reject) => {
+        stream
+          .pipe(csvParser())
+          .on('headers', (headers) => {
+            const cleaned = headers.map(h => h.trim().replace(/^\uFEFF/, ''));
+            console.log('Headers received (csv):', cleaned);
+            resolve(cleaned);
+          })
+          .on('error', reject);
+      });
+      contentBuffer = req.file.buffer;
+    }
 
     // --- Compare headers ---
     const missing = required.filter(col => !headers.includes(col));
@@ -87,21 +110,23 @@ export const uploadDataset = async (req, res) => {
       });
     }
 
-    // --- Save valid dataset ---
+    // --- Save valid dataset (always store as CSV) ---
     const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}.csv`;
     const uploadStream = bucket.openUploadStream(filename);
 
     await new Promise((resolve, reject) => {
-      Readable.from(req.file.buffer)
+      Readable.from(contentBuffer)
         .pipe(uploadStream)
         .on('error', reject)
         .on('finish', resolve);
     });
 
     // Save to DB
+    const baseOriginal = path.parse(originalname || 'dataset').name;
+    const normalizedOriginalname = `${baseOriginal}.csv`;
     const newDataset = await datasetModel.create({
       filename,
-      originalname,
+      originalname: normalizedOriginalname,
       user: userId,
       type: formattedType,
       isClean: false,

@@ -327,7 +327,7 @@ const DatasetTab = () => {
                 <input
                   type="file"
                   name="file"
-                  accept=".csv"
+                  accept=".csv,.xlsx"
                   onChange={(e) => setFile(e.target.files[0])}
                   className="border p-2 rounded"
                   required
