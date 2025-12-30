@@ -14,7 +14,6 @@ import XLSX from 'xlsx';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// UPDATE THE COLUMN HERE(only customer column need to modify), OPTIONAL & MANDATORY COLUMNS
 export const uploadDataset = async (req, res) => {
   try {
     const bucket = getGridFSBucket();
@@ -97,10 +96,6 @@ export const uploadDataset = async (req, res) => {
       if (missing.length > 0) {
         htmlMsg += `<p><b>Missing required columns:</b></p><ul>${missing.map(c => `<li>${c}</li>`).join('')}</ul>`;
       }
-
-      // if (extra.length > 0) {
-      //   htmlMsg += `<p><b>Unexpected extra columns found:</b></p><ul>${extra.map(c => `<li>${c}</li>`).join('')}</ul>`;
-      // }
 
       htmlMsg += '</div>';
 
