@@ -312,7 +312,6 @@ const DataQualityReport = () => {
       <main className="flex-grow px-4 md:px-8 pt-20 pb-20">
         <div className="max-w-full mx-auto">
           <h1 className="text-2xl font-bold mb-5 text-center text-[#2C3E50] flex items-center justify-center gap-3">
-            <span className="text-2xl">📊</span>
             Data Checking Report
           </h1>
 

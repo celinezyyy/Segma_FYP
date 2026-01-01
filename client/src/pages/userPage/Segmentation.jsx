@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import UserSidebar from '../../components/UserSidebar';
 import { AppContext } from '../../context/AppContext';
@@ -15,23 +15,11 @@ const Segmentation = () => {
   const [summary, setSummary] = useState(null);
   const [segmentationId, setSegmentationId] = useState(null);
   const [downloading, setDownloading] = useState(false);
-  const [selectedPairId, setSelectedPairId] = useState(null);
   const [segLoading, setSegLoading] = useState(false);
   const [segResult, setSegResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
-  const [recommendedPairs, setRecommendedPairs] = useState([]);
   const resultRef = useRef(null);
-
-    // Derive feature label/unit from recommendedPairs provided by backend
-  const FEATURE_META = useMemo(() => {
-    const entries = [];
-    for (const p of recommendedPairs || []) {
-      for (const f of p.features || []) {
-        if (f && f.key) entries.push([f.key, { label: f.label, unit: f.unit }]);
-      }
-    }
-    return Object.fromEntries(entries);
-  }, [recommendedPairs]);
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   // Scroll to result when it's rendered (handles conditional render timing)
   useEffect(() => {
@@ -74,12 +62,7 @@ const Segmentation = () => {
         if (cached && cached.customerDatasetId === selectedCustomer && cached.orderDatasetId === selectedOrder && cached.segmentationId) {
           setSegmentationId(cached.segmentationId);
           setSummary(cached.summary || null);
-          const pairs = Array.isArray(cached.availablePairs) ? cached.availablePairs : [];
-          // Only short-circuit if we actually have pairs cached; otherwise refresh from server
-          if (pairs.length > 0) {
-            setRecommendedPairs(pairs);
-            return; // skip fetch & merge
-          }
+          return; // skip fetch & merge
         }
       }
     } catch (_) {}
@@ -110,13 +93,11 @@ const Segmentation = () => {
       if (response.data?.success) {
         setSegmentationId(response.data.segmentationId || null);
         setSummary(response.data.summary || null);
-        setRecommendedPairs(Array.isArray(response.data.availablePairs) ? response.data.availablePairs : []);
         // Persist cache to avoid re-prepare on return visits
         try {
           localStorage.setItem('segmentationCache', JSON.stringify({
             segmentationId: response.data.segmentationId || null,
             summary: response.data.summary || null,
-            availablePairs: Array.isArray(response.data.availablePairs) ? response.data.availablePairs : [],
             customerDatasetId: selectedCustomer,
             orderDatasetId: selectedOrder,
             cachedAt: Date.now(),
@@ -226,19 +207,9 @@ const Segmentation = () => {
     setErrorMsg(null);
     setSegResult(null);
 
-    // Determine features based on selection
-    let features = null;
-    if (selectedPairId) {
-      const p = recommendedPairs.find((x) => x.id === selectedPairId);
-      if (!p) 
-        { setErrorMsg('Invalid pair selected.'); return; }
-      // Use feature keys, not full objects
-      features = (p.features || []).map(f => f.key).filter(Boolean);
-      console.log('[DEBUG] Running segmentation with suggested pair features (keys):', features);
-    } else {
-      setErrorMsg('Please choose a suggested pair or select two attributes.');
-      return;
-    }
+    // Always use RFM features for segmentation
+    const features = ['recency', 'frequency', 'monetary'];
+    console.log('[DEBUG] Running segmentation with RFM features:', features);
     if (!segmentationId) 
       { setErrorMsg('Segmentation session is not ready yet.'); return; }
 
@@ -300,26 +271,19 @@ const Segmentation = () => {
       <div className="flex-1 p-8 pt-20">{/* pt-20 offsets fixed top navbar overlap */}
         <div className="max-w-7xl mx-auto">
           {/* Header */}
-          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">
-              Customer Segmentation
-            </h1>
-            <p className="text-gray-600">
-              Analyze customer segments based on behavioral, demographic, and geographic attributes
-            </p>
-            <div className="mt-4 flex gap-3">
-                <button
-                  onClick={DownloadMergedDataset}
-                  disabled={downloading}
-                    className={`inline-block border border-green-400 text-green-700 font-medium py-2 px-4 rounded transition
-                  ${downloading ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-[#F1F8E9] hover:bg-[#E6F4D7]'}
-                    `}
-                >
-                  Download merged dataset
-                </button>
+          <div className="p-4 mb-4">
+            <div className="grid grid-cols-3 items-center mb-3 gap-3">
+              <h1 className="text-2xl font-bold text-gray-800 text-center col-start-2">Customer Segmentation</h1>
+              <button
+                onClick={DownloadMergedDataset}
+                disabled={downloading}
+                className={`justify-self-end inline-block border border-green-400 text-green-700 font-medium py-2 px-4 rounded transition ${downloading ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-[#F1F8E9] hover:bg-[#E6F4D7]'}`}
+              >
+                Download merged dataset
+              </button>
             </div>
+            <hr className="border-gray-200" />
           </div>
-
           {/* Summary Stats */}
           {summary && (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -380,91 +344,77 @@ const Segmentation = () => {
               </div>
             </div>
           )}
+          <p className="text-lg text-gray-700 mb-4">
+            We will use RFM (Recency, Frequency, Monetary) analysis to group your customers based on their purchasing behavior. Later on you will be able to look the details segmentation results on dsahboard!
+          </p>
+          <div className="mt-2 flex gap-3 items-center">
+              {/* Compact help link */}
+              <button
+                onClick={() => setShowHelpModal(true)}
+                className="inline-flex items-center gap-2 text-blue-700 hover:text-blue-800 text-sm"
+              >
+                <span className="inline-block w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">i</span>
+                What is RFM?
+              </button>
+          </div>
 
-          {/* Segmentation Pairs Selection */}
-          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-2">Choose How To Segment</h2>
-            <p className="text-sm text-gray-600 mb-4">Use our suggested pairs</p>
-            {errorMsg && <p className="text-red-600 text-sm mt-2">{errorMsg}</p>}
+          {/* RFM Segmentation Only */}
+          <div className="bg-white border-2 border-[#C3E5F1] shadow-2xl rounded-lg p-6 mb-8 mt-8 text-center max-w-3xl mx-auto">
 
-            {/* Suggested Pairs */}
-            <h3 className="text-xl font-bold text-gray-900 mb-6">
-              Recommended Segmentation Strategies
-            </h3>
+            <div className="border-b-2 border-gray-200 pb-4 mb-6">
+              <h2 className="text-2xl font-bold text-[#2C3E50]">Ready to group your customers?</h2>
+            </div>
+            <p className="text-lg text-gray-700 mt-2">
+              We’ll apply RFM and present easy-to-understand groups with insights and suggested next steps.
+            </p>
+            {errorMsg && <p className="text-red-600 text-sm mt-3">{errorMsg}</p>}
 
-            {recommendedPairs.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-6xl mx-auto">
-                {recommendedPairs.map(p => {
-                  const selected = selectedPairId === p.id;
-
-                  return (
-                    <label
-                      key={p.id}
-                      className={`relative cursor-pointer rounded-2xl border-2 p-5 transition-all duration-300 ${
-                        selected
-                          ? "border-blue-600 bg-blue-50/70 shadow-2xl ring-4 ring-blue-200 scale-105"
-                          : "border-gray-200 bg-white shadow-lg hover:shadow-2xl hover:scale-102"
-                      }`}
-                      onClick={() => setSelectedPairId(p.id)}
-                    >
-                      <input type="radio" name="segPair" checked={selected} className="sr-only" />
-
-                      {/* Selected checkmark */}
-                      {selected && (
-                        <div className="absolute -top-4 -right-4">
-                          <div className="bg-blue-600 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-xl text-3xl font-bold">
-                            ✓
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="flex gap-5 items-start">
-                        {/* Icon */}
-                        <div className="text-5xl flex-shrink-0">{p.icon}</div>
-
-                        <div className="flex-1">
-                          {/* Title + tagline */}
-                          <h4 className="text-2xl font-bold text-gray-900 mb-2">{p.label}</h4>
-                          <p className="text-lg text-blue-600 font-medium mb-6">{p.tagline}</p>
-
-                          {/* Benefits with green checks */}
-                          <ul className="space-y-2 mb-6">
-                            {p.benefits.map((benefit, i) => (
-                              <li key={i} className="flex items-center gap-3 text-gray-700">
-                                <span className="text-green-600 text-xl font-bold">✔</span>
-                                <span className="text-base">{benefit}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="mt-2 p-4 bg-yellow-50 border-l-4 border-yellow-300 rounded text-sm text-yellow-700">
-                No recommended segmentation pairs available. Error in retrieving attributes pairs
-              </div>
-            )}
-
-            {/* Unified Run Button */}
-            {(() => {
-              const canRun = !!segmentationId && (
-                (selectedPairId && recommendedPairs.some(x => x.id === selectedPairId))
-              );
-              return (
-                <div className="mt-6 pt-4 border-t flex items-center justify-end">
-                  <button
-                    onClick={handleRunSegmentation}
-                    disabled={segLoading || !canRun}
-                    className={`inline-flex items-center gap-2 px-5 py-2 rounded font-medium border transition ${(segLoading || !canRun) ? 'bg-gray-300 border-gray-300 text-gray-600 cursor-not-allowed' : 'border-blue-500 text-blue-700 bg-blue-50 hover:bg-blue-100'}`}
-                  >Run Segmentation</button>
-                </div>
-              );
-            })()}
+            <div className="mt-8 flex items-center justify-center">
+              <button
+                onClick={handleRunSegmentation}
+                disabled={segLoading || !segmentationId}
+                className="self-center py-2.5 px-6 rounded-full text-black font-semibold transition-all border border-black hover:brightness-90"
+                style={{ backgroundColor: '#C7EDC3' }}
+              >Group My Customers</button>
+            </div>
           </div>
         </div>
+
+          {/* Help Modal: What is RFM? */}
+          {showHelpModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center">
+              <div className="absolute inset-0 bg-black/30" onClick={() => setShowHelpModal(false)}></div>
+              <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6">
+                <div className="flex items-start justify-between mb-3">
+                  <h3 className="text-xl font-bold text-gray-800">What is RFM?</h3>
+                  <button onClick={() => setShowHelpModal(false)} className="text-gray-500 hover:text-gray-700">✕</button>
+                </div>
+                <p className="text-gray-700 mb-4">
+                  RFM groups customers by how <span className="font-semibold">recently</span> they bought, how <span className="font-semibold">often</span> they buy, and how much <span className="font-semibold">money</span> they spend.
+                  It’s a friendly way to spot VIPs, loyal fans, and customers who may be at risk of leaving.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <p className="text-xs text-gray-600">Recency</p>
+                    <p className="font-semibold text-blue-700">Days since last purchase</p>
+                  </div>
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <p className="text-xs text-gray-600">Frequency</p>
+                    <p className="font-semibold text-blue-700">Orders per month</p>
+                  </div>
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <p className="text-xs text-gray-600">Monetary</p>
+                    <p className="font-semibold text-blue-700">Total spend (MYR)</p>
+                  </div>
+                </div>
+                <ul className="list-disc pl-6 text-gray-700 mb-4">
+                  <li>See groups like VIPs, Loyal, Potential Loyal, and At Risk</li>
+                  <li>Get simple, actionable tips for each group</li>
+                  <li>Track spend and order trends by group</li>
+                </ul>
+              </div>
+            </div>
+          )}
       </div>
     </div>
   );
