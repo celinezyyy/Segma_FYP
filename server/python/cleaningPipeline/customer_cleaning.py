@@ -185,10 +185,10 @@ def derive_age_group(df):
             elif 45 <= age <= 54: return '45-54'
             elif 55 <= age <= 64: return '55-64'
             else: return 'Above 65'
-        df['age_group'] = df['age'].apply(categorize_age)
+        df['age group'] = df['age'].apply(categorize_age)
         # Clean up any remaining empty strings or NaN
-        df['age_group'] = df['age_group'].fillna("Unknown")
-        df['age_group'] = df['age_group'].replace('', 'Unknown')
+        df['age group'] = df['age group'].fillna("Unknown")
+        df['age group'] = df['age group'].replace('', 'Unknown')
         print("[LOG - STAGE 4] Age groups derived, null age_group marked as Unknown")
     else:
         print("[LOG - STAGE 4] Age column not found, skipping age_group creation")

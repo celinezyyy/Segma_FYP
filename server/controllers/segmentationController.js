@@ -15,7 +15,6 @@ const aggregateOrderData = (orderRows) => {
 
   // Loop through each order row
   orderRows.forEach(row => {
-    // Get customer ID (lowercase because of cleaning pipeline normalization)
     const customerId = row['customerid'];
     
     // If this is the first order for this customer, initialize their data
@@ -56,7 +55,8 @@ const aggregateOrderData = (orderRows) => {
 
     // Collect purchase time if available (e.g., "14:35:00")
     if (purchaseTime) {
-      if (!customerOrders[customerId].purchaseTimes) customerOrders[customerId].purchaseTimes = [];
+      if (!customerOrders[customerId].purchaseTimes) 
+        customerOrders[customerId].purchaseTimes = [];
       customerOrders[customerId].purchaseTimes.push(purchaseTime);
     }
   });
@@ -69,42 +69,27 @@ const aggregateOrderData = (orderRows) => {
     
     // Sort dates: most recent first (newest to oldest)
     const dates = data.purchaseDates.sort((a, b) => b - a);
-    
-    // === CALCULATE RECENCY (R in RFM) ===
-    // How many days since their last purchase?
-    let daysSinceLastPurchase = null;
-    let lastPurchaseDate = null;
-    let firstPurchaseDate = null;
-    
+
+    let recency = null;
+    let customerLifetimeMonths = 0;
+
     if (dates.length > 0) {
-      lastPurchaseDate = dates[0];  // Most recent date (first in sorted array)
-      firstPurchaseDate = dates[dates.length - 1];  // Oldest date (last in array)
+      const lastPurchaseDate = dates[0];
+      const firstPurchaseDate = dates[dates.length - 1];
       const now = new Date();
-      // Calculate difference in days
-      daysSinceLastPurchase = Math.floor((now - lastPurchaseDate) / (1000 * 60 * 60 * 24));
+
+      recency = Math.floor((now - lastPurchaseDate) / (1000 * 60 * 60 * 24));
+
+      const diffTime = lastPurchaseDate - firstPurchaseDate;
+      customerLifetimeMonths = Math.max(
+        1,
+        Math.floor(diffTime / (1000 * 60 * 60 * 24 * 30))
+      );
     }
 
     // === CALCULATE AVERAGE ORDER VALUE ===
     // Total spend divided by number of orders
     const avgOrderValue = data.totalOrders > 0 ? data.totalSpend / data.totalOrders : 0;
-
-    // === CALCULATE CUSTOMER LIFETIME (in months) ===
-    // Time between first and last purchase
-    let customerLifetimeMonths = null;
-    if (firstPurchaseDate && lastPurchaseDate) {
-      const diffTime = Math.abs(lastPurchaseDate - firstPurchaseDate);
-      // Convert milliseconds to months (approx 30 days per month)
-      customerLifetimeMonths = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 30));
-    }
-
-    // === CALCULATE PURCHASE FREQUENCY ===
-    // How many orders per month on average?
-    let purchaseFrequency = null;
-    if (customerLifetimeMonths !== null && customerLifetimeMonths > 0) {
-      purchaseFrequency = data.totalOrders / customerLifetimeMonths;
-    } else if (data.totalOrders > 0) {
-      purchaseFrequency = data.totalOrders; // Customer less than a month old
-    }
 
     // === FIND FAVORITE ITEM ===
     // Count how many times each item was purchased
@@ -112,6 +97,7 @@ const aggregateOrderData = (orderRows) => {
     data.items.forEach(item => {
       itemCounts[item] = (itemCounts[item] || 0) + 1;
     });
+
     // Find the item with highest count
     const favoriteItem = Object.keys(itemCounts).length > 0
       ? Object.keys(itemCounts).reduce((a, b) => 
@@ -123,7 +109,7 @@ const aggregateOrderData = (orderRows) => {
     // Compute favorite purchase hour (0-23) and day-part if times exist
     let favoritePurchaseHour = null;
     let favoriteDayPart = null;
-    if (data.purchaseTimes && data.purchaseTimes.length > 0) {
+    if (data.purchaseTimes.length > 0) {
       const hourCounts = {};
       const dayPartCounts = { Night: 0, Morning: 0, Afternoon: 0, Evening: 0 };
 
@@ -159,18 +145,14 @@ const aggregateOrderData = (orderRows) => {
       
       // === BEHAVIORAL METRICS ===
       totalOrders: data.totalOrders,
-      totalSpend: parseFloat(data.totalSpend.toFixed(2)),  // Round to 2 decimals
       avgOrderValue: parseFloat(avgOrderValue.toFixed(2)),
-      lastPurchaseDate: lastPurchaseDate ? lastPurchaseDate.toISOString().split('T')[0] : null,  // Format: YYYY-MM-DD
-      firstPurchaseDate: firstPurchaseDate ? firstPurchaseDate.toISOString().split('T')[0] : null,
       customerLifetimeMonths: customerLifetimeMonths || 0,
-      purchaseFrequency: purchaseFrequency ? parseFloat(purchaseFrequency.toFixed(2)) : 0,
       favoriteItem: favoriteItem,
       favoritePurchaseHour: favoritePurchaseHour,   // Optional, integer 0-23
       favoriteDayPart: favoriteDayPart,             // Optional, one of Night/Morning/Afternoon/Evening
       
       // === RFM COMPONENTS (for RFM segmentation) ===
-      recency: daysSinceLastPurchase,      // R: Days since last purchase (lower is better)
+      recency: recency,      // R: Days since last purchase (lower is better)
       frequency: data.totalOrders,         // F: Number of orders (higher is better)
       monetary: parseFloat(data.totalSpend.toFixed(2)),  // M: Total spend (higher is better)
     };
@@ -187,12 +169,12 @@ const mergeCustomerAndOrderData = (customerRows, aggregatedOrderData) => {
   const sampleCustomer = customerRows[0] || {};
   // Support both underscore and hyphen variants from cleaning outputs
   const hasAgeColumn = 'age' in sampleCustomer;
-  const hasAgeGroupColumn = ('age_group' in sampleCustomer) || ('age-group' in sampleCustomer);
+  const hasAgeGroupColumn = ('age group' in sampleCustomer);
   const hasGenderColumn = 'gender' in sampleCustomer;
 
   console.log('[LOG - MERGE] Column availability check:');
   console.log(`  - age: ${hasAgeColumn}`);
-  console.log(`  - age_group: ${hasAgeGroupColumn}`);
+  console.log(`  - age group: ${hasAgeGroupColumn}`);
   console.log(`  - gender: ${hasGenderColumn}`);
 
   customerRows.forEach(customer => {
@@ -206,49 +188,44 @@ const mergeCustomerAndOrderData = (customerRows, aggregatedOrderData) => {
     // Start with mandatory fields (always present)
     const mergedCustomer = {
       // === IDENTIFICATION ===
-      customerid: customerId,
+      CustomerId: customerId,
       
       // === GEOGRAPHIC DATA (always present) ===
-      city: customer['city'] || null,
-      state: customer['state'] || null,
+      City: customer['city'] || null,
+      State: customer['state'] || null,
       
       // === BEHAVIORAL DATA FROM ORDERS ===
-      totalOrders: orderData.totalOrders || 0,
-      totalSpend: orderData.totalSpend || 0,
-      avgOrderValue: orderData.avgOrderValue || 0,
-      lastPurchaseDate: orderData.lastPurchaseDate || null,
-      firstPurchaseDate: orderData.firstPurchaseDate || null,
-      customerLifetimeMonths: orderData.customerLifetimeMonths || 0,
-      purchaseFrequency: orderData.purchaseFrequency || 0,
-      favoriteItem: orderData.favoriteItem || null,
-      favoritePurchaseHour: orderData.favoritePurchaseHour ?? null,
-      favoriteDayPart: orderData.favoriteDayPart ?? null,
+      TotalOrders: orderData.totalOrders || 0,
+      AvgOrderValue: orderData.avgOrderValue || 0,
+      CustomerLifetimeMonths: orderData.customerLifetimeMonths || 0,
+      FavoriteItem: orderData.favoriteItem || null,
+      FavoritePurchaseHour: orderData.favoritePurchaseHour ?? null,
+      FavoriteDayPart: orderData.favoriteDayPart ?? null,
       
       // === RFM SCORES (for RFM segmentation) ===
-      recency: orderData.recency || null,
-      frequency: orderData.frequency || 0,
-      monetary: orderData.monetary || 0,
+      Recency: orderData.recency || null,
+      Frequency: orderData.frequency || 0,
+      Monetary: orderData.monetary || 0,
     };
 
     if (hasAgeGroupColumn) {
       // Prefer underscore if present, else fallback to hyphen variant
-      const ageGroupValue = (customer['age_group'] ?? customer['age-group']);
+      const ageGroupValue = customer['age group'];
       if (ageGroupValue && ageGroupValue !== 'Unknown') {
-        mergedCustomer.ageGroup = ageGroupValue;
+        mergedCustomer.AgeGroup = ageGroupValue;
       } else {
-        mergedCustomer.ageGroup = null; // mark as truly missing
+        mergedCustomer.AgeGroup = null; // mark as truly missing
       }
     }
 
     if (hasGenderColumn) {
       const genderValue = customer['gender'];
       if (genderValue && genderValue !== 'Unknown') {
-        mergedCustomer.gender = genderValue;
+        mergedCustomer.Gender = genderValue;
       } else {
-        mergedCustomer.gender = null; // mark as missing for accurate summary
+        mergedCustomer.Gender = null; // mark as missing for accurate summary
       }
     }
-
     mergedData.push(mergedCustomer);
   });
 

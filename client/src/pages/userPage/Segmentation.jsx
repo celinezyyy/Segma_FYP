@@ -123,16 +123,16 @@ const Segmentation = () => {
           }));
         } catch (_) {}
         // Fetch merged columns for custom selection
-        if (response.data.segmentationId) {
-          try {
-            const colsResp = await axios.get(`${backendUrl}/api/segmentation/${response.data.segmentationId}/columns`, { withCredentials: true });
-            if (colsResp.data?.success && Array.isArray(colsResp.data.columns)) {
-              console.log('[DEBUG] Merged columns:', colsResp.data.columns);
-            }
-          } catch (e) {
-            console.warn('Unable to fetch merged columns', e?.message);
-          }
-        }
+        // if (response.data.segmentationId) {
+        //   try {
+        //     const colsResp = await axios.get(`${backendUrl}/api/segmentation/${response.data.segmentationId}/columns`, { withCredentials: true });
+        //     if (colsResp.data?.success && Array.isArray(colsResp.data.columns)) {
+        //       console.log('[DEBUG] Merged columns:', colsResp.data.columns);
+        //     }
+        //   } catch (e) {
+        //     console.warn('Unable to fetch merged columns', e?.message);
+        //   }
+        // }
         Swal.fire({
           icon: 'success',
           title: 'Data Prepared!',
