@@ -309,7 +309,7 @@ def order_detect_outliers(df):
 
     numeric_cols = ["purchase quantity", "total spend"]
     df = df.copy()
-    
+    messages = []
     outlier_info = []
     
     # Initialize flag columns
@@ -354,8 +354,21 @@ def order_detect_outliers(df):
             col_display = col.replace('_', ' ').title()
             outlier_info.append(f"  - {col_display}: {outliers_count} unusual value(s) detected (may indicate high-value customers)")
     
+    # Build message
+    if outlier_info:
+        messages.append("Unusual Values Detected:")
+        messages.append("\nWe found some extremely high or low values in your order data.")
+        messages.append("\nWhat we did: Flagged these values for your attention. Original values are preserved.")
+        messages.append("\nDetails:")
+        messages.extend(outlier_info)
+        messages.append("\nNote: These outliers might represent VIP customers or bulk buyers. They will be considered during segmentation to help identify high-value customer groups.")
+    else:
+        messages.append("Order Values Look Good:")
+        messages.append("\nAll order values (quantities and amounts) appear normal and consistent. No unusual values detected.")
+
+    final_message = "\n".join(messages)
     print("✅ [STAGE 5 COMPLETE] Outliers flagged successfully (values preserved).")
-    return df
+    return df, final_message
 
 # ============================================= (ORDER DATASET) DATASET CLEANING PIPELINE =============================================
 def clean_order_dataset(df, cleaned_output_path):
@@ -417,13 +430,11 @@ def clean_order_dataset(df, cleaned_output_path):
     print("✅ [STAGE 4 COMPLETE] Missing values handled.\n")
     
     # =============================================
-    # STAGE 5: OUTLIER DETECTION
+    # STAGE 5: OUTLIER DETECTION (Not implement)
     # =============================================
-    print("========== [STAGE 5 START] Outlier Detection ==========")
-    df, outlier_msg = order_detect_outliers(df)
-    messages.append(outlier_msg)
-    report["detailed_messages"]["order_detect_outliers"] = outlier_msg
-    print("✅ [STAGE 5 COMPLETE] Outliers handled.\n")
+    # print("========== [STAGE 5 START] Outlier Detection ==========")
+    # df = order_detect_outliers(df)
+    # print("✅ [STAGE 5 COMPLETE] Outliers handled.\n")
     
     # final profiling summary
     report["summary"].update({

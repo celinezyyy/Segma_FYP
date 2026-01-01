@@ -97,6 +97,21 @@ const DataQualityReport = () => {
   const formatMessage = (message) => {
     if (!message) return null;
 
+    // Render **bold** segments inside a line
+    const renderStyledText = (text) => {
+      const parts = [];
+      let lastIndex = 0;
+      const regex = /\*\*(.+?)\*\*/g;
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+        parts.push(<span className="font-semibold" key={`b-${match.index}`}>{match[1]}</span>);
+        lastIndex = match.index + match[0].length;
+      }
+      if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+      return parts;
+    };
+
     // Split by double newlines for paragraphs
     const paragraphs = message.split('\n\n');
     
@@ -140,7 +155,7 @@ const DataQualityReport = () => {
               
               return (
                 <h4 key={lIdx} className={`font-semibold ${colorClass} text-base mb-2`}>
-                  {trimmedLine}
+                  {renderStyledText(trimmedLine)}
                 </h4>
               );
             }
@@ -151,7 +166,7 @@ const DataQualityReport = () => {
               return (
                 <div key={lIdx} className="flex items-start gap-2 ml-4 mb-1">
                   <span className="text-blue-500 mt-1.5 text-xs">●</span>
-                  <p className="text-gray-600 flex-1 leading-relaxed">{text}</p>
+                  <p className="text-gray-600 flex-1 leading-relaxed">{renderStyledText(text)}</p>
                 </div>
               );
             }
@@ -159,7 +174,7 @@ const DataQualityReport = () => {
             // Regular lines
             return (
               <p key={lIdx} className="text-gray-700 mb-1.5 leading-relaxed">
-                {trimmedLine}
+                {renderStyledText(trimmedLine)}
               </p>
             );
           })}
@@ -188,6 +203,7 @@ const DataQualityReport = () => {
     if (!report) return <p className="italic text-gray-500">No report available.</p>;
 
     const { summary, detailed_messages } = report;
+    const [showDetails, setShowDetails] = React.useState(false);
     
     // Determine dataset ID and name for download
     const datasetId = type === 'Customer' ? selectedCustomer : selectedOrder;
@@ -197,7 +213,6 @@ const DataQualityReport = () => {
       check_mandatory_columns: { title: '✓ Column Validation', icon: '📋', color: 'bg-blue-50' },
       customer_check_optional_columns: { title: '✓ Optional Fields Check', icon: '📊', color: 'bg-purple-50' },
       remove_duplicate_entries: { title: '✓ Duplicate Removal', icon: '🔄', color: 'bg-green-50' },
-      deduplicate_customers: { title: '✓ Customer Deduplication', icon: '👥', color: 'bg-teal-50' },
       standardize_dob: { title: '✓ Date of Birth Processing', icon: '📅', color: 'bg-indigo-50' },
       standardize_purchase_date: { title: '✓ Purchase Date Processing', icon: '📅', color: 'bg-indigo-50' },
       handle_missing_values_customer: { title: '✓ Missing Values Handled', icon: '🔧', color: 'bg-yellow-50' },
@@ -211,7 +226,7 @@ const DataQualityReport = () => {
         <div className="border-b-2 border-gray-200 pb-4 mb-6 flex justify-between items-center">
           <h2 className="text-2xl font-bold text-[#2C3E50] flex items-center gap-3">
             <span className="text-3xl">{type === 'Customer' ? '👤' : '🛒'}</span>
-            {type} Dataset Cleaning Report
+            {type} Dataset Checking Report
           </h2>
           <button
             onClick={() => handleDownload(datasetId, `cleaned_${type.toLowerCase()}_data.csv`, type)}
@@ -254,41 +269,38 @@ const DataQualityReport = () => {
               <p className="text-xs text-gray-600 mt-1">Total Columns</p>
             </div>
           </div>
-
-          {/* Final Columns List */}
-          {summary.final_columns && summary.final_columns.length > 0 && (
-            <div className="mt-4 bg-white rounded-lg p-4 shadow-sm">
-              <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                <span>📋</span> Remaining Columns After Cleaning
-              </h4>
-              <div className="flex flex-wrap gap-2">
-                {summary.final_columns.map((col, idx) => (
-                  <span 
-                    key={idx} 
-                    className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium"
-                  >
-                    {col}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* Detailed Messages */}
-        <div>
-          <h3 className="font-semibold text-gray-800 mb-4 text-lg flex items-center gap-2">
-            <span>📝</span> Detailed Cleaning Steps
-          </h3>
-          {Object.entries(detailed_messages).map(([key, msg]) => {
-            if (!msg) return null;
-            const config = sectionConfig[key] || { 
-              title: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), 
-              icon: '✓', 
-              color: 'bg-gray-50' 
-            };
-            return renderReportSection(config.title, msg, config.icon, config.color);
-          })}
+        {/* User-facing note and optional technical details */}
+        <div className="mt-4">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-3">
+            <p className="text-sm text-yellow-900">
+              You can view how your data was prepared and checked in more detail below.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowDetails(prev => !prev)}
+            className="inline-block bg-white border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded hover:bg-gray-50 transition"
+          >
+           {showDetails ? 'Hide Data Checking Details' : 'View Data Checking Details'}
+          </button>
+
+          {showDetails && (
+            <div className="mt-4">
+              <h3 className="font-semibold text-gray-800 mb-4 text-lg flex items-center gap-2">
+                <span>📝</span> Detailed Data Checking Steps
+              </h3>
+              {Object.entries(detailed_messages).map(([key, msg]) => {
+                if (!msg) return null;
+                const config = sectionConfig[key] || { 
+                  title: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), 
+                  icon: '✓', 
+                  color: 'bg-gray-50' 
+                };
+                return renderReportSection(config.title, msg, config.icon, config.color);
+              })}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -301,7 +313,7 @@ const DataQualityReport = () => {
         <div className="max-w-full mx-auto">
           <h1 className="text-2xl font-bold mb-5 text-center text-[#2C3E50] flex items-center justify-center gap-3">
             <span className="text-2xl">📊</span>
-            Summarize Cleaning Report
+            Data Checking Report
           </h1>
 
           {/* Tab Navigation */}
@@ -338,16 +350,16 @@ const DataQualityReport = () => {
           <div className="flex justify-center gap-4 mt-8">
             <button
               onClick={() => navigate('/dataset-selection')}
-              className="py-3 px-8 rounded-full border-2 border-gray-400 hover:bg-gray-100 text-gray-700 font-semibold transition-all hover:shadow-md"
+              className="py-2.5 px-6 rounded-full border border-gray-400 hover:bg-gray-100 text-gray-700 font-semibold transition-all hover:shadow-md"
             >
               ← Back
             </button>
             <button
               onClick={() => navigate('/segmentation', { state: { selectedCustomer, selectedOrder } })}
-              className="py-3 px-8 rounded-full text-black font-semibold transition-all border-2 border-black hover:brightness-90 hover:shadow-lg"
-              style={{ backgroundColor: '#C7EDC3' }}
+              className="self-center py-2.5 px-6 rounded-full text-black font-semibold transition-all border border-black hover:brightness-90"
+                  style={{ backgroundColor: '#C7EDC3' }}
             >
-              Proceed to Segmentation →
+              Proceed to Segmentation
             </button>
           </div>
         </div>

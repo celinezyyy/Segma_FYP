@@ -44,14 +44,21 @@ def customer_check_optional_columns(df, threshold=0.9):
             dropped_columns.append(col)
 
     # Generate user-friendly message
+    message = None
     if dropped_columns:
-        dropped_str = ", ".join(dropped_columns)
+        # Title-case and bold the dropped column names
+        def _title_cap(s):
+            return " ".join(w.capitalize() for w in str(s).split())
+
+        formatted = [f"**{_title_cap(col)}**" for col in dropped_columns]
+        dropped_str = ", ".join(formatted)
+
         kept_details = [report for report in missing_report if not any(col in report for col in dropped_columns)]
-        
+
         message = (
-            f"Some optional customer details ({dropped_str}) were not available for most records, so they were excluded from analysis. This will not affect the system’s ability to perform segmentation."
+            f"({dropped_str}) were not available for most records, so they were excluded from analysis."
         )
-        
+
         if kept_details:
             message += "\n\n Columns Kept:\n" + "\n".join(f"  • {d}" for d in kept_details)
     
@@ -603,13 +610,13 @@ def clean_customer_dataset(df, cleaned_output_path):
     print("✅ [STAGE 5 COMPLETE] Missing values handled.\n")
 
     # =============================================
-    # STAGE 6: OUTLIER DETECTION
+    # STAGE 6: OUTLIER DETECTION (Not Implement)
     # =============================================
-    print("========== [STAGE 6 START] Outlier Detection ==========")
-    df, outlier_msg = customer_detect_outliers(df)
-    messages.append(outlier_msg)
-    report["detailed_messages"]["customer_detect_outliers"] = outlier_msg
-    print("✅ [STAGE 6 COMPLETE] Outliers handled.\n")
+    # print("========== [STAGE 6 START] Outlier Detection ==========")
+    # df, outlier_msg = customer_detect_outliers(df)
+    # messages.append(outlier_msg)
+    # report["detailed_messages"]["customer_detect_outliers"] = outlier_msg
+    # print("✅ [STAGE 6 COMPLETE] Outliers handled.\n")
 
     # final profiling summary
     report["summary"].update({

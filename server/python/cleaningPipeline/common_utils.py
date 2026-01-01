@@ -47,17 +47,19 @@ def check_mandatory_columns(df, dataset_type, mandatory_columns, threshold=0.9):
 
     # Step 2: Generate message
     if warning_columns:
-        warning_str = ", ".join(warning_columns)
+        # Bold and capitalize each column name in the warning list
+        def _title_cap(s):
+            return " ".join(w.capitalize() for w in str(s).split())
+
+        formatted_cols = [f"**{_title_cap(col)}**" for col in warning_columns]
+        warning_str = ", ".join(formatted_cols)
         warning_details = [report for report in missing_report if any(col in report for col in warning_columns)]
         
-        # Check if location fields (city/state) are in warning
+        # Check if location fields (city/state) are in warning (reserved for future use)
         location_warning = any(col in ['city', 'state'] for col in warning_columns)
         
         message = (
             f"⚠️ ATTENTION - The following field(s) is missing in many records: {warning_str}\n\n"
-        )
-        message += (
-            f"⚠️ Impact: Missing mandatory data can significantly reduce the accuracy of your segmentation results.\n\n"
         )
         
         message += (
