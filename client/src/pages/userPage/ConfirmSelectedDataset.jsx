@@ -145,11 +145,6 @@ const ConfirmSelectedDataset = () => {
                     const isCustomerClean = customerRes.data?.isClean;
                     const isOrderClean = orderRes.data?.isClean;
 
-                    let customerCleanRes = {};
-                    let orderCleanRes = {};
-                    let customerReport = {};
-                    let orderReport = {};
-
                     if (!isCustomerClean) {
                         // Show progress modal
                         Swal.fire({

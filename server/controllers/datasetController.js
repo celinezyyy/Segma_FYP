@@ -307,6 +307,7 @@ export const getDatasetCleanStatus = async (req, res) => {
 
 // Handle dataset cleaning process
 export const startDatasetCleaning = async (req, res) => {
+  console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> ENTRY: startDatasetCleaning function >>>>>>>>>>>>>>>>>>>>>>>>');
   try {
     const io = req.app.get('io');
     const { customerDatasetId, orderDatasetId } = req.body;
@@ -430,8 +431,8 @@ export const startDatasetCleaning = async (req, res) => {
     } catch (e) {
       console.warn('Temp cleanup warning', e);
     }
+    console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> EXIT: startDatasetCleaning function >>>>>>>>>>>>>>>>>>>>>>>>');
     return res.json({ success: true, message: `${type} dataset cleaned successfully.`, report });
-    // res.json({ success: true, message: `${type} dataset cleaned and replaced successfully.` });
 
   } catch (error) {
     console.error('Error in startDatasetCleaning:', error);
@@ -439,7 +440,6 @@ export const startDatasetCleaning = async (req, res) => {
     const io = req.app.get('io');
     io?.to(req.userId).emit('cleaning-progress', { progress: 0, message: 'Cleaning failed', error: error.message });
     return res.status(500).json({ success: false, message: error.message });
-    // res.status(500).json({ success: false, message: error.message });
   }
 };
 

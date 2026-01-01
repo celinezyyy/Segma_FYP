@@ -206,7 +206,7 @@ def handle_missing_values_order(df):
     """
 
     initial_count = len(df)
-    messages = []
+   
     stats = {
         "critical_ids_removed": 0,
         "purchase_time_removed": 0,
@@ -290,41 +290,11 @@ def handle_missing_values_order(df):
     # Build message
     dropped_total = initial_count - len(df)
     
-    if dropped_total > 0:
-        messages.append(f"{dropped_total} order(s) removed due to missing critical information:")
-        if stats["critical_ids_removed"] > 0:
-            messages.append(f"  - {stats['critical_ids_removed']} order(s) without OrderID, CustomerID, Purchase Date, or Purchase Item")
-        if stats["purchase_time_removed"] > 0:
-            messages.append(f"  - {stats['purchase_time_removed']} order(s) without Purchase Time")
-        if stats["no_financial_removed"] > 0:
-            messages.append(f"  - {stats['no_financial_removed']} order(s) without any price or total spend information")
-        if stats["item_price_removed"] > 0:
-            messages.append(f"  - {stats['item_price_removed']} order(s) without Item Price (needed for calculations)")
-        if stats["total_spend_removed"] > 0:
-            messages.append(f"  - {stats['total_spend_removed']} order(s) without Total Spend even after calculation")
-    
-    calculation_msgs = []
-    if stats["qty_calculated"] > 0:
-        calculation_msgs.append(f"  - Calculated Purchase Quantity for {stats['qty_calculated']} order(s) using Total Spend / Item Price")
-    if stats["total_spend_calculated"] > 0:
-        calculation_msgs.append(f"  - Calculated Total Spend for {stats['total_spend_calculated']} order(s) using Item Price x Quantity")
-    if stats["transaction_method_filled"] > 0:
-        calculation_msgs.append(f"  - Filled {stats['transaction_method_filled']} missing Transaction Method(s) with 'Unknown'")
-    
-    if calculation_msgs:
-        messages.append("\nData Filled/Calculated:")
-        messages.extend(calculation_msgs)
-    
-    if not messages:
-        final_message = "All order records have complete information. No missing values found."
-    else:
-        final_message = "Missing Value Handling Summary:\n\n" + "\n".join(messages)
-    
     # Final summary
     print(f"[LOG - STAGE 4] Dropped total {dropped_total} rows ({dropped_total/initial_count:.2%}) due to missing critical data")
     print(f"[LOG - STAGE 4] Dataset now has {len(df)} rows after missing value handling")
 
-    return df, final_message
+    return df
 
 # ============================================= (ORDER DATASET) STAGE 5: OUTLIER DETECTION =============================================
 def order_detect_outliers(df):
@@ -340,9 +310,7 @@ def order_detect_outliers(df):
     numeric_cols = ["purchase quantity", "total spend"]
     df = df.copy()
     
-    messages = []
     outlier_info = []
-    dataset_size = len(df)
     
     # Initialize flag columns
     df['is_quantity_outlier'] = False
@@ -385,23 +353,9 @@ def order_detect_outliers(df):
         if outliers_count > 0:
             col_display = col.replace('_', ' ').title()
             outlier_info.append(f"  - {col_display}: {outliers_count} unusual value(s) detected (may indicate high-value customers)")
-
-    # Build message
-    if outlier_info:
-        messages.append("Unusual Values Detected:")
-        messages.append("\nWe found some extremely high or low values in your order data.")
-        messages.append("\nWhat we did: Flagged these values for your attention. Original values are preserved.")
-        messages.append("\nDetails:")
-        messages.extend(outlier_info)
-        messages.append("\nNote: These outliers might represent VIP customers or bulk buyers. They will be considered during segmentation to help identify high-value customer groups.")
-    else:
-        messages.append("Order Values Look Good:")
-        messages.append("\nAll order values (quantities and amounts) appear normal and consistent. No unusual values detected.")
-
-    final_message = "\n".join(messages)
     
     print("✅ [STAGE 5 COMPLETE] Outliers flagged successfully (values preserved).")
-    return df, final_message
+    return df
 
 # ============================================= (ORDER DATASET) DATASET CLEANING PIPELINE =============================================
 def clean_order_dataset(df, cleaned_output_path):
@@ -436,9 +390,7 @@ def clean_order_dataset(df, cleaned_output_path):
     # ============================================================
     print("========== [STAGE 2 START] Remove Duplicate Entry Rows ==========")
     initial_rows = len(df)
-    df, message = remove_duplicate_entries(df)
-    messages.append(message)
-    report["detailed_messages"]["remove_duplicate_entries"] = message
+    df = remove_duplicate_entries(df)
     report["summary"]["duplicates_removed_rows"] = initial_rows - len(df)
     print("✅ [STAGE 2 COMPLETE] Duplicate entries removed.\n")
     
@@ -461,9 +413,7 @@ def clean_order_dataset(df, cleaned_output_path):
     # STAGE 4: MISSING VALUE HANDLING
     # ===============================================
     print("========== [STAGE 4 START] Missing Value Handling ==========")
-    df, missing_value_msg = handle_missing_values_order(df)
-    messages.append(missing_value_msg)
-    report["detailed_messages"]["handle_missing_values_order"] = missing_value_msg
+    df = handle_missing_values_order(df)
     print("✅ [STAGE 4 COMPLETE] Missing values handled.\n")
     
     # =============================================

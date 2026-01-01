@@ -46,32 +46,14 @@ def customer_check_optional_columns(df, threshold=0.9):
     # Generate user-friendly message
     if dropped_columns:
         dropped_str = ", ".join(dropped_columns)
-        dropped_details = [report for report in missing_report if any(col in report for col in dropped_columns)]
         kept_details = [report for report in missing_report if not any(col in report for col in dropped_columns)]
         
         message = (
-            f"Optional Columns Removed:\n\n"
-            f"The following column(s) were removed due to insufficient data: {dropped_str}\n"
-        )
-        if dropped_details:
-            message += "Details:\n" + "\n".join(f"  • {d}" for d in dropped_details) + "\n\n"
-        
-        message += (
-            "Why? These columns had less than 90% complete data, which is too sparse for reliable analysis.\n\n"
-            "Good News: Segmentation will still work using:\n"
-            "  • Geographic data (City, State)\n"
-            "  • Behavioral data (orders, purchase patterns, spending)\n"
+            f"Some optional customer details ({dropped_str}) were not available for most records, so they were excluded from analysis. This will not affect the system’s ability to perform segmentation."
         )
         
         if kept_details:
             message += "\n\n Columns Kept:\n" + "\n".join(f"  • {d}" for d in kept_details)
-    else:
-        message = (
-            "All Optional Columns Retained:\n\n"
-            "All optional columns (Date of Birth, Gender) have sufficient data (≥90% filled) and will be kept for analysis.\n\n"
-            "Data Completeness:\n" + "\n".join(f"  • {report}" for report in missing_report) + "\n\n"
-            "Note: We already clean missing values in these columns during the cleaning process."
-        )
     
     return df, message
 
@@ -131,8 +113,8 @@ def standardize_dob(df):
         # Keep NaT as is - don't fill with "Unknown" string (causes issues with .year/.month/.day)
         print("[LOG - STAGE 4] DOB parsing complete. Invalid dates kept as NaT")
         message = (
-            "Since your dataset includes a Date of Birth information, we derived two useful fields — "
-            "'age' and 'age_group' — for segmentation purposes, and the original 'Date of Birth' column will be remove."
+            "Since your dataset includes a Date of Birth information, we derived two useful fields "
+            "'age' and 'age_group' for segmentation purposes, and the original 'Date of Birth' column will be remove."
         )
     else:
         print("[LOG - STAGE 4] DOB column not found, skipping")
@@ -328,13 +310,12 @@ def standardize_location(df):
 def handle_missing_values_customer(df):
     print("[LOG - STAGE 5] Running handle_missing_values...")
     # moe acc geoAPI: 68f8ce9a38c3f632237334dyiedb96e
-    #siswa acc geoAPI(Currently use this): 69512949ee2fd401068815gcid6e3dd
+    # siswa acc geoAPI(Currently use this): 69512949ee2fd401068815gcid6e3dd
     API_KEY = "69512949ee2fd401068815gcid6e3dd"
     GEOCODE_URL = "https://geocode.maps.co/search"
     SLEEP_TIME = 1.2
     cache = {}  # ⚡ moved outside loops
     
-    messages = []
     stats = {
         "customerid_removed": 0,
         "case1_api_filled": 0,
@@ -350,8 +331,6 @@ def handle_missing_values_customer(df):
         rows_removed = before_drop - len(df)
         stats["customerid_removed"] = rows_removed
         print(f"[LOG - STAGE 5] Dropped {rows_removed} rows without CustomerID")
-        if rows_removed > 0:
-            messages.append(f" Removed {rows_removed} record(s) with missing CustomerID as we cannot predict valid customer identifiers.")
     else:
         print("[LOG - STAGE 5] 'customerid' column missing, skipping drop")
 
@@ -420,15 +399,6 @@ def handle_missing_values_customer(df):
                 stats["case1_fallback_filled"] += filled_count
                 print(f"[TRACE - STAGE 5] Filled {filled_count} row(s) → city='{mode_city}', state='{mode_state}' (Fallback)")
 
-        if stats["case1_api_filled"] > 0 or stats["case1_fallback_filled"] > 0:
-            msg = "Location - Missing State (City Known):\n"
-            if stats["case1_api_filled"] > 0:
-                msg += f"  • {stats['case1_api_filled']} record(s) automatically matched to correct state using map service\n"
-            if stats["case1_fallback_filled"] > 0:
-                msg += f"  • {stats['case1_fallback_filled']} record(s) filled based on where most customers are located (city name couldn't be verified - may be misspelled or invalid)\n"
-            msg += "Why safe: We kept their original city and only filled in the missing state using reliable location data"
-            messages.append(msg)
-
         # Case 2: missing city but state known → fill with mode city per state
         print("\n[LOG - STAGE 5] Case 2: Filling missing city where state is known...")
         mask_case2 = (df['city'] == 'Unknown') & (df['state'] != 'Unknown')
@@ -445,12 +415,6 @@ def handle_missing_values_customer(df):
                     df.loc[mask_fill, 'city'] = city_mode
                     stats["case2_filled"] += filled_count
                     print(f"[TRACE - STAGE 5] Filled {filled_count} row(s) → missing city for state='{state}' → city='{city_mode}'")
-        
-        if stats["case2_filled"] > 0:
-            msg = "Location - Missing City (State Known):\n"
-            msg += f"  • {stats['case2_filled']} record(s) filled with representative city for their state\n"
-            msg += "Why safe: Used real cities from your actual customer base, ensuring realistic segmentation"
-            messages.append(msg)
 
         # Case 3: both missing → fill with most frequent pair
         print("\n[LOG - STAGE 5] Case 3: Filling missing city and state...")
@@ -465,20 +429,7 @@ def handle_missing_values_customer(df):
                 print(f"[TRACE - STAGE 5] Filled {filled_count} row(s) → missing city/state → City='{city_mode}', State='{state_mode}'")
             else:
                 print("[WARN - STAGE 5] No valid city/state pairs to fill missing both values")
-        
-        if stats["case3_filled"] > 0:
-            msg = "Location - Both City & State Missing:\n"
-            msg += f"  • {stats['case3_filled']} record(s) filled with your primary customer location (where most customers are from)\n"
-            msg += "Why safe: Used the most common location in your customer base, minimizing impact on segmentation"
-            messages.append(msg)
-
-    # Build final message
-    if not messages:
-        final_message = "No missing values found in critical fields (CustomerID, City, State)."
-    else:
-        final_message = "Summary:\n\n" + "\n\n".join(messages)
-
-    return df, final_message
+    return df
 
 # ============================================= (CUSTOMER DATASET) STAGE 6: OUTLIER DETECTION =============================================
 def customer_detect_outliers(df):
@@ -560,7 +511,7 @@ def customer_detect_outliers(df):
 
     else:
         print("[LOG - STAGE 6] 'age' column missing, skipping outlier detection")
-        message = "Age column not found. Outlier detection skipped."
+        message = "Age information was not provided, so age-based checks were skipped."
 
     return df, message
 
@@ -578,7 +529,7 @@ def clean_customer_dataset(df, cleaned_output_path):
     6. Deduplication
     Finally, saves the cleaned dataset to the specified path and returns it.
     """
-    print("🚀 Starting customer data cleaning pipeline...\n", flush=True)
+    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Starting customer data cleaning pipeline...>>>>>>>>>>>>>>>>>>>>>>>>>\n", flush=True)
     messages = [] 
     report = {"summary": {}, "detailed_messages": {}}
     
@@ -616,9 +567,7 @@ def clean_customer_dataset(df, cleaned_output_path):
     # ============================================================
     print("========== [STAGE 2 START] Remove Duplicate Entry Rows ==========")
     initial_rows = len(df)
-    df, message = remove_duplicate_entries(df)
-    messages.append(message)
-    report["detailed_messages"]["remove_duplicate_entries"] = message
+    df = remove_duplicate_entries(df)
     report["summary"]["duplicates_removed_rows"] = initial_rows - len(df)
     print("✅ [STAGE 2 COMPLETE] Duplicate entries removed.\n")
 
@@ -628,7 +577,6 @@ def clean_customer_dataset(df, cleaned_output_path):
     print("========== [STAGE 3 START] Deduplication ==========")
     df, message = deduplicate_customers(df)
     messages.append(message)
-    report["detailed_messages"]["deduplicate_customers"] = message
     report["summary"]["rows_after_deduplication"] = len(df)
     print("✅ [STAGE 3 COMPLETE] Duplicate CustomerIDs deduplicated.\n")
 
@@ -651,9 +599,7 @@ def clean_customer_dataset(df, cleaned_output_path):
     # STAGE 5: MISSING VALUE HANDLING
     # =============================================
     print("========== [STAGE 5 START] Missing Value Handling ==========")
-    df, missing_value_msg = handle_missing_values_customer(df)
-    messages.append(missing_value_msg)
-    report["detailed_messages"]["handle_missing_values_customer"] = missing_value_msg
+    df = handle_missing_values_customer(df)
     print("✅ [STAGE 5 COMPLETE] Missing values handled.\n")
 
     # =============================================
