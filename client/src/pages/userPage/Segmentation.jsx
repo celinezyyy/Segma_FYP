@@ -208,7 +208,7 @@ const Segmentation = () => {
     setSegResult(null);
 
     // Always use RFM features for segmentation
-    const features = ['recency', 'frequency', 'monetary'];
+    const features = ['Recency', 'Frequency', 'Monetary'];
     console.log('[DEBUG] Running segmentation with RFM features:', features);
     if (!segmentationId) 
       { setErrorMsg('Segmentation session is not ready yet.'); return; }

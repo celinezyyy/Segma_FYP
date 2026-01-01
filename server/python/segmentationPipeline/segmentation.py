@@ -21,39 +21,8 @@ def vlog(msg: str):
 # ====================================================
 #  FIXED ENCODING / SCALING CONFIG (Production-style)
 # ====================================================
-# Categorical encoding strategy (fixed, not adaptive):
-#   Favourite Payment Method  -> One-Hot
-#   Favourite Item            -> Frequency Encoding
-#   Favourite Day Part        -> One-Hot
-#   Age Group                 -> Ordinal
-#   Gender                    -> One-Hot
-#   State                     -> One-Hot
-#   City                      -> Frequency Encoding
 # Numeric scaling strategy:
-#   RobustScaler: totalSpend, totalOrders, avgOrderValue, recency, purchaseFrequency
-#   StandardScaler: customerLifetimeMonths
-#   MinMaxScaler: favoritePurchaseHour
-
-AGE_GROUP_ORDER = ['Below 18', '18-24', '25-34', '35-44', '45-54', '55-64', 'Above 65']
-
-ROBUST_COLS = ['totalSpend', 'totalOrders', 'avgOrderValue', 'recency', 'purchaseFrequency']
-STANDARD_COLS = ['customerLifetimeMonths']
-MINMAX_COLS = ['favoritePurchaseHour']
-
-OHE_COLS = ['favouritePaymentMethod', 'favouriteDayPart', 'gender', 'state']
-ORDINAL_COLS = ['age_group']
-FREQ_COLS = ['favouriteItem', 'city']
-
-
-def apply_frequency_encoding(df: pd.DataFrame, columns: List[str]) -> List[str]:
-    applied = []
-    for col in columns:
-        if col in df.columns:
-            freq = df[col].value_counts(normalize=True)
-            df[col] = df[col].map(freq).fillna(0.0)
-            applied.append(col)
-    return applied
-
+#   RobustScaler: RFM
 
 def run_segmentation(df: pd.DataFrame, selected_features: List[str]) -> Dict[str, Any]:
     """Run segmentation with fixed encoding/scaling rules.
@@ -63,56 +32,27 @@ def run_segmentation(df: pd.DataFrame, selected_features: List[str]) -> Dict[str
     vlog(f"===========================Start run_segmentation with features={selected_features}")
     usable_df = df[selected_features].copy()
 
-    # Identify types BEFORE manual frequency encoding (object dtype for categoricals)
-    categorical_cols = usable_df.select_dtypes(include=['object']).columns.tolist()
-    numeric_cols = usable_df.select_dtypes(include=[np.number]).columns.tolist()
+    # RFM-only fast path: skip all categorical/frequency encoding; scale numerics only
+    vlog("Using RFM-only encoding path (RobustScaler on recency, frequency, monetary)")
+    #NEW========== Add on invert Recency and log-transform Frequency & Monetary
+    # Transform RFM
+    rfm_df = usable_df[selected_features].copy()
 
-    # Apply frequency encoding to designated high-cardinality categoricals
-    freq_applied = apply_frequency_encoding(usable_df, [c for c in FREQ_COLS if c in categorical_cols])
-    if freq_applied:
-        vlog(f"Applied frequency encoding to: {freq_applied}")
+    # Invert Recency
+    if 'Recency' in rfm_df.columns:
+        rfm_df['Recency'] = rfm_df['Recency'].max() - rfm_df['Recency']
 
-    # After frequency encoding, recompute numeric/categorical splits
-    categorical_cols = usable_df.select_dtypes(include=['object']).columns.tolist()
-    numeric_cols = usable_df.select_dtypes(include=[np.number]).columns.tolist()
+    # Log-transform Frequency and Monetary
+    for col in ['Frequency', 'Monetary']:
+        if col in rfm_df.columns:
+            rfm_df[col] = np.log1p(rfm_df[col])
 
-    # Build transformers list
-    transformers = []
-
-    # Ordinal encoding (age-group) if present
-    ordinal_present = [c for c in ORDINAL_COLS if c in categorical_cols]
-    if ordinal_present:
-        transformers.append(
-            ('ord_age_group', OrdinalEncoder(categories=[AGE_GROUP_ORDER], handle_unknown='use_encoded_value', unknown_value=-1), ordinal_present)
-        )
-
-    # One-Hot encoding for specified columns that remain categorical
-    ohe_present = [c for c in OHE_COLS if c in categorical_cols]
-    if ohe_present:
-        transformers.append(
-            ('cat_ohe', OneHotEncoder(handle_unknown='ignore', sparse_output=False), ohe_present)
-        )
-
-    # Numeric scaling
-    robust_present = [c for c in ROBUST_COLS if c in numeric_cols]
-    standard_present = [c for c in STANDARD_COLS if c in numeric_cols]
-    minmax_present = [c for c in MINMAX_COLS if c in numeric_cols]
-
-    for col in robust_present:
-        transformers.append((f'robust_{col}', RobustScaler(), [col]))
-    for col in standard_present:
-        transformers.append((f'standard_{col}', StandardScaler(), [col]))
-    for col in minmax_present:
-        transformers.append((f'minmax_{col}', MinMaxScaler(), [col]))
-
-    preprocessor = ColumnTransformer(transformers=transformers, remainder='drop')
-    vlog(f"Transformers configured: {[t[0] for t in transformers]}")
-
-    X = preprocessor.fit_transform(usable_df)
-    if hasattr(X, 'toarray'):
-        X = X.toarray()
+    scaler = RobustScaler()
+    X = scaler.fit_transform(rfm_df[selected_features])
+    # Populate feature info for downstream payload
+    robust_present = list(selected_features)
     vlog(f"Encoded matrix shape={X.shape}")
-
+    
     # Evaluate K (2..10)
     from collections import Counter
     k_results = []
@@ -163,7 +103,8 @@ def run_segmentation(df: pd.DataFrame, selected_features: List[str]) -> Dict[str
     final_km = KMeans(n_clusters=best_k, random_state=42, n_init=10)
     final_labels = final_km.fit_predict(X)
     df = df.copy()
-    df['cluster'] = final_labels
+    # Use capitalized 'Cluster' column as requested
+    df['Cluster'] = final_labels
     vlog("Final clustering complete; generating summary")
 
     summary = generate_cluster_summary(df, selected_features)
@@ -183,19 +124,16 @@ def run_segmentation(df: pd.DataFrame, selected_features: List[str]) -> Dict[str
         }
     }
 
+    assignments = df[['CustomerId', 'Cluster']].to_dict(orient='records')
+
     response = {
         'best_k': int(best_k),
         'evaluation': k_results,
-        'cluster_assignments': df[['customerid', 'cluster']].to_dict(orient='records'),
+        'cluster_assignments': assignments,
         'cluster_summary': summary,
         'feature_info': {
             'selected_features': selected_features,
-            'ohe_cols': ohe_present,
-            'ordinal_cols': ordinal_present,
-            'frequency_cols': freq_applied,
             'robust_scaled': robust_present,
-            'standard_scaled': standard_present,
-            'minmax_scaled': minmax_present,
             'transformed_shape': list(X.shape)
         },
         'decision': decision
@@ -217,11 +155,11 @@ def generate_cluster_summary(df: pd.DataFrame, selected_features: List[str]) -> 
         "totalOrders": 0,
     }
 
-    clusters = sorted(df['cluster'].unique())
+    clusters = sorted(df['Cluster'].unique())
     out: Dict[str, Any] = {}
 
     for c in clusters:
-        part = df[df['cluster'] == c]
+        part = df[df['Cluster'] == c]
         stats: Dict[str, Any] = {}
 
         for col in selected_features:
@@ -253,12 +191,12 @@ def generate_cluster_summary(df: pd.DataFrame, selected_features: List[str]) -> 
 def run_segmentation_from_csv(csv_path: str, selected_features: List[str]) -> Dict[str, Any]:
     df = pd.read_csv(csv_path)
 
-    if 'customerid' not in df.columns:
+    if 'CustomerId' not in df.columns:
         raise ValueError(f"'customerid' column not found. Available columns: {list(df.columns)}")
 
     # keep customers with at least one order
-    if 'totalOrders' in df.columns:
-        df = df[df['totalOrders'] > 0].copy()
+    if 'TotalOrders' in df.columns:
+        df = df[df['TotalOrders'] > 0].copy()
     vlog(f"Loaded CSV rows={len(df)} after order filter")
 
     # Keep only selected features that exist (use exact names provided by caller)
