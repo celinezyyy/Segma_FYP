@@ -802,10 +802,14 @@ export const showSegmentationResultInDashboard = async (req, res) => {
     });
     if (!run) return res.status(404).json({ success: false, message: 'No segmentation result found for the selected features. Please run segmentation first.' });
 
-    // Map customer -> cluster
+    // Map customer -> cluster (robust to casing)
     const assignmentMap = new Map();
     for (const rec of run.cluster_assignments || []) {
-      if (rec?.customerid != null) assignmentMap.set(String(rec.customerid), rec.cluster);
+      const cid = rec?.CustomerId;
+      const clusterVal = rec?.Cluster;
+      if (cid != null && clusterVal != null) {
+        assignmentMap.set(String(cid), Number(clusterVal));
+      }
     }
 
     const summaries = {};
@@ -818,15 +822,15 @@ export const showSegmentationResultInDashboard = async (req, res) => {
     await new Promise((resolve, reject) => {
       const parser = csvParser();
       parser.on('headers', (headers) => {
-        includeGender = headers.includes('gender');
-        includeAgeGroup = headers.includes('ageGroup');
+        includeGender = headers.includes('Gender');
+        includeAgeGroup = headers.includes('AgeGroup');
       });
 
       bucket.openDownloadStream(seg.mergedFileId)
         .pipe(parser)
         .on('data', (row) => {
-          const cid = row?.customerid != null ? String(row.customerid) : null;
-          const cluster = cid ? (assignmentMap.get(cid) ?? null) : null;
+          const cidStr = row?.CustomerId != null ? String(row.CustomerId) : null;
+          const cluster = cidStr ? (assignmentMap.get(cidStr) ?? null) : null;
           const key = cluster != null ? cluster : 'Unassigned';
 
           if (!summaries[key]) {
@@ -839,24 +843,31 @@ export const showSegmentationResultInDashboard = async (req, res) => {
           const s = summaries[key];
           totalCustomers += 1;
           s.size += 1;
-          s.orders += parseInt(row.totalOrders || 0);
-          const spend = parseFloat(row.totalSpend || 0);
+          s.orders += parseFloat(row.TotalOrders || 0);
+          const spend = parseFloat(row.Monetary || 0);
           s.spend += spend;
           totalRevenue += spend;
-          s.aov += parseFloat(row.avgOrderValue || 0);
-          s.recency += parseFloat(row.recency || 0);
-          s.lifetime += parseFloat(row.customerLifetimeMonths || 0);
+          s.aov += parseFloat(row.AvgOrderValue || 0);
+          s.recency += parseFloat(row.Recency || 0);
+          s.lifetime += parseFloat(row.CustomerLifetimeMonths || 0);
+          const gender = row.Gender;
+          const ageGroup = row.AgeGroup;
+          const state = row.State;
+          const city = row.City;
+          const dayPart = row.FavoriteDayPart;
+          const purchaseHour = row.FavoritePurchaseHour;
+          const favoriteItem = row.FavoriteItem;
 
-          if (row.gender) s.gender[row.gender] = (s.gender[row.gender] || 0) + 1;
-          if (row.ageGroup) s.ageGroup[row.ageGroup] = (s.ageGroup[row.ageGroup] || 0) + 1;
-          if (row.state) {
-            s.state[row.state] = (s.state[row.state] || 0) + 1;
-            s.stateSpend[row.state] = (s.stateSpend[row.state] || 0) + spend;
+          if (gender) s.gender[gender] = (s.gender[gender] || 0) + 1;
+          if (ageGroup) s.ageGroup[ageGroup] = (s.ageGroup[ageGroup] || 0) + 1;
+          if (state) {
+            s.state[state] = (s.state[state] || 0) + 1;
+            s.stateSpend[state] = (s.stateSpend[state] || 0) + spend;
           }
-          if (row.city) s.city[row.city] = (s.city[row.city] || 0) + 1;
-          if (row.favoriteDayPart) s.dayPart[row.favoriteDayPart] = (s.dayPart[row.favoriteDayPart] || 0) + 1;
-          if (row.favoritePurchaseHour) s.purchaseHour[row.favoritePurchaseHour] = (s.purchaseHour[row.favoritePurchaseHour] || 0) + 1;
-          if (row.favoriteItem) s.item[row.favoriteItem] = (s.item[row.favoriteItem] || 0) + 1;
+          if (city) s.city[city] = (s.city[city] || 0) + 1;
+          if (dayPart) s.dayPart[dayPart] = (s.dayPart[dayPart] || 0) + 1;
+          if (purchaseHour) s.purchaseHour[purchaseHour] = (s.purchaseHour[purchaseHour] || 0) + 1;
+          if (favoriteItem) s.item[favoriteItem] = (s.item[favoriteItem] || 0) + 1;
         })
         .on('end', resolve)
         .on('error', reject);
@@ -985,7 +996,7 @@ export const showSegmentationResultInDashboard = async (req, res) => {
 
 
 const detectPair = (features = []) => {
-  const f = new Set(features);
+  const f = new Set((features || []).map(x => String(x).toLowerCase()));
 
   if (['recency', 'frequency', 'monetary'].every(x => f.has(x))) return 'rfm';
   if (['totalSpend', 'avgOrderValue', 'totalOrders'].every(x => f.has(x))) return 'spending';
