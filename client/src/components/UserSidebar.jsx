@@ -173,8 +173,16 @@ const UserSidebar = () => {
         </div>
       </aside>
 
+      {/* Backdrop overlay below navbar when drawer is open */}
+      {isOpen && (
+        <div
+          className="fixed top-16 left-0 right-0 bottom-0 bg-black/30 z-30"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
       {/* Content area, adjust margin-left depending on sidebar width */}
-      <main className={`flex-grow transition-all duration-300 ${isOpen ? 'ml-64' : 'ml-16'}`}>
+      <main className={`flex-grow transition-all duration-300 ml-16`}>
         {/* Your main content goes here */}
       </main>
     </div>
