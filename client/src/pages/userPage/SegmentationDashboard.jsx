@@ -18,7 +18,7 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { Users, DollarSign, ShoppingBag, TrendingUp, ArrowLeft, Save, FileText } from 'lucide-react';
+import { Users, DollarSign, ShoppingBag, TrendingUp, ArrowLeft, Save, FileText, HelpCircle } from 'lucide-react';
 
 const COLORS = ['#4F46E5', '#6366F1', '#F59E0B', '#10B981', '#EF4444'];
 
@@ -47,6 +47,15 @@ export default function SegmentationDashboard() {
     </div>
   );
 
+  const InfoTooltip = ({ text }) => (
+    <span className="relative group inline-flex items-center ml-1 align-middle">
+      <HelpCircle className="w-4 h-4 text-gray-400 group-hover:text-gray-600" aria-label="Info" />
+      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-900 text-white text-xs rounded-md px-2 py-1 whitespace-nowrap z-50 shadow-lg">
+        {text}
+      </span>
+    </span>
+  );
+
   const SegmentCard = ({ seg, idx }) => {
     const {
       suggestedName,
@@ -54,9 +63,9 @@ export default function SegmentationDashboard() {
       revenuePct,
       avgSpend,
       topState,
-      segmentType,
-      keyInsight,
-      recommendedAction,
+      avgAOV,
+      avgRecencyDays,  // Assume available in seg from summaries
+      avgFrequencyPerMonth,  // Assume available
     } = seg;
 
     const currency = useMemo(() => new Intl.NumberFormat('en-MY', { style: 'currency', currency: 'MYR', maximumFractionDigits: 2 }), []);
@@ -69,16 +78,11 @@ export default function SegmentationDashboard() {
             state: { segmentationId, clusterIndex: idx, selectedFeatures },
           });
         }}
-        className="bg-white rounded-3xl shadow-2xl overflow-hidden cursor-pointer hover:shadow-indigo-200 transform hover:scale-105 transition duration-300 border border-gray-200"
+        className="bg-white rounded-3xl shadow-2xl overflow-visible cursor-pointer hover:shadow-indigo-200 transform hover:scale-105 transition duration-300 border border-gray-200"
       >
         {/* Header gradient uses Tailwind arbitrary color from hex */}
         <div className={`h-36 bg-gradient-to-br from-[${COLORS[idx % COLORS.length]}] to-indigo-600 flex items-center justify-between px-6`}>
           <h3 className="text-2xl md:text-3xl font-bold text-black">{suggestedName}</h3>
-          {segmentType && (
-            <span className="ml-3 text-xs md:text-sm px-3 py-1 rounded-full bg-white/20 text-white backdrop-blur">
-              {segmentType}
-            </span>
-          )}
         </div>
 
         <div className="p-6 md:p-8 space-y-5">
@@ -93,8 +97,29 @@ export default function SegmentationDashboard() {
               <div className="text-xl font-bold text-green-600">{percentFmt(revenuePct)}</div>
             </div>
             <div className="text-center">
-              <div className="text-xs text-gray-600">Avg Spend</div>
+              <div className="text-xs text-gray-600">Average Spend</div>
               <div className="text-xl font-bold text-gray-900">{currency.format(avgSpend || 0)}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xs text-gray-600 flex items-center justify-center">
+                <span>Average Order Value</span>
+                <InfoTooltip text="How much customers typically spend per order." />
+              </div>
+              <div className="text-xl font-bold text-gray-900">{avgAOV ? currency.format(avgAOV) : 'N/A'}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xs text-gray-600 flex items-center justify-center">
+                <span>Average Recency</span>
+                <InfoTooltip text="Average days since the last purchase (lower is more recent)." />
+              </div>
+              <div className="text-xl font-bold text-gray-900">{avgRecencyDays ? `${Math.round(avgRecencyDays)} days` : 'N/A'}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xs text-gray-600 flex items-center justify-center">
+                <span>Average Purchase/Months</span>
+                
+              </div>
+              <div className="text-xl font-bold text-gray-900">{avgFrequencyPerMonth ? Math.round(avgFrequencyPerMonth) : 'N/A'}</div>
             </div>
           </div>
 
@@ -103,16 +128,6 @@ export default function SegmentationDashboard() {
             <li className="text-sm text-gray-700">
               <span className="font-medium text-gray-600">Top Location:</span> <span className="font-semibold">{topState || 'N/A'}</span>
             </li>
-            {keyInsight && (
-              <li className="text-sm text-gray-700">
-                <span className="font-medium text-gray-600">Insight:</span> <span className="italic">{keyInsight}</span>
-              </li>
-            )}
-            {recommendedAction && (
-              <li className="text-sm text-gray-700">
-                <span className="font-medium text-gray-600">Recommended Action:</span> <span className="text-green-700 font-semibold">{recommendedAction}</span>
-              </li>
-            )}
           </ul>
 
           <button className="w-full mt-2 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition">
@@ -210,13 +225,6 @@ export default function SegmentationDashboard() {
     }))
   ), [summaries]);
 
-  const clusterRecencyData = useMemo(() => (
-    (summaries || []).map(s => ({
-      cluster: s.suggestedName || `Cluster ${s.cluster}`,
-      avgRecencyDays: Number(s.avgRecencyDays || 0),
-    }))
-  ), [summaries]);
-
   const clusterDistribution = useMemo(() => (
     (summaries || []).map(s => ({
       name: s.suggestedName || `Cluster ${s.cluster}`,
@@ -256,7 +264,7 @@ export default function SegmentationDashboard() {
 
   // Compute max wrapped lines needed for X-axis labels based on chart width and number of ticks
   const maxLinesStates = useMemo(() => {
-    const approxCharW = 7; // px per character at ~12px font
+    const approxCharW = 10; // px per character at ~12px font
     const tickCount = Math.max(stateChartData.length, 1);
     const tickAvailWidth = Math.max(60, (stateChartWidth - 120) / tickCount);
     const perLine = Math.max(8, Math.floor(tickAvailWidth / approxCharW));
@@ -289,43 +297,43 @@ export default function SegmentationDashboard() {
     return max;
   }, [stateChartData, stateChartWidth]);
 
-const WrappedXAxisTick = ({ x, y, payload }) => {
-    const raw = String(payload?.value || '');
-    const approxCharW = 7; // px per character at ~12px font
-    const tickCount = Math.max(stateChartData.length, 1);
-    const tickAvailWidth = Math.max(60, (stateChartWidth - 120) / tickCount);
-    const perLine = Math.max(8, Math.floor(tickAvailWidth / approxCharW));
-    const MAX_LINES = 3;
+  const WrappedXAxisTick = ({ x, y, payload }) => {
+      const raw = String(payload?.value || '');
+      const approxCharW = 7; // px per character at ~12px font
+      const tickCount = Math.max(stateChartData.length, 1);
+      const tickAvailWidth = Math.max(60, (stateChartWidth - 120) / tickCount);
+      const perLine = Math.max(8, Math.floor(tickAvailWidth / approxCharW));
+      const MAX_LINES = 3;
 
-    const words = raw.split(/\s+/);
-    const lines = [];
-    let current = '';
-    for (const w of words) {
-      const candidate = current ? `${current} ${w}` : w;
-      if (candidate.length <= perLine) {
-        current = candidate;
-      } else {
-        if (current) lines.push(current);
-        current = w;
+      const words = raw.split(/\s+/);
+      const lines = [];
+      let current = '';
+      for (const w of words) {
+        const candidate = current ? `${current} ${w}` : w;
+        if (candidate.length <= perLine) {
+          current = candidate;
+        } else {
+          if (current) lines.push(current);
+          current = w;
+        }
+        if (lines.length === MAX_LINES) break;
       }
-      if (lines.length === MAX_LINES) break;
-    }
-    if (current && lines.length < MAX_LINES) {
-      lines.push(current.length > perLine ? `${current.slice(0, Math.max(perLine - 1, 1))}…` : current);
-    }
-    const displayLines = lines.length ? lines : [''];
+      if (current && lines.length < MAX_LINES) {
+        lines.push(current.length > perLine ? `${current.slice(0, Math.max(perLine - 1, 1))}…` : current);
+      }
+      const displayLines = lines.length ? lines : [''];
 
-    return (
-      <g transform={`translate(${x},${y})`}>
-        <text textAnchor="middle" fill="#374151" fontSize={12}>
-          {displayLines.map((line, index) => (
-            <tspan key={index} x="0" dy={index === 0 ? 16 : 14}>{line}</tspan>
-          ))}
-          <title>{raw}</title>
-        </text>
-      </g>
-    );
-};
+      return (
+        <g transform={`translate(${x},${y})`}>
+          <text textAnchor="middle" fill="#374151" fontSize={12}>
+            {displayLines.map((line, index) => (
+              <tspan key={index} x="0" dy={index === 0 ? 16 : 14}>{line}</tspan>
+            ))}
+            <title>{raw}</title>
+          </text>
+        </g>
+      );
+  };
 
   // Optional: keep width tracking for future responsive tweaks
   useEffect(() => {
@@ -398,7 +406,7 @@ const WrappedXAxisTick = ({ x, y, payload }) => {
                 Customer Segmentation Dashboard Overview
               </h1>
 
-              {/* Buttons */}
+              {/* Report Buttons */}
               <div className="flex items-center gap-3">
                 <button
                   onClick={handleSaveReport}

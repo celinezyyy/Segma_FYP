@@ -927,14 +927,15 @@ export const showSegmentationResultInDashboard = async (req, res) => {
       const segment = {
         cluster: clusterId,
         size: data.size,
-        sizePct: totalCustomers ? Number((data.size / totalCustomers * 100).toFixed(1)) : 0,
+        sizePct: totalCustomers ? Number((data.size / totalCustomers * 100).toFixed(2)) : 0,
         revenue: Number(data.spend.toFixed(2)),
-        avgSpend: Number((data.spend / data.size).toFixed(2)),
+        revenuePct: totalRevenue ? Number((data.spend / totalRevenue * 100).toFixed(2)) : 0,
         avgAOV: Number((data.aov / data.size).toFixed(2)),
+        avgLifetimeMonths: Number((data.lifetime / data.size).toFixed(0)),
         // avgOrders: Number((data.orders / data.size).toFixed(2)),
         avgRecencyDays: Number((data.recency / data.size).toFixed(0)),
-        avgLifetimeMonths: Number((data.lifetime / data.size).toFixed(0)),
         avgFrequencyPerMonth: Number((data.frequency / data.size).toFixed(0)),
+        avgSpend: Number((data.spend / data.size).toFixed(2)),
         states: Object.entries(data.state || {}).map(([name, count]) => ({
           name, count,
           pct: Number((count / data.size * 100).toFixed(1)),
