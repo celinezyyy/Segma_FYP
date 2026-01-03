@@ -916,13 +916,8 @@ export const showSegmentationResultInDashboard = async (req, res) => {
       const isUnassigned = key === 'Unassigned';
       const clusterId = isUnassigned ? -1 : Number(key);
 
-      const genderTop = getTop(data.gender, data.size);
-      const ageTop = getTop(data.ageGroup, data.size);
       const stateTop = getTop(data.state, data.size);
       const cityTop = getTop(data.city, data.size);
-      const dayPartTop = getTop(data.dayPart, data.size);
-      const purchaseHourTop = getTop(data.purchaseHour, data.size);
-      const favoriteItemTop = getTop(data.item, data.size);
 
       const segment = {
         cluster: clusterId,
@@ -941,32 +936,45 @@ export const showSegmentationResultInDashboard = async (req, res) => {
           revenue: Number((data.stateSpend?.[name] || 0).toFixed(2))
         })).sort((a, b) => b.revenue - a.revenue),
 
+        // Include full distributions for hybrid segmentation visuals
         items: Object.entries(data.item || {}).map(([name, count]) => ({
           name, count, pct: Number((count / data.size * 100).toFixed(1))
-        })).sort((a, b) => b.count - a.count).slice(0, 5),
+        })).sort((a, b) => b.count - a.count),
 
         cities: Object.entries(data.city || {}).map(([name, count]) => ({
           name, count, pct: Number((count / data.size * 100).toFixed(1))
-        })).sort((a, b) => b.count - a.count).slice(0, 10),
+        })).sort((a, b) => b.count - a.count),
+
+        dayParts: Object.entries(data.dayPart || {}).map(([name, count]) => ({
+          name, count, pct: Number((count / data.size * 100).toFixed(1))
+        })).sort((a, b) => b.count - a.count),
+
+        purchaseHours: Object.entries(data.purchaseHour || {}).map(([hourStr, count]) => {
+          const hour = parseInt(hourStr, 10);
+          return {
+            hour: isNaN(hour) ? hourStr : hour,
+            count,
+            pct: Number((count / data.size * 100).toFixed(1))
+          };
+        }).sort((a, b) => {
+          const ah = typeof a.hour === 'number' ? a.hour : 0;
+          const bh = typeof b.hour === 'number' ? b.hour : 0;
+          return ah - bh; // sort by hour ascending for histogram
+        }),
 
         topState: stateTop.top,
-        statePct: stateTop.pct,
         topCity: cityTop.top,
-
-        topDayPart: dayPartTop.top,
-        topPurchaseHour: purchaseHourTop.top !== 'N/A' ? formatHour(purchaseHourTop.top) : 'N/A',
-        purchaseHourPct: purchaseHourTop.pct,
-        topFavoriteItem: favoriteItemTop.top,
-        favoriteItemPct: favoriteItemTop.pct
       };
 
       if (includeGender) {
-        segment.topGender = genderTop.top;
-        segment.genderPct = genderTop.pct;
+        segment.genders = Object.entries(data.gender || {}).map(([name, count]) => ({
+          name, count, pct: Number((count / data.size * 100).toFixed(1))
+        })).sort((a, b) => b.count - a.count);
       }
       if (includeAgeGroup) {
-        segment.topAgeGroup = ageTop.top;
-        segment.agePct = ageTop.pct;
+        segment.ageGroups = Object.entries(data.ageGroup || {}).map(([name, count]) => ({
+          name, count, pct: Number((count / data.size * 100).toFixed(1))
+        })).sort((a, b) => b.count - a.count);
       }
 
       return segment;
