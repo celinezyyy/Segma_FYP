@@ -20,7 +20,7 @@ import {
 } from 'recharts';
 import { Users, DollarSign, ShoppingBag, TrendingUp, ArrowLeft, Save, FileText, HelpCircle } from 'lucide-react';
 
-const COLORS = ['#4F46E5', '#6366F1', '#F59E0B', '#10B981', '#EF4444'];
+const COLORS = ['#41d6f7ff', '#6366F1', '#F59E0B', '#10B981', '#EF4444'];
 
 export default function SegmentationDashboard() {
   const location = useLocation();
@@ -35,6 +35,7 @@ export default function SegmentationDashboard() {
   const [data, setData] = useState(null);
   const [selectedCluster, setSelectedCluster] = useState('overview'); // 'overview' or cluster index
   const [topProductsSortOrder, setTopProductsSortOrder] = useState('desc'); // 'asc' | 'desc'
+  const [spendSortOrder, setSpendSortOrder] = useState('desc'); // 'asc' | 'desc'
 
   // ---------------- Components ----------------
   const MetricCard = ({ title, value, icon, bgColor }) => (
@@ -62,6 +63,7 @@ export default function SegmentationDashboard() {
       sizePct,
       revenuePct,
       avgSpend,
+      topCity,
       topState,
       avgAOV,
       avgRecencyDays,  // Assume available in seg from summaries
@@ -127,6 +129,9 @@ export default function SegmentationDashboard() {
           <ul className="space-y-2">
             <li className="text-sm text-gray-700">
               <span className="font-medium text-gray-600">Top Location:</span> <span className="font-semibold">{topState || 'N/A'}</span>
+            </li>
+            <li className="text-sm text-gray-700">
+              <span className="font-medium text-gray-600">Top City:</span> <span className="font-semibold">{topCity || 'N/A'}</span>
             </li>
           </ul>
 
@@ -218,17 +223,20 @@ export default function SegmentationDashboard() {
   ), [topProducts]);
 
   // Cluster comparison datasets
-  const clusterSpendData = useMemo(() => (
-    (summaries || []).map(s => ({
+  const clusterSpendData = useMemo(() => {
+    const rows = (summaries || []).map(s => ({
       cluster: s.suggestedName || `Cluster ${s.cluster}`,
       avgSpend: Number(s.avgSpend || 0),
-    }))
-  ), [summaries]);
+    }));
+    rows.sort((a, b) => (spendSortOrder === 'asc' ? a.avgSpend - b.avgSpend : b.avgSpend - a.avgSpend));
+    return rows;
+  }, [summaries, spendSortOrder]);
 
   const clusterDistribution = useMemo(() => (
     (summaries || []).map(s => ({
       name: s.suggestedName || `Cluster ${s.cluster}`,
       value: Number(s.size || 0),
+      pct: Number((s.sizePct ?? 0).toFixed?.(2) || s.sizePct || 0),
     }))
   ), [summaries]);
   
@@ -436,11 +444,20 @@ export default function SegmentationDashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-8 ">
               {/* Left: Avg Spend spanning two rows */}
               <div className="bg-white p-8 rounded-3xl shadow-xl lg:row-span-2">
-                <h3 className="text-xl font-bold text-gray-800 mb-6">Average Customer Spend per Segment</h3>
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold text-gray-800">Average Customer Spend per Segment</h3>
+                  <button
+                    className="px-3 py-2 text-sm rounded-md border border-gray-300 hover:border-gray-400 bg-gray-50 hover:bg-gray-100"
+                    onClick={() => setSpendSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
+                    title="Toggle sort order"
+                  >
+                    Sort: {spendSortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                  </button>
+                </div>
                 <ResponsiveContainer width="100%" height={650}>
                   <BarChart data={clusterSpendData} margin={{ top: 10, right: 0, left: 0, bottom: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="cluster" height={70} tick={<WrappedXAxisTick />} />
+                    <XAxis dataKey="cluster" interval={0} height={70} tickMargin={8} tick={<WrappedXAxisTick />} />
                     <YAxis />
                     <Tooltip formatter={v => `RM ${Number(v || 0).toLocaleString()}`} />
                     <Legend />
@@ -461,13 +478,13 @@ export default function SegmentationDashboard() {
                       cx="40%"
                       cy="50%"
                       outerRadius={110}
-                      label={entry => `${entry.value}`}
+                      label={entry => `${entry.value} (${entry.pct}%)`}
                     >
                       {clusterDistribution.map((entry, index) => (
                         <Cell key={`cluster-dist-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={v => `${v} customers`} />
+                    <Tooltip formatter={(v, name, params) => `${v} customers (${params?.payload?.pct || 0}%)`} />
                     <Legend
                       layout="vertical"
                       align="right"
@@ -480,7 +497,7 @@ export default function SegmentationDashboard() {
               {/* Right bottom: Top Products (Table) */}
               <div className="bg-white p-6 rounded-3xl shadow-xl self-start">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-2xl font-bold text-gray-800">Top 5 Best Selling Products</h3>
+                  <h3 className="text-xl font-bold text-gray-800 mb-6">Products by Popularity</h3>
                   <button
                     className="px-3 py-1 text-sm rounded-md border border-gray-300 hover:border-gray-400 bg-gray-50 hover:bg-gray-100"
                     onClick={() => setTopProductsSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
@@ -490,28 +507,36 @@ export default function SegmentationDashboard() {
                   </button>
                 </div>
                 <div className="overflow-x-auto max-h-64 overflow-y-auto">
-                  <table className="min-w-full table-auto">
-                    <thead>
-                      <tr className="text-left text-gray-600">
-                        <th className="py-2 px-3">Product</th>
-                        <th className="py-2 px-3 text-right">Orders</th>
+                  <table className="min-w-full table-auto border border-gray-400">
+                    <thead className="bg-gray-50">
+                      <tr className="text-left text-gray-700">
+                        <th className="py-2 px-3 border-b border-r border-gray-400">Product</th>
+                        <th className="py-2 px-3 text-right border-b border-gray-400">Orders</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {topProducts.map((p) => {
-                        const count = Number(p.count || 0);
-                        const intensity = maxTopCount ? (0.15 + (count / maxTopCount) * 0.25) : 0.15;
-                        return (
-                          <tr
-                            key={p.name}
-                            className="transition-colors"
-                            style={{ backgroundColor: `rgba(79, 70, 229, ${intensity})` }}
-                          >
-                            <td className="py-2 px-3">{p.name}</td>
-                            <td className="py-2 px-3 text-right">{count.toLocaleString()}</td>
-                          </tr>
-                        );
-                      })}
+                    <tbody>
+                      {topProducts
+                        .slice() // make a copy
+                        .sort((a, b) => topProductsSortOrder === 'asc' ? a.count - b.count : b.count - a.count)
+                        .map((p, index, arr) => {
+                          const rank = index; // 0 = first row
+                          const total = arr.length - 1;
+                          // Map rank to intensity: first row = darkest, last row = lightest
+                          const intensity = total > 0 ? 0.2 + ((total - rank) / total) * 0.6 : 0.2;
+
+                          return (
+                            <tr
+                              key={p.name}
+                              className="transition-colors hover:bg-gray-100"
+                              style={{
+                                backgroundColor: `rgba(37, 99, 235, ${intensity})`,
+                              }}
+                            >
+                              <td className="py-2 px-3 border-b border-r border-gray-400">{p.name}</td>
+                              <td className="py-2 px-3 text-right border-b border-gray-400">{p.count.toLocaleString()}</td>
+                            </tr>
+                          );
+                        })}
                     </tbody>
                   </table>
                 </div>
@@ -521,7 +546,7 @@ export default function SegmentationDashboard() {
             {/* Row 2: States by Revenue full-width */}
             <div className="bg-white p-8 rounded-3xl shadow-xl mb-4" ref={stateChartWrapperRef}>
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-2xl font-bold text-gray-800">States by Revenue</h3>
+                <h3 className="text-xl font-bold text-gray-800 mb-6">States by Revenue</h3>
                 <div className="flex items-center gap-2">
                   <button
                     className="px-3 py-2 text-sm rounded-md border border-gray-300 hover:border-gray-400 bg-gray-50 hover:bg-gray-100"
