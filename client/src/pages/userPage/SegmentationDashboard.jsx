@@ -447,11 +447,11 @@ export default function SegmentationDashboard() {
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xl font-bold text-gray-800">Average Customer Spend per Segment</h3>
                   <button
-                    className="px-3 py-2 text-sm rounded-md border border-gray-300 hover:border-gray-400 bg-gray-50 hover:bg-gray-100"
+                    className="text-sm text-indigo-600 hover:underline"
                     onClick={() => setSpendSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
                     title="Toggle sort order"
                   >
-                    Sort: {spendSortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                    Sort: {spendSortOrder === 'asc' ? '↑' : '↓'} 
                   </button>
                 </div>
                 <ResponsiveContainer width="100%" height={650}>
@@ -461,7 +461,7 @@ export default function SegmentationDashboard() {
                     <YAxis />
                     <Tooltip formatter={v => `RM ${Number(v || 0).toLocaleString()}`} />
                     <Legend />
-                    <Bar dataKey="avgSpend" name="Avg Spend" fill={COLORS[0]} />
+                    <Bar dataKey="avgSpend" name="Average Spend" fill={COLORS[0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -499,11 +499,11 @@ export default function SegmentationDashboard() {
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-xl font-bold text-gray-800 mb-6">Products by Popularity</h3>
                   <button
-                    className="px-3 py-1 text-sm rounded-md border border-gray-300 hover:border-gray-400 bg-gray-50 hover:bg-gray-100"
+                    className="text-sm text-indigo-600 hover:underline"
                     onClick={() => setTopProductsSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
                     title="Toggle sort order"
                   >
-                    Sort: {topProductsSortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                    Sort: {topProductsSortOrder === 'asc' ? '↑' : '↓'}
                   </button>
                 </div>
                 <div className="overflow-x-auto max-h-64 overflow-y-auto">
@@ -549,11 +549,11 @@ export default function SegmentationDashboard() {
                 <h3 className="text-xl font-bold text-gray-800 mb-6">States by Revenue</h3>
                 <div className="flex items-center gap-2">
                   <button
-                    className="px-3 py-2 text-sm rounded-md border border-gray-300 hover:border-gray-400 bg-gray-50 hover:bg-gray-100"
+                    className="text-sm text-indigo-600 hover:underline"
                     onClick={() => setStateSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
                     title="Toggle sort order"
                   >
-                    Sort: {stateSortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                    Sort: {stateSortOrder === 'asc' ? '↑' : '↓'} 
                   </button>
                 </div>
               </div>
