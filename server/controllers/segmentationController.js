@@ -932,7 +932,6 @@ export const showSegmentationResultInDashboard = async (req, res) => {
         revenuePct: totalRevenue ? Number((data.spend / totalRevenue * 100).toFixed(2)) : 0,
         avgAOV: Number((data.aov / data.size).toFixed(2)),
         avgLifetimeMonths: Number((data.lifetime / data.size).toFixed(0)),
-        // avgOrders: Number((data.orders / data.size).toFixed(2)),
         avgRecencyDays: Number((data.recency / data.size).toFixed(0)),
         avgFrequencyPerMonth: Number((data.frequency / data.size).toFixed(0)),
         avgSpend: Number((data.spend / data.size).toFixed(2)),
@@ -970,25 +969,66 @@ export const showSegmentationResultInDashboard = async (req, res) => {
         segment.agePct = ageTop.pct;
       }
 
-      // ---------------- Dynamic interpretation ----------------
-      const interpretation = interpretClusterDynamic(segment, Object.values(summaries).filter((_, i) => i !== 'Unassigned'), activePair);
-      segment.segmentType = interpretation.segmentType;
-      segment.keyInsight = interpretation.keyInsight;
-      segment.recommendedAction = interpretation.recommendedAction;
-
       return segment;
     });
 
-    // ---------------- Suggested Names (generic, distinct per pair) ----------------
-    const namePools = {
-      rfm: ["Champions", "Loyal Customers", "Potential Loyalists", "At Risk", "Hibernating", "Lost"],
-      generic: ["Segment A", "Segment B", "Segment C", "Segment D", "Segment E"]
+    // ---------------- Strict RFM Naming (no fallback) ----------------
+    const assignRFMNameStrict = (cluster, allClusters) => {
+      // Percentile helpers
+      const percentileRank = (value, allValues) => {
+        const arr = [...allValues].filter(v => typeof v === 'number' && !isNaN(v));
+        if (!arr.length) return 0.5;
+        arr.sort((a, b) => a - b);
+        const idx = arr.findIndex(v => v >= value);
+        const pos = idx === -1 ? arr.length - 1 : idx;
+        return (pos) / (arr.length - 1 || 1);
+      };
+
+      // Normalize cluster to 0-1 R, F, M
+      const allSpend = allClusters.map(c => c.avgSpend);
+      const allFreq = allClusters.map(c => c.avgFrequencyPerMonth);
+      const allRec = allClusters.map(c => c.avgRecencyDays);
+      const r = 1 - percentileRank(cluster.avgRecencyDays, allRec); // more recent → higher R
+      const f = percentileRank(cluster.avgFrequencyPerMonth, allFreq);
+      const m = percentileRank(cluster.avgSpend, allSpend);
+
+      // Define archetype prototypes in R,F,M space
+      const prototypes = [
+        { name: 'Champions',            r: 1.00, f: 1.00, m: 1.00 },
+        { name: 'Loyal Customers',      r: 0.85, f: 0.85, m: 0.65 },
+        { name: 'Potential Loyalists',  r: 0.85, f: 0.60, m: 0.60 },
+        { name: 'New Customers',        r: 0.95, f: 0.20, m: 0.20 },
+        { name: "Can't Lose Them",     r: 0.50, f: 0.90, m: 0.90 },
+        { name: 'At Risk',              r: 0.20, f: 0.90, m: 0.90 },
+        { name: 'Regular Customers',    r: 0.50, f: 0.50, m: 0.50 },
+        { name: 'Need Attention',       r: 0.50, f: 0.30, m: 0.60 },
+        { name: 'About to Sleep',       r: 0.30, f: 0.50, m: 0.50 },
+        { name: 'Hibernating',          r: 0.20, f: 0.20, m: 0.50 },
+        { name: 'Lost',                 r: 0.10, f: 0.10, m: 0.10 },
+      ];
+
+      // Weighted Euclidean distance (bias towards Recency if desired)
+      const wR = 0.4, wF = 0.3, wM = 0.3;
+      let best = prototypes[0];
+      let bestDist = Infinity;
+      for (const p of prototypes) {
+        const dr = r - p.r;
+        const df = f - p.f;
+        const dm = m - p.m;
+        const dist = Math.sqrt(wR*dr*dr + wF*df*df + wM*dm*dm);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = p;
+        }
+      }
+      return best.name;
     };
 
+    const usableClusters = enrichedSummaries.filter(s => s.cluster !== -1);
     enrichedSummaries
       .filter(s => s.cluster !== -1)
-      .forEach((s, i) => {
-        s.suggestedName = namePools[activePair]?.[i] || `Segment ${s.cluster}`;
+      .forEach((s) => {
+        s.suggestedName = assignRFMNameStrict(s, usableClusters);
       });
 
     res.json({
@@ -1006,50 +1046,4 @@ export const showSegmentationResultInDashboard = async (req, res) => {
     console.error('[showSegmentationResultInDashboard] Error:', err);
     res.status(500).json({ success: false, message: 'Failed to generate dashboard data', error: err.message });
   }
-};
-
-// Compute cluster-relative interpretation dynamically
-const interpretClusterDynamic = (cluster, allClusters, pair) => {
-  const { avgSpend, avgOrders, avgRecencyDays, avgLifetimeMonths } = cluster;
-
-  // Helper: get percentile rank of this cluster for a given metric
-  const percentileRank = (value, allValues) => {
-    const sorted = [...allValues].sort((a, b) => a - b);
-    const index = sorted.findIndex(v => v >= value);
-    return index / (sorted.length - 1 || 1);
-  };
-
-  // Collect all clusters' metrics
-  const allSpend = allClusters.map(c => c.avgSpend);
-  const allOrders = allClusters.map(c => c.avgOrders);
-  const allRecency = allClusters.map(c => c.avgRecencyDays);
-  const allLifetime = allClusters.map(c => c.avgLifetimeMonths);
-
-  // Percentile positions (0–1)
-  const spendPct = percentileRank(avgSpend, allSpend);
-  const ordersPct = percentileRank(avgOrders, allOrders);
-  const recencyPct = 1 - percentileRank(avgRecencyDays, allRecency); // lower recency = more recent
-  const lifetimePct = percentileRank(avgLifetimeMonths, allLifetime);
-
-  // Interpretation based on pair
-  let segmentType = '';
-  let keyInsight = '';
-  let recommendedAction = '';
-
-  if (pair === 'rfm') {
-    if (spendPct > 0.7 && ordersPct > 0.7 && recencyPct > 0.7) {
-      segmentType = 'VIP Customers';
-      keyInsight = 'High spending, frequent, and recently active customers.';
-      recommendedAction = 'Reward with loyalty perks and exclusive offers.';
-    } else if (recencyPct < 0.3) {
-      segmentType = 'Churn Risk';
-      keyInsight = 'Customers have not purchased recently and show declining engagement.';
-      recommendedAction = 'Run reactivation campaigns or personalized discounts.';
-    } else {
-      segmentType = 'Regular Customers';
-      keyInsight = 'Moderate purchase behavior with stable engagement.';
-      recommendedAction = 'Encourage repeat purchases with bundles or promotions.';
-    }
-  }
-  return { segmentType, keyInsight, recommendedAction };
 };
