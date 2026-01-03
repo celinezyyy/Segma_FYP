@@ -62,7 +62,7 @@ export default function SegmentationClusterDashboard() {
   const topCities = useMemo(() => {
     const data = [...baseCities];
     data.sort((a, b) => (citySort === 'desc' ? b.value - a.value : a.value - b.value));
-    return data.slice(0, 10);
+    return data.slice(0, 20);
   }, [baseCities, citySort]);
 
   const topProducts = useMemo(
@@ -166,7 +166,13 @@ export default function SegmentationClusterDashboard() {
                   </button>
                 }
               >
-                <SimpleBarChart data={topStates} valueKey="value" />
+                <SimpleBarChart
+                  data={topStates}
+                  valueKey="value"
+                  xTickFontSize={12}
+                  tickRenderer={<WrappedXAxisTickCluster />}
+                  bottomMargin={60}
+                />
               </BarBox>
               <div className="bg-white p-6 rounded-2xl shadow">
             <h3 className="text-xl font-bold text-gray-800 mb-6">Top 5 Best Selling Products</h3>
@@ -209,7 +215,13 @@ export default function SegmentationClusterDashboard() {
               </button>
             }
           >
-            <SimpleBarChart data={topCities} valueKey="value" />
+            <SimpleBarChart
+              data={topCities}
+              valueKey="value"
+              xTickFontSize={12}
+              tickRenderer={<WrappedXAxisTickCluster />}
+              bottomMargin={60}
+            />
           </BarBox>
 
           {/* ================= PURCHASE TIMING ================= */}
@@ -287,12 +299,47 @@ function BarBox({ title, children, action }) {
   );
 }
 
-function SimpleBarChart({ data, valueKey = 'count' }) {
+function WrappedXAxisTickCluster({ x, y, payload }) {
+  const raw = String(payload?.value || '');
+  const words = raw.split(/\s+/);
+  const MAX_LINES = 4;
+  const PER_LINE = 10; // approx characters per line; tune as needed
+
+  const lines = [];
+  let current = '';
+  for (const w of words) {
+    const candidate = current ? `${current} ${w}` : w;
+    if (candidate.length <= PER_LINE) {
+      current = candidate;
+    } else {
+      if (current) lines.push(current);
+      current = w;
+    }
+    if (lines.length === MAX_LINES) break;
+  }
+  if (current && lines.length < MAX_LINES) {
+    lines.push(current.length > PER_LINE ? `${current.slice(0, Math.max(PER_LINE - 1, 1))}…` : current);
+  }
+  const displayLines = lines.length ? lines : [''];
+
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text textAnchor="middle" fill="#374151" fontSize={12}>
+        {displayLines.map((line, index) => (
+          <tspan key={index} x="0" dy={index === 0 ? 16 : 14}>{line}</tspan>
+        ))}
+        <title>{raw}</title>
+      </text>
+    </g>
+  );
+}
+
+function SimpleBarChart({ data, valueKey = 'count', xTickFontSize = 12, tickRenderer = null, bottomMargin = 20 }) {
   return (
     <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={data} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+      <BarChart data={data} margin={{ top: 10, right: 20, bottom: bottomMargin, left: 10 }}>
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="name" interval={0} tickMargin={8} />
+        <XAxis dataKey="name" interval={0} tickMargin={8} tick={tickRenderer || { fontSize: xTickFontSize }} />
         <YAxis />
         <Tooltip />
         <Bar dataKey={valueKey} fill="#3b82f6" />
