@@ -146,14 +146,17 @@ const aggregateOrderData = (orderRows) => {
       // === BEHAVIORAL METRICS ===
       totalOrders: data.totalOrders,
       avgOrderValue: parseFloat(avgOrderValue.toFixed(2)),
-      customerLifetimeMonths: customerLifetimeMonths || 0,
+      customerLifetimeMonths: customerLifetimeMonths || 0, // Months active between first and last purchase.
       favoriteItem: favoriteItem,
       favoritePurchaseHour: favoritePurchaseHour,   // Optional, integer 0-23
       favoriteDayPart: favoriteDayPart,             // Optional, one of Night/Morning/Afternoon/Evening
       
       // === RFM COMPONENTS (for RFM segmentation) ===
       recency: recency,      // R: Days since last purchase (lower is better)
-      frequency: data.totalOrders,         // F: Number of orders (higher is better)
+      // F: Orders per month (normalized by customer lifetime)
+      frequency: data.customerLifetimeMonths > 0 
+        ? parseFloat((data.totalOrders / data.customerLifetimeMonths).toFixed(2)) 
+        : data.totalOrders,
       monetary: parseFloat(data.totalSpend.toFixed(2)),  // M: Total spend (higher is better)
     };
   });
@@ -833,10 +836,24 @@ export const showSegmentationResultInDashboard = async (req, res) => {
           const cluster = cidStr ? (assignmentMap.get(cidStr) ?? null) : null;
           const key = cluster != null ? cluster : 'Unassigned';
 
+          // For cluster info
           if (!summaries[key]) {
             summaries[key] = {
-              size: 0, orders: 0, spend: 0, aov: 0, recency: 0, lifetime: 0,
-              gender: {}, ageGroup: {}, state: {}, city: {}, dayPart: {}, purchaseHour: {}, item: {}, stateSpend: {}
+              size: 0,  // cluster size - how many customers
+              orders: 0, // how many orders in total
+              spend: 0, // total revenue (Monetary)
+              aov: 0, // average order value
+              recency: 0, // recency in days
+              frequency: 0, // Measures how much they purchase per month
+              lifetime: 0, //  how long the customer has been active: months between first and last purchase.
+              gender: {}, 
+              ageGroup: {},
+              state: {}, 
+              city: {}, 
+              dayPart: {}, 
+              purchaseHour: {}, 
+              item: {}, 
+              stateSpend: {}
             };
           }
 
@@ -850,6 +867,7 @@ export const showSegmentationResultInDashboard = async (req, res) => {
           s.aov += parseFloat(row.AvgOrderValue || 0);
           s.recency += parseFloat(row.Recency || 0);
           s.lifetime += parseFloat(row.CustomerLifetimeMonths || 0);
+          s.frequency += parseFloat(row.Frequency || 0);
           const gender = row.Gender;
           const ageGroup = row.AgeGroup;
           const state = row.State;
@@ -889,7 +907,8 @@ export const showSegmentationResultInDashboard = async (req, res) => {
       return `${displayHour} ${period}`;
     };
 
-    const activePair = detectPair(features);
+    // Default to RFM-only segmentation for dashboard logic
+    const activePair = 'rfm';
 
     // Enrich clusters
     const enrichedSummaries = Object.keys(summaries).map(key => {
@@ -910,13 +929,12 @@ export const showSegmentationResultInDashboard = async (req, res) => {
         size: data.size,
         sizePct: totalCustomers ? Number((data.size / totalCustomers * 100).toFixed(1)) : 0,
         revenue: Number(data.spend.toFixed(2)),
-        revenuePct: totalRevenue ? Number((data.spend / totalRevenue * 100).toFixed(1)) : 0,
         avgSpend: Number((data.spend / data.size).toFixed(2)),
         avgAOV: Number((data.aov / data.size).toFixed(2)),
-        avgOrders: Number((data.orders / data.size).toFixed(2)),
-        avgRecencyDays: Number((data.recency / data.size).toFixed(1)),
-        avgLifetimeMonths: Number((data.lifetime / data.size).toFixed(1)),
-
+        // avgOrders: Number((data.orders / data.size).toFixed(2)),
+        avgRecencyDays: Number((data.recency / data.size).toFixed(0)),
+        avgLifetimeMonths: Number((data.lifetime / data.size).toFixed(0)),
+        avgFrequencyPerMonth: Number((data.frequency / data.size).toFixed(0)),
         states: Object.entries(data.state || {}).map(([name, count]) => ({
           name, count,
           pct: Number((count / data.size * 100).toFixed(1)),
@@ -963,9 +981,6 @@ export const showSegmentationResultInDashboard = async (req, res) => {
     // ---------------- Suggested Names (generic, distinct per pair) ----------------
     const namePools = {
       rfm: ["Champions", "Loyal Customers", "Potential Loyalists", "At Risk", "Hibernating", "Lost"],
-      spending: ["High-Value Regulars", "Occasional Spenders", "New Explorers", "Sleeping Giants", "Price-Sensitive", "Loyal Enthusiasts"],
-      lifetime: ["Loyal Customers", "Growing Customers", "New Customers", "Steady Contributors", "Emerging", "Occasional"],
-      timebased: ["Active Customers", "Occasional Buyers", "Inactive Customers", "Weekend Shoppers", "Morning Buyers", "Evening Buyers"],
       generic: ["Segment A", "Segment B", "Segment C", "Segment D", "Segment E"]
     };
 
@@ -981,9 +996,7 @@ export const showSegmentationResultInDashboard = async (req, res) => {
         totalCustomers,
         totalRevenue: Number(totalRevenue.toFixed(2)),
         averageSpendOverall: totalCustomers ? Number((totalRevenue / totalCustomers).toFixed(2)) : 0,
-        summaries: enrichedSummaries.filter(s => s.cluster !== -1),
-        unassignedCount: summaries['Unassigned']?.size || 0,
-        featuresUsed: features
+        summaries: enrichedSummaries.filter(s => s.cluster !== -1)
       }
     });
 
@@ -992,18 +1005,6 @@ export const showSegmentationResultInDashboard = async (req, res) => {
     console.error('[showSegmentationResultInDashboard] Error:', err);
     res.status(500).json({ success: false, message: 'Failed to generate dashboard data', error: err.message });
   }
-};
-
-
-const detectPair = (features = []) => {
-  const f = new Set((features || []).map(x => String(x).toLowerCase()));
-
-  if (['recency', 'frequency', 'monetary'].every(x => f.has(x))) return 'rfm';
-  if (['totalSpend', 'avgOrderValue', 'totalOrders'].every(x => f.has(x))) return 'spending';
-  if (['customerLifetimeMonths', 'purchaseFrequency', 'totalSpend'].every(x => f.has(x))) return 'lifetime';
-  if (['recency', 'favoritePurchaseHour', 'purchaseFrequency'].every(x => f.has(x))) return 'timebased';
-
-  return 'generic';
 };
 
 // Compute cluster-relative interpretation dynamically
@@ -1049,54 +1050,5 @@ const interpretClusterDynamic = (cluster, allClusters, pair) => {
       recommendedAction = 'Encourage repeat purchases with bundles or promotions.';
     }
   }
-
-  if (pair === 'spending') {
-    if (spendPct > 0.7 && ordersPct <= 0.5) {
-      segmentType = 'Premium Buyers';
-      keyInsight = 'High spend per customer with fewer but valuable purchases.';
-      recommendedAction = 'Upsell premium products and personalized recommendations.';
-    } else if (ordersPct > 0.7 && spendPct < 0.3) {
-      segmentType = 'Price-Sensitive Buyers';
-      keyInsight = 'Frequent purchases but lower overall spending.';
-      recommendedAction = 'Offer bundles, discounts, or loyalty points.';
-    } else {
-      segmentType = 'Average Spenders';
-      keyInsight = 'Balanced spending and purchase frequency.';
-      recommendedAction = 'Maintain engagement with seasonal promotions.';
-    }
-  }
-
-  if (pair === 'lifetime') {
-    if (lifetimePct > 0.7 && ordersPct > 0.7) {
-      segmentType = 'Loyal Customers';
-      keyInsight = 'Long-term customers with consistent purchasing behavior.';
-      recommendedAction = 'Introduce membership or referral programs.';
-    } else if (lifetimePct < 0.3) {
-      segmentType = 'New Customers';
-      keyInsight = 'Recently acquired customers still exploring the brand.';
-      recommendedAction = 'Onboard with welcome offers and product education.';
-    } else {
-      segmentType = 'Growing Customers';
-      keyInsight = 'Customers showing potential for long-term value.';
-      recommendedAction = 'Nurture with targeted engagement campaigns.';
-    }
-  }
-
-  if (pair === 'timebased') {
-    if (recencyPct > 0.7) {
-      segmentType = 'Active Customers';
-      keyInsight = 'Customers are actively purchasing in recent periods.';
-      recommendedAction = 'Maintain engagement with timely promotions.';
-    } else if (recencyPct < 0.3) {
-      segmentType = 'Inactive Customers';
-      keyInsight = 'Long gap since last purchase indicates disengagement.';
-      recommendedAction = 'Trigger reminder or win-back campaigns.';
-    } else {
-      segmentType = 'Occasional Buyers';
-      keyInsight = 'Irregular purchase timing patterns.';
-      recommendedAction = 'Send reminders based on preferred purchase hours.';
-    }
-  }
-
   return { segmentType, keyInsight, recommendedAction };
 };
