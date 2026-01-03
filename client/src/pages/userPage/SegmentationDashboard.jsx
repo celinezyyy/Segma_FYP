@@ -20,28 +20,28 @@ import {
 } from 'recharts';
 import { Users, DollarSign, ShoppingBag, TrendingUp, ArrowLeft, Save, FileText } from 'lucide-react';
 
-const COLORS = ['#1d4ed8', '#0ea5e9', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+const COLORS = ['#4F46E5', '#6366F1', '#F59E0B', '#10B981', '#EF4444'];
 
 export default function SegmentationDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
   const { segmentationId, selectedFeatures } = location.state || {};
   const { backendUrl } = useContext(AppContext);
-
+  const stateChartWrapperRef = useRef(null);
   const [loading, setLoading] = useState(true);
+  const [stateSortOrder, setStateSortOrder] = useState('desc'); // 'asc' | 'desc'
+  const [selectedStateFilter, setSelectedStateFilter] = useState(null);
+  const [stateChartWidth, setStateChartWidth] = useState(0);
   const [data, setData] = useState(null);
   const [selectedCluster, setSelectedCluster] = useState('overview'); // 'overview' or cluster index
-  const [selectedStateFilter, setSelectedStateFilter] = useState(null);
-  const [stateSortOrder, setStateSortOrder] = useState('desc'); // 'asc' | 'desc'
-  const stateChartWrapperRef = useRef(null);
-  const [stateChartWidth, setStateChartWidth] = useState(0);
+  const [topProductsSortOrder, setTopProductsSortOrder] = useState('desc'); // 'asc' | 'desc'
 
   // ---------------- Components ----------------
   const MetricCard = ({ title, value, icon, bgColor }) => (
-    <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow">
-      <div className="flex items-center gap-3 mb-3">
-        <div className={`p-3 ${bgColor} rounded-xl`}>{icon}</div>
-        <p className="text-xl font-medium text-gray-600">{title}</p>
+    <div className="bg-white p-4 rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow">
+      <div className="flex items-center gap-8 mb-3">
+        <div className={`p-1 ${bgColor} rounded-xl`}>{icon}</div>
+        <p className="text-small font-small text-gray-600">{title}</p>
       </div>
       <p className="text-center text-2xl font-bold text-gray-900">{value}</p>
     </div>
@@ -124,24 +124,10 @@ export default function SegmentationDashboard() {
   };
   
   // ---------------- Hooks / Data ----------------
-  const activePair = useMemo(() => {
-    const keys = Array.isArray(selectedFeatures) ? selectedFeatures.map(String) : [];
-    const PAIRS = {
-      rfm: ['recency', 'frequency', 'monetary'],
-      spending: ['totalSpend', 'avgOrderValue', 'totalOrders'],
-      lifetime: ['customerLifetimeMonths', 'purchaseFrequency', 'totalSpend'],
-      timebased: ['recency', 'favoritePurchaseHour', 'purchaseFrequency'],
-    };
-    const keySet = new Set(keys);
-    for (const [id, feats] of Object.entries(PAIRS)) if (feats.every(f => keySet.has(f))) return id;
-    return null;
-  }, [selectedFeatures]);
-
+  // RFM-only: simplify pair handling
+  const activePair = 'rfm';
   const pairDescriptions = {
     rfm: { title: 'Classic RFM', summary: 'Ranks customers by recency, frequency and monetary value to find VIPs and churn risks.', kpis: ['Average Spend', 'Average Recency', 'Revenue Share'] },
-    spending: { title: 'Spending Behavior', summary: 'Focuses on total spend, AOV and order count to spot high vs low spenders.', kpis: ['Average Spend', 'Order Count', 'Top Product'] },
-    lifetime: { title: 'Customer Lifetime + Behavior', summary: 'Highlights loyal long-term customers and their spend/frequency patterns.', kpis: ['Average Spend', 'Purchase Frequency', 'Customer Lifetime'] },
-    timebased: { title: 'Time-based Behavior', summary: 'Surfaces churn risks and preferred buying hours/days.', kpis: ['Average Recency', 'Favorite Purchase Hour', 'Purchase Frequency'] },
   };
 
   useEffect(() => {
@@ -163,6 +149,7 @@ export default function SegmentationDashboard() {
 
         const res = await axios.post(`${backendUrl}/api/segmentation/${segmentationId}/dashboard`, { features: selectedFeatures }, { withCredentials: true });
         if (res.data.success) {
+          console.log('Segmentation dashboard data:', res.data.data.summaries);
           const summaries = res.data.data.summaries.map((s, i) => ({ ...s, suggestedName: s.suggestedName || `Segment ${i + 1}` }));
           setData({ ...res.data.data, summaries });
           localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), payload: { ...res.data.data, summaries } }));
@@ -173,32 +160,71 @@ export default function SegmentationDashboard() {
 
     fetchData();
   }, [segmentationId, selectedFeatures, backendUrl]);
-
-  useEffect(() => {
-    const el = stateChartWrapperRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        const w = entry.contentRect?.width || el.clientWidth || 0;
-        setStateChartWidth(w);
-      }
-    });
-    ro.observe(el);
-    setStateChartWidth(el.clientWidth || 0);
-    return () => ro.disconnect();
-  }, []);
-
+  
   // ---------------- Computed Data ----------------
   const { totalCustomers = 0, totalRevenue = 0, averageSpendOverall = 0, summaries = [] } = data || {};
 
+  const overallAvgRecency = useMemo(() => {
+    if (!summaries.length) return 0;
+
+    const totalRecencyDay = summaries.reduce((acc, s) => {
+      return acc + (s.avgRecencyDays * s.size);
+    }, 0);
+
+    const totalCustomers = summaries.reduce((acc, s) => acc + s.size, 0);
+
+    return totalCustomers ? Number((totalRecencyDay / totalCustomers).toFixed(0)) : 0;
+  }, [summaries]);
+
+  const overallAvgFrequency = Number(
+    (summaries.reduce((acc, s) => acc + (s.avgFrequencyPerMonth * s.size), 0) /
+    summaries.reduce((acc, s) => acc + s.size, 0)
+    ).toFixed(0) // no decimals
+  );
+
+  // Product counts for Top Products chart
   const productCounts = useMemo(() => {
     const counts = {};
-    summaries.forEach(s => (s.items || []).forEach(it => counts[it.name] = (counts[it.name] || 0) + it.count));
+    summaries.forEach(s => (s.items || []).forEach(it => {
+      counts[it.name] = (counts[it.name] || 0) + (it.count || 0);
+    }));
     return counts;
   }, [summaries]);
 
-  const topProducts = useMemo(() => Object.entries(productCounts).map(([name, count]) => ({ name, count })).sort((a,b) => b.count - a.count).slice(0,5), [productCounts]);
+  const topProducts = useMemo(() => (
+    Object.entries(productCounts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => (topProductsSortOrder === 'asc' ? a.count - b.count : b.count - a.count))
+      .slice(0, 5)
+  ), [productCounts, topProductsSortOrder]);
 
+  const maxTopCount = useMemo(() => (
+    topProducts.reduce((m, p) => Math.max(m, Number(p.count || 0)), 0)
+  ), [topProducts]);
+
+  // Cluster comparison datasets
+  const clusterSpendData = useMemo(() => (
+    (summaries || []).map(s => ({
+      cluster: s.suggestedName || `Cluster ${s.cluster}`,
+      avgSpend: Number(s.avgSpend || 0),
+    }))
+  ), [summaries]);
+
+  const clusterRecencyData = useMemo(() => (
+    (summaries || []).map(s => ({
+      cluster: s.suggestedName || `Cluster ${s.cluster}`,
+      avgRecencyDays: Number(s.avgRecencyDays || 0),
+    }))
+  ), [summaries]);
+
+  const clusterDistribution = useMemo(() => (
+    (summaries || []).map(s => ({
+      name: s.suggestedName || `Cluster ${s.cluster}`,
+      value: Number(s.size || 0),
+    }))
+  ), [summaries]);
+  
+  // State chart data for States vs Revenue
   const stateChartData = useMemo(() => {
     const allStatesSet = new Set();
     summaries.forEach(s => (s.states || []).forEach(st => allStatesSet.add(st.name)));
@@ -222,13 +248,99 @@ export default function SegmentationDashboard() {
       return row;
     });
 
-    chartData.sort((a, b) => {
-      return stateSortOrder === 'asc' ? a.__total - b.__total : b.__total - a.__total;
-    });
+    chartData.sort((a, b) => (stateSortOrder === 'asc' ? a.__total - b.__total : b.__total - a.__total));
 
     const sliced = chartData.slice(0, 10).map(({ __total, ...rest }) => rest);
     return sliced;
   }, [summaries, selectedStateFilter, stateSortOrder]);
+
+  // Compute max wrapped lines needed for X-axis labels based on chart width and number of ticks
+  const maxLinesStates = useMemo(() => {
+    const approxCharW = 7; // px per character at ~12px font
+    const tickCount = Math.max(stateChartData.length, 1);
+    const tickAvailWidth = Math.max(60, (stateChartWidth - 120) / tickCount);
+    const perLine = Math.max(8, Math.floor(tickAvailWidth / approxCharW));
+    const MAX_LINES = 3;
+
+    const linesNeeded = (label) => {
+      const words = String(label || '').split(/\s+/);
+      const lines = [];
+      let current = '';
+      for (const w of words) {
+        const candidate = current ? `${current} ${w}` : w;
+        if (candidate.length <= perLine) {
+          current = candidate;
+        } else {
+          if (current) lines.push(current);
+          current = w;
+        }
+        if (lines.length === MAX_LINES) break;
+      }
+      if (current && lines.length < MAX_LINES) {
+        lines.push(current.length > perLine ? `${current.slice(0, Math.max(perLine - 1, 1))}…` : current);
+      }
+      return Math.max(lines.length, 1);
+    };
+
+    let max = 1;
+    for (const d of stateChartData) {
+      max = Math.max(max, linesNeeded(d.state));
+    }
+    return max;
+  }, [stateChartData, stateChartWidth]);
+
+const WrappedXAxisTick = ({ x, y, payload }) => {
+    const raw = String(payload?.value || '');
+    const approxCharW = 7; // px per character at ~12px font
+    const tickCount = Math.max(stateChartData.length, 1);
+    const tickAvailWidth = Math.max(60, (stateChartWidth - 120) / tickCount);
+    const perLine = Math.max(8, Math.floor(tickAvailWidth / approxCharW));
+    const MAX_LINES = 3;
+
+    const words = raw.split(/\s+/);
+    const lines = [];
+    let current = '';
+    for (const w of words) {
+      const candidate = current ? `${current} ${w}` : w;
+      if (candidate.length <= perLine) {
+        current = candidate;
+      } else {
+        if (current) lines.push(current);
+        current = w;
+      }
+      if (lines.length === MAX_LINES) break;
+    }
+    if (current && lines.length < MAX_LINES) {
+      lines.push(current.length > perLine ? `${current.slice(0, Math.max(perLine - 1, 1))}…` : current);
+    }
+    const displayLines = lines.length ? lines : [''];
+
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text textAnchor="middle" fill="#374151" fontSize={12}>
+          {displayLines.map((line, index) => (
+            <tspan key={index} x="0" dy={index === 0 ? 16 : 14}>{line}</tspan>
+          ))}
+          <title>{raw}</title>
+        </text>
+      </g>
+    );
+};
+
+  // Optional: keep width tracking for future responsive tweaks
+  useEffect(() => {
+    const el = stateChartWrapperRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const w = entry.contentRect?.width || el.clientWidth || 0;
+        setStateChartWidth(w);
+      }
+    });
+    ro.observe(el);
+    setStateChartWidth(el.clientWidth || 0);
+    return () => ro.disconnect();
+  }, []);
 
   const handleStateBarClick = entry => {
     const stateName = entry?.payload?.state;
@@ -249,7 +361,6 @@ export default function SegmentationDashboard() {
 
   // ---------------- Render Overview ----------------
   if (selectedCluster === 'overview') {
-    const pairKPIs = pairDescriptions[activePair]?.kpis || ['Average Spend', 'Average Recency', 'Revenue Share'];
     const handleSaveReport = async () => {
       try {
         if (!segmentationId || !Array.isArray(summaries) || summaries.length === 0) return;
@@ -281,82 +392,170 @@ export default function SegmentationDashboard() {
         <div className="flex-1 p-6 pt-24">
           <Navbar />
           <div className="max-w-7xl mx-auto">
-                        <div className="mb-3 flex items-center justify-end gap-3">
-                          <button onClick={handleSaveReport} className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100">
-                            <Save size={16} /> Save Report (PDF)
-                          </button>
-                          <button onClick={() => navigate('/reports')} className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50">
-                            <FileText size={16} /> View Reports
-                          </button>
-                        </div>
-            <button
-              onClick={() => navigate(-1)}
-              className="mb-4 flex items-center gap-2 text-indigo-700 hover:text-indigo-900 font-semibold"
-            >
-              <ArrowLeft size={20} /> Back to Segmentation
-            </button>
-            <h1 className="text-3xl font-bold text-center text-indigo-900 mb-2">Customer Segmentation Dashboard Overview</h1>
-            {activePair && <p className="text-center text-gray-700 mb-6">Pair selected: <strong>{pairDescriptions[activePair].title}</strong> — {pairDescriptions[activePair].summary}</p>}
+            <div className="mb-5 flex items-center justify-between">
+              {/* Title */}
+              <h1 className="text-2xl font-bold text-indigo-900 flex-1 text-center md:text-left">
+                Customer Segmentation Dashboard Overview
+              </h1>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
-              <MetricCard title="Total Customers" value={totalCustomers.toLocaleString()} icon={<Users className="w-7 h-7 text-blue-600" />} bgColor="bg-blue-100" />
-              <MetricCard title="Total Revenue" value={`RM ${totalRevenue.toFixed(2).toLocaleString()}`} icon={<DollarSign className="w-7 h-7 text-green-600" />} bgColor="bg-green-100" />
-              <MetricCard title={pairKPIs[0]} value={pairKPIs[0]==='Average Spend' ? `RM ${averageSpendOverall.toFixed(2)}` : summaries.length} icon={<TrendingUp className="w-7 h-7 text-purple-600" />} bgColor="bg-purple-100" />
-              <MetricCard title="Segments Found" value={summaries.length} icon={<ShoppingBag className="w-7 h-7 text-orange-600" />} bgColor="bg-orange-100" />
+              {/* Buttons */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleSaveReport}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100"
+                >
+                  <Save size={16} /> Save Report (PDF)
+                </button>
+                <button
+                  onClick={() => navigate('/reports')}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  <FileText size={16} /> View Reports
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-16">
-              {/* States by Revenue */}
-              <div className="bg-white p-8 rounded-3xl shadow-xl" ref={stateChartWrapperRef}>
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-2xl font-bold text-gray-800">States by Revenue</h3>
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="px-3 py-2 text-sm rounded-md border border-gray-300 hover:border-gray-400 bg-gray-50 hover:bg-gray-100"
-                      onClick={() => setStateSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
-                      title="Toggle sort order"
-                    >
-                      Sort: {stateSortOrder === 'asc' ? 'Ascending' : 'Descending'}
-                    </button>
-                  </div>
-                </div>
-                <ResponsiveContainer width="100%" height={500}>
-                  <BarChart data={stateChartData}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
+              <MetricCard title="Total Customers" value={totalCustomers.toLocaleString()} icon={<Users className="w-7 h-7 text-blue-600" />} bgColor="bg-blue-100" />
+              <MetricCard title="Total Revenue" value={`RM ${totalRevenue.toFixed(2).toLocaleString()}`} icon={<DollarSign className="w-7 h-7 text-green-600" />} bgColor="bg-green-100" />
+              <MetricCard title="Segments Found" value={summaries.length} icon={<ShoppingBag className="w-7 h-7 text-orange-600" />} bgColor="bg-orange-100" />
+              <MetricCard title="Average Spend" value={`RM ${averageSpendOverall}`} icon={<TrendingUp className="w-7 h-7 text-purple-600" />} bgColor="bg-purple-100" />
+              <MetricCard title="Average Days Since Last Purchase" value={`${overallAvgRecency} days`} icon={<TrendingUp className="w-7 h-7 text-purple-600" />} bgColor="bg-purple-100" />
+              <MetricCard title="Average Purchases Per Month" value={`${overallAvgFrequency}`} icon={<TrendingUp className="w-7 h-7 text-purple-600" />} bgColor="bg-purple-100" />
+            </div>
+
+            {/* Row: Left spans 2 rows, right has two stacked panels */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-8 ">
+              {/* Left: Avg Spend spanning two rows */}
+              <div className="bg-white p-8 rounded-3xl shadow-xl lg:row-span-2">
+                <h3 className="text-xl font-bold text-gray-800 mb-6">Average Customer Spend per Segment</h3>
+                <ResponsiveContainer width="100%" height={650}>
+                  <BarChart data={clusterSpendData} margin={{ top: 10, right: 0, left: 0, bottom: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="state" tick={{ angle: -35, textAnchor: 'end' }} height={70} />
+                    <XAxis dataKey="cluster" height={70} tick={<WrappedXAxisTick />} />
                     <YAxis />
-                    <Tooltip formatter={v => `RM ${v.toLocaleString()}`} />
+                    <Tooltip formatter={v => `RM ${Number(v || 0).toLocaleString()}`} />
                     <Legend />
-                    {summaries.map((s, idx) => (
-                      <Bar
-                        key={s.cluster}
-                        dataKey={`cluster_${s.cluster}`}
-                        stackId="a"
-                        fill={COLORS[idx % COLORS.length]}
-                        stroke="#fff"
-                        strokeWidth={1}
-                        name={s.suggestedName || `Cluster ${s.cluster}`}
-                        onClick={handleStateBarClick}
-                        cursor="pointer"
-                      />
-                    ))}
+                    <Bar dataKey="avgSpend" name="Avg Spend" fill={COLORS[0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
 
-              {/* Top Products */}
-              <div className="bg-white p-8 rounded-3xl shadow-xl">
-                <h3 className="text-2xl font-bold mb-6 text-gray-800">Top 5 Best Selling Products</h3>
-                <ResponsiveContainer width="100%" height={500}>
+              {/* Right top: Customer distribution by cluster */}
+              <div className="bg-white p-4 rounded-3xl shadow-xl">
+                <h3 className="text-xl font-bold text-gray-800 mb-6">Customer Distribution by Cluster</h3>
+                <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
-                    <Pie data={topProducts} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={120} label={entry => `${entry.name} (${entry.count})`}>
-                      {topProducts.map((entry, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
+                    <Pie
+                      data={clusterDistribution}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="40%"
+                      cy="50%"
+                      outerRadius={110}
+                      label={entry => `${entry.value}`}
+                    >
+                      {clusterDistribution.map((entry, index) => (
+                        <Cell key={`cluster-dist-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
                     </Pie>
-                    <Tooltip formatter={v => `${v} orders`} />
-                    <Legend />
+                    <Tooltip formatter={v => `${v} customers`} />
+                    <Legend
+                      layout="vertical"
+                      align="right"
+                      verticalAlign="middle"
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
+
+              {/* Right bottom: Top Products (Table) */}
+              <div className="bg-white p-6 rounded-3xl shadow-xl self-start">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-2xl font-bold text-gray-800">Top 5 Best Selling Products</h3>
+                  <button
+                    className="px-3 py-1 text-sm rounded-md border border-gray-300 hover:border-gray-400 bg-gray-50 hover:bg-gray-100"
+                    onClick={() => setTopProductsSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
+                    title="Toggle sort order"
+                  >
+                    Sort: {topProductsSortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                  </button>
+                </div>
+                <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                  <table className="min-w-full table-auto">
+                    <thead>
+                      <tr className="text-left text-gray-600">
+                        <th className="py-2 px-3">Product</th>
+                        <th className="py-2 px-3 text-right">Orders</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {topProducts.map((p) => {
+                        const count = Number(p.count || 0);
+                        const intensity = maxTopCount ? (0.15 + (count / maxTopCount) * 0.25) : 0.15;
+                        return (
+                          <tr
+                            key={p.name}
+                            className="transition-colors"
+                            style={{ backgroundColor: `rgba(79, 70, 229, ${intensity})` }}
+                          >
+                            <td className="py-2 px-3">{p.name}</td>
+                            <td className="py-2 px-3 text-right">{count.toLocaleString()}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2: States by Revenue full-width */}
+            <div className="bg-white p-8 rounded-3xl shadow-xl mb-4" ref={stateChartWrapperRef}>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-gray-800">States by Revenue</h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="px-3 py-2 text-sm rounded-md border border-gray-300 hover:border-gray-400 bg-gray-50 hover:bg-gray-100"
+                    onClick={() => setStateSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
+                    title="Toggle sort order"
+                  >
+                    Sort: {stateSortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                  </button>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={500}>
+                <BarChart data={stateChartData} >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="state"
+                    interval={0}
+                    height={Math.min(140, maxLinesStates * 16 + 24)}
+                    tickMargin={8}
+                    tick={<WrappedXAxisTick />}
+                  />
+                  <YAxis />
+                  <Tooltip formatter={v => `RM ${v.toLocaleString()}`} />
+                  <Legend
+                    layout="vertical"
+                    align="right"
+                    verticalAlign="middle"
+                  />
+                  {summaries.map((s, idx) => (
+                    <Bar
+                      key={s.cluster}
+                      dataKey={`cluster_${s.cluster}`}
+                      stackId="a"
+                      fill={COLORS[idx % COLORS.length]}
+                      stroke="#fff"
+                      strokeWidth={1}
+                      name={s.suggestedName || `Cluster ${s.cluster}`}
+                      onClick={handleStateBarClick}
+                      cursor="pointer"
+                    />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
             </div>
 
             {/* Segment Cards */}
