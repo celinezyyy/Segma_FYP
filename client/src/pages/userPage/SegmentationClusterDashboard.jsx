@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import UserSidebar from '../../components/UserSidebar';
 import Navbar from '../../components/Navbar';
@@ -40,22 +40,30 @@ export default function SegmentationClusterDashboard() {
   }
 
   /* -------------------- DATA PREP -------------------- */
+  const [stateSort, setStateSort] = useState('desc');
+  const [citySort, setCitySort] = useState('desc');
 
-  const topStates = useMemo(
-    () =>
-      (seg.states || [])
-        .map(s => ({ name: s.name, value: (s.revenue ?? s.count ?? 0) }))
-        .slice(0, 10),
+  const baseStates = useMemo(
+    () => (seg.states || []).map(s => ({ name: s.name, value: (s.revenue ?? s.count ?? 0) })),
     [seg]
   );
 
-  const topCities = useMemo(
-    () =>
-      (seg.cities || [])
-        .map(c => ({ name: c.name, value: (c.count ?? c.revenue ?? 0) }))
-        .slice(0, 10),
+  const topStates = useMemo(() => {
+    const data = [...baseStates];
+    data.sort((a, b) => (stateSort === 'desc' ? b.value - a.value : a.value - b.value));
+    return data.slice(0, 10);
+  }, [baseStates, stateSort]);
+
+  const baseCities = useMemo(
+    () => (seg.cities || []).map(c => ({ name: c.name, value: (c.count ?? c.revenue ?? 0) })),
     [seg]
   );
+
+  const topCities = useMemo(() => {
+    const data = [...baseCities];
+    data.sort((a, b) => (citySort === 'desc' ? b.value - a.value : a.value - b.value));
+    return data.slice(0, 10);
+  }, [baseCities, citySort]);
 
   const topProducts = useMemo(
     () =>
@@ -145,48 +153,71 @@ export default function SegmentationClusterDashboard() {
             />
           </div>
 
-          {/* ================= GEOGRAPHIC ================= */}
-          <Section title="Geographic Distribution">
-            <TwoCol>
-              <BarBox title="Customers by State">
+          {/* ================= State & Product ================= */}
+          <TwoCol>
+              <BarBox
+                title="Customers by State"
+                action={
+                  <button
+                    onClick={() => setStateSort(prev => (prev === 'desc' ? 'asc' : 'desc'))}
+                    className="text-sm text-indigo-600 hover:underline"
+                  >
+                    Sort {stateSort === 'desc' ? '↓' : '↑'}
+                  </button>
+                }
+              >
                 <SimpleBarChart data={topStates} valueKey="value" />
               </BarBox>
-              <BarBox title="Customers by City">
-                <SimpleBarChart data={topCities} valueKey="value" />
-              </BarBox>
+              <div className="bg-white p-6 rounded-2xl shadow">
+            <h3 className="text-xl font-bold text-gray-800 mb-6">Top 5 Best Selling Products</h3>
+            <ResponsiveContainer width="100%" height={360}>
+              <PieChart>
+                <Pie
+                  data={topProducts}
+                  dataKey="count"
+                  nameKey="name"
+                  outerRadius={100}
+                  // cx="50%"
+                  label={({value, percent }) => `${value} (${(percent * 100).toFixed(1)}%)`}
+                >
+                  {topProducts.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend
+                  layout="horizontal"      // horizontal legend
+                  verticalAlign="bottom"   // place at bottom
+                  align="center"           // center horizontally
+                  wrapperStyle={{ fontSize: 14, fontWeight: 500 }} // adjust font
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          
             </TwoCol>
-          </Section>
 
-          {/* ================= PRODUCT ================= */}
-          <Section title="Product Preference Analysis">
-            <div className="bg-white p-6 rounded-2xl shadow">
-              <ResponsiveContainer width="100%" height={350}>
-                <PieChart>
-                  <Pie
-                    data={topProducts}
-                    dataKey="count"
-                    nameKey="name"
-                    outerRadius={120}
-                    label
-                  >
-                    {topProducts.map((_, i) => (
-                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </Section>
+          {/* ================= CITY ================= */}
+          <BarBox
+            title="Customers by City"
+            action={
+              <button
+                onClick={() => setCitySort(prev => (prev === 'desc' ? 'asc' : 'desc'))}
+                className="text-sm text-indigo-600 hover:underline"
+              >
+                Sort {citySort === 'desc' ? '↓' : '↑'}
+              </button>
+            }
+          >
+            <SimpleBarChart data={topCities} valueKey="value" />
+          </BarBox>
 
           {/* ================= PURCHASE TIMING ================= */}
-          <Section title="Purchase Timing Behavior">
             <TwoCol>
               <BarBox title="Preferred Purchase Hour">
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={purchaseHourData}>
-                    <XAxis dataKey="hour" />
+                  <BarChart data={purchaseHourData} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+                    <XAxis dataKey="hour" interval={0} tickMargin={8} />
                     <YAxis />
                     <Tooltip />
                     <Bar dataKey={Array.isArray(seg.purchaseHours) && seg.purchaseHours.length ? 'count' : 'pct'} fill="#f59e0b" />
@@ -201,7 +232,7 @@ export default function SegmentationClusterDashboard() {
                       data={dayPartData}
                       dataKey="value"
                       outerRadius={100}
-                      label
+                      label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(1)}%)`}
                     >
                       <Cell fill="#8b5cf6" />
                     </Pie>
@@ -209,8 +240,6 @@ export default function SegmentationClusterDashboard() {
                 </ResponsiveContainer>
               </BarBox>
             </TwoCol>
-          </Section>
-
         </div>
       </div>
     </div>
@@ -246,10 +275,13 @@ function TwoCol({ children }) {
   );
 }
 
-function BarBox({ title, children }) {
+function BarBox({ title, children, action }) {
   return (
     <div className="bg-white p-6 rounded-2xl shadow">
-      <h3 className="text-lg font-semibold mb-4">{title}</h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold">{title}</h3>
+        {action || null}
+      </div>
       {children}
     </div>
   );
@@ -258,9 +290,9 @@ function BarBox({ title, children }) {
 function SimpleBarChart({ data, valueKey = 'count' }) {
   return (
     <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={data}>
+      <BarChart data={data} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="name" />
+        <XAxis dataKey="name" interval={0} tickMargin={8} />
         <YAxis />
         <Tooltip />
         <Bar dataKey={valueKey} fill="#3b82f6" />
