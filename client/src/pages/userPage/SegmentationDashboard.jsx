@@ -415,20 +415,20 @@ const WrappedXAxisTick = ({ x, y, payload }) => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-5 mb-10">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
               <MetricCard title="Total Customers" value={totalCustomers.toLocaleString()} icon={<Users className="w-7 h-7 text-blue-600" />} bgColor="bg-blue-100" />
               <MetricCard title="Total Revenue" value={`RM ${totalRevenue.toFixed(2).toLocaleString()}`} icon={<DollarSign className="w-7 h-7 text-green-600" />} bgColor="bg-green-100" />
               <MetricCard title="Segments Found" value={summaries.length} icon={<ShoppingBag className="w-7 h-7 text-orange-600" />} bgColor="bg-orange-100" />
               <MetricCard title="Average Spend" value={`RM ${averageSpendOverall}`} icon={<TrendingUp className="w-7 h-7 text-purple-600" />} bgColor="bg-purple-100" />
-              <MetricCard title="Average Recency" value={`${overallAvgRecency} days`} icon={<TrendingUp className="w-7 h-7 text-purple-600" />} bgColor="bg-purple-100" />
-              <MetricCard title="Average Frequency" value={`${overallAvgFrequency}`} icon={<TrendingUp className="w-7 h-7 text-purple-600" />} bgColor="bg-purple-100" />
+              <MetricCard title="Average Days Since Last Purchase" value={`${overallAvgRecency} days`} icon={<TrendingUp className="w-7 h-7 text-purple-600" />} bgColor="bg-purple-100" />
+              <MetricCard title="Average Purchases Per Month" value={`${overallAvgFrequency}`} icon={<TrendingUp className="w-7 h-7 text-purple-600" />} bgColor="bg-purple-100" />
             </div>
 
             {/* Row: Left spans 2 rows, right has two stacked panels */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-8 ">
               {/* Left: Avg Spend spanning two rows */}
               <div className="bg-white p-8 rounded-3xl shadow-xl lg:row-span-2">
-                <h3 className="text-xl font-bold text-gray-800 mb-6">Avg Spend by Customers (Monetary) per Cluster</h3>
+                <h3 className="text-xl font-bold text-gray-800 mb-6">Average Customer Spend per Segment</h3>
                 <ResponsiveContainer width="100%" height={650}>
                   <BarChart data={clusterSpendData} margin={{ top: 10, right: 0, left: 0, bottom: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" />
