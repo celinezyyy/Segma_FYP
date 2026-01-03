@@ -75,7 +75,7 @@ export default function SegmentationDashboard() {
       <div
         onClick={() => {
           navigate(`/segmentation/${segmentationId}/cluster/${idx}`, {
-            state: { segmentationId, clusterIndex: idx, selectedFeatures },
+            state: { segmentationId, clusterIndex: idx, selectedFeatures, segment: seg },
           });
         }}
         className="bg-white rounded-3xl shadow-2xl overflow-visible cursor-pointer hover:shadow-indigo-200 transform hover:scale-105 transition duration-300 border border-gray-200"
