@@ -14,7 +14,7 @@ const UserSidebar = () => {
       <aside
         onMouseEnter={() => setIsOpen(true)}
         onMouseLeave={() => setIsOpen(false)}
-        className={`fixed top-16 left-0 z-40 flex flex-col justify-between h-[calc(100vh-4rem)] bg-gray-50 dark:bg-gray-800 transition-all duration-300 ${
+        className={`fixed top-16 left-0 z-40 flex flex-col justify-between h-[calc(100vh-4rem)] bg-gray-50 dark:bg-gray-800 transition-all duration-300 shadow-md ${
           isOpen ? 'w-64' : 'w-16'
         }`}
       >
