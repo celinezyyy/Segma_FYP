@@ -84,7 +84,8 @@ export default function SegmentationDashboard() {
       >
         {/* Header gradient uses Tailwind arbitrary color from hex */}
         <div className={`h-36 bg-gradient-to-br from-[${COLORS[idx % COLORS.length]}] to-indigo-600 flex items-center justify-between px-6`}>
-          <h3 className="text-2xl md:text-3xl font-bold text-black">{suggestedName}</h3>
+          <h3 className="text-2xl md:text-xl font-bold text-black">{`${suggestedName} Group`}</h3>
+          <span className="ml-3 inline-flex items-center px-2 py-1 rounded-md bg-black/10 text-black text-xs md:text-sm font-semibold">Group {idx + 1}</span>
         </div>
 
         <div className="p-6 md:p-8 space-y-5">
@@ -225,7 +226,7 @@ export default function SegmentationDashboard() {
   // Cluster comparison datasets
   const clusterSpendData = useMemo(() => {
     const rows = (summaries || []).map(s => ({
-      cluster: s.suggestedName || `Cluster ${s.cluster}`,
+      cluster: `${s.suggestedName || `Cluster ${s.cluster}`} Group`,
       avgSpend: Number(s.avgSpend || 0),
     }));
     rows.sort((a, b) => (spendSortOrder === 'asc' ? a.avgSpend - b.avgSpend : b.avgSpend - a.avgSpend));
@@ -234,7 +235,7 @@ export default function SegmentationDashboard() {
 
   const clusterDistribution = useMemo(() => (
     (summaries || []).map(s => ({
-      name: s.suggestedName || `Cluster ${s.cluster}`,
+      name: `${s.suggestedName || `Cluster ${s.cluster}`} Group`,
       value: Number(s.size || 0),
       pct: Number((s.sizePct ?? 0).toFixed?.(2) || s.sizePct || 0),
     }))
@@ -307,13 +308,17 @@ export default function SegmentationDashboard() {
 
   const WrappedXAxisTick = ({ x, y, payload }) => {
       const raw = String(payload?.value || '');
+      // Clean 'Wilayah Persekutuan' and common prefixes
+      let cleaned = raw.replace(/\(?\s*Wilayah\s+Persekutuan\s*\)?/gi, '');
+      cleaned = cleaned.replace(/^\s*(W\.?P\.?|WP)\s+/gi, '');
+      cleaned = cleaned.replace(/\s{2,}/g, ' ').replace(/^[\s,()\-\.]+|[\s,()\-\.]+$/g, '').trim();
       const approxCharW = 7; // px per character at ~12px font
       const tickCount = Math.max(stateChartData.length, 1);
       const tickAvailWidth = Math.max(60, (stateChartWidth - 120) / tickCount);
-      const perLine = Math.max(8, Math.floor(tickAvailWidth / approxCharW));
+      const perLine = Math.max(12, Math.floor(tickAvailWidth / approxCharW));
       const MAX_LINES = 3;
 
-      const words = raw.split(/\s+/);
+      const words = cleaned.split(/\s+/);
       const lines = [];
       let current = '';
       for (const w of words) {
@@ -337,7 +342,7 @@ export default function SegmentationDashboard() {
             {displayLines.map((line, index) => (
               <tspan key={index} x="0" dy={index === 0 ? 16 : 14}>{line}</tspan>
             ))}
-            <title>{raw}</title>
+            <title>{cleaned}</title>
           </text>
         </g>
       );
@@ -430,6 +435,7 @@ export default function SegmentationDashboard() {
                 </button>
               </div>
             </div>
+            <p className="text-sm text-gray-600 mb-4">We found {summaries.length} customer groups.</p>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
               <MetricCard title="Total Customers" value={totalCustomers.toLocaleString()} icon={<Users className="w-7 h-7 text-blue-600" />} bgColor="bg-blue-100" />
@@ -455,12 +461,22 @@ export default function SegmentationDashboard() {
                   </button>
                 </div>
                 <ResponsiveContainer width="100%" height={650}>
-                  <BarChart data={clusterSpendData} margin={{ top: 10, right: 0, left: 0, bottom: 10 }}>
+                  <BarChart data={clusterSpendData} margin={{ top: 24, right: 0, left: 0, bottom: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="cluster" interval={0} height={70} tickMargin={8} tick={<WrappedXAxisTick />} />
-                    <YAxis />
+                    <XAxis dataKey="cluster" interval={0} height={70} tickMargin={8} tick={<WrappedXAxisTick />} label={{
+                      value: 'Segment Groups Name',
+                      position: 'insideBottom',
+                      dy:10
+                    }}/>
+                    <YAxis tick={{ fontSize: 12 }} label={{
+                      value: 'Average Spend (RM)',
+                      position: 'insideStart',
+                      angle: -90,
+                      offset: 0,
+                      dx: -15,
+                      dy: 0
+                    }}/>
                     <Tooltip formatter={v => `RM ${Number(v || 0).toLocaleString()}`} />
-                    <Legend />
                     <Bar dataKey="avgSpend" name="Average Spend" fill={COLORS[0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -566,8 +582,22 @@ export default function SegmentationDashboard() {
                     height={Math.min(140, maxLinesStates * 16 + 24)}
                     tickMargin={8}
                     tick={<WrappedXAxisTick />}
+                    label={{
+                      value: 'State',
+                      angle: 0,
+                      position: 'insideStart',
+                      offset: 0,
+                      dy: 15
+                    }}
                   />
-                  <YAxis />
+                  <YAxis tick={{ fontSize: 12 }} label={{
+                      value: 'Average Spend (RM)',
+                      position: 'insideStart',
+                      angle: -90,
+                      offset: 0,
+                      dx: -29,
+                      dy: 0
+                    }}/>
                   <Tooltip formatter={v => `RM ${v.toLocaleString()}`} />
                   <Legend
                     layout="vertical"

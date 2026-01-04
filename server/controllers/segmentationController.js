@@ -1002,18 +1002,18 @@ export const showSegmentationResultInDashboard = async (req, res) => {
 
       // Define archetype prototypes in R,F,M space
       const prototypes = [
-        { name: 'Champions',            r: 1.00, f: 1.00, m: 1.00 },
-        { name: 'Loyal Customers',      r: 0.85, f: 0.85, m: 0.65 },
-        { name: 'Potential Loyalists',  r: 0.85, f: 0.60, m: 0.60 },
-        { name: 'New Customers',        r: 0.95, f: 0.20, m: 0.20 },
-        { name: "Can't Lose Them",     r: 0.50, f: 0.90, m: 0.90 },
-        { name: 'At Risk',              r: 0.20, f: 0.90, m: 0.90 },
-        { name: 'Regular Customers',    r: 0.50, f: 0.50, m: 0.50 },
-        { name: 'Need Attention',       r: 0.50, f: 0.30, m: 0.60 },
-        { name: 'About to Sleep',       r: 0.30, f: 0.50, m: 0.50 },
-        { name: 'Hibernating',          r: 0.20, f: 0.20, m: 0.50 },
-        { name: 'Lost',                 r: 0.10, f: 0.10, m: 0.10 },
-      ];
+        { name: 'Top Customers',          r: 1.00, f: 1.00, m: 1.00 }, // High R, F, M
+        { name: 'Loyal Customers',        r: 0.85, f: 0.85, m: 0.65 }, // Frequent & recent, moderate spend
+        { name: 'Growing Customers',      r: 0.85, f: 0.60, m: 0.60 }, // Moderate engagement, can grow
+        { name: 'New Customers',          r: 0.95, f: 0.20, m: 0.20 }, // Recently joined
+        { name: 'Slipping Customers',     r: 0.50, f: 0.90, m: 0.90 }, // Valuable but declining
+        { name: 'At-Risk Customers',      r: 0.20, f: 0.90, m: 0.90 }, // High-value, low recency
+        { name: 'Regular Customers',      r: 0.50, f: 0.50, m: 0.50 }, // Average across RFM
+        { name: 'Steady Customers',       r: 0.50, f: 0.30, m: 0.60 }, // Stable buyers, not growing fast
+        { name: 'About-to-Sleep Customers', r: 0.30, f: 0.50, m: 0.50 }, // Engagement declining
+        { name: 'Hibernating Customers',  r: 0.20, f: 0.20, m: 0.50 }, // Rarely buy, low activity
+        { name: 'Lost Customers',         r: 0.10, f: 0.10, m: 0.10 }  // Inactive long-term
+    ];
 
       // Weighted Euclidean distance (bias towards Recency if desired)
       const wR = 0.4, wF = 0.3, wM = 0.3;

@@ -122,7 +122,7 @@ export default function SegmentationClusterDashboard() {
             </button>
 
             <h1 className="text-3xl font-bold text-center text-indigo-900">
-              {seg.suggestedName}
+              {seg.suggestedName} Group
             </h1>
             <div />
           </div>
@@ -244,7 +244,8 @@ export default function SegmentationClusterDashboard() {
               <BarBox title="Customer Preferred Purchase Hour">
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={purchaseHourData} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
-                    <XAxis dataKey="hour" interval={0} tickMargin={8} tick={{ fontSize: 12 }} label={{
+                    <XAxis dataKey="hour" interval={0} tickMargin={8} tick={{ fontSize: 12 }} 
+                      label={{
                       value: 'Purchase Hour',
                       position: 'insideBottom',
                       offset: -10,
@@ -254,7 +255,8 @@ export default function SegmentationClusterDashboard() {
                       value: 'Number of Customers',
                       angle: -90,
                       position: 'insideLeft',
-                      dy:60
+                      dy: 60,
+                      dx: 15
                     }}/>
                     <Tooltip
                       formatter={(value) => [`${value} customers`]}
@@ -465,21 +467,34 @@ function SimpleBarChart({
               type="category"
               dataKey="name"
               interval={0}
-              tickFormatter={yTickFormatter}
+              tick={<WrappedYAxisTickCluster fontSize={xTickFontSize} />}
               label={{
                 value: 'State',
-                position: 'insideBottom',
-                offset: 90,
-                dy:5
+                angle: -90,
+                position: 'insideStart',
+                offset: 0,
+                dx: -40
               }}
-              tick={ { fontSize: xTickFontSize }}
               width={yTickWidth}
             />
           </>
         ) : (
           <>
-            <XAxis dataKey="name" interval={0} tickMargin={8} tick={tickRenderer || { fontSize: xTickFontSize }} />
-            <YAxis tick={{ fontSize: xTickFontSize }} />
+            <XAxis dataKey="name" interval={0} tickMargin={8} tick={tickRenderer || { fontSize: xTickFontSize }} 
+              label={{
+                value: 'Cities',
+                position: 'insideBottom',
+                offset: -30,
+                dy:5
+              }}
+            />
+            <YAxis tick={{ fontSize: xTickFontSize }} label={{
+                value: 'Number of Customers',
+                angle: -90,
+                position: 'insideStart',
+                offset: 0,
+                dx: -5
+              }} />
           </>
         )}
         <Tooltip
