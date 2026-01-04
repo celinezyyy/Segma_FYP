@@ -21,6 +21,7 @@ import {
   // Removed Radar/Treemap as we switch to bar charts
 } from 'recharts';
 import { Users, DollarSign, ShoppingBag, TrendingUp, ArrowLeft, Save, FileText, HelpCircle } from 'lucide-react';
+import Swal from 'sweetalert2';
 
 // Use valid 6-digit hex colors (avoid undefined entries and 8-digit hex)
 const COLORS = ['#41D6F7', '#6366F1', '#F59E0B', '#10B981', '#EF4444', '#C1CF44'];
@@ -472,8 +473,21 @@ export default function SegmentationDashboard() {
     const handleSaveReport = async () => {
       try {
         if (!segmentationId || !Array.isArray(summaries) || summaries.length === 0) return;
+        // Retrieve dataset IDs from cache so dedup works server-side
+        let customerDatasetId = null;
+        let orderDatasetId = null;
+        try {
+          const raw = localStorage.getItem('segmentationCache');
+          if (raw) {
+            const cached = JSON.parse(raw);
+            customerDatasetId = cached?.customerDatasetId || null;
+            orderDatasetId = cached?.orderDatasetId || null;
+          }
+        } catch (_) {}
         const payload = {
           segmentationId,
+          customerDatasetId,
+          orderDatasetId,
           features: Array.isArray(selectedFeatures) ? selectedFeatures : [],
           pair: activePair ? { id: activePair, label: pairDescriptions[activePair]?.title, tagline: pairDescriptions[activePair]?.summary } : {},
           bestK: summaries.length,
@@ -484,13 +498,34 @@ export default function SegmentationDashboard() {
         const res = await axios.post(`${backendUrl}/api/reports`, payload, { withCredentials: true });
         const id = res?.data?.data?.id;
         const pdf = res?.data?.data?.pdf;
+        const reused = res?.data?.data?.reused;
         if (id) {
-          if (pdf?.fileId) {
-            window.open(`${backendUrl}/api/reports/${id}/pdf`, '_blank');
+          if (reused) {
+            await Swal.fire({
+              icon: 'info',
+              title: 'Report already exists',
+              text: 'A report for this segmentation and datasets was previously saved. You can view it in your Reports list.',
+              confirmButtonText: 'Go to Reports',
+              confirmButtonColor: '#3b82f6',
+            });
+            navigate('/reports');
+          } else {
+            await Swal.fire({
+              icon: 'success',
+              title: 'Report saved',
+              text: 'Your report has been saved. You can find it in your Reports list.',
+              showConfirmButton: false,  
+              timer: 3000,
+            });
+             if (pdf?.fileId) {
+              window.open(`${backendUrl}/api/reports/${id}/pdf`, '_blank');
+            }
           }
         }
       } catch (e) {
         console.error('Failed to save report', e);
+        const msg = e.response?.data?.message || e.message || 'Unable to save report.';
+        Swal.fire({ icon: 'error', title: 'Save failed', text: msg });
       }
     };
 
