@@ -1,5 +1,6 @@
 // SegmentationDashboard.jsx
 import React, { useEffect, useState, useContext, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { AppContext } from '../../context/AppContext';
@@ -48,14 +49,36 @@ export default function SegmentationDashboard() {
     </div>
   );
 
-  const InfoTooltip = ({ text }) => (
-    <span className="relative group inline-flex items-center ml-1 align-middle">
-      <HelpCircle className="w-4 h-4 text-gray-400 group-hover:text-gray-600" aria-label="Info" />
-      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-900 text-white text-xs rounded-md px-2 py-1 whitespace-nowrap z-50 shadow-lg">
-        {text}
-      </span>
-    </span>
-  );
+  const InfoTooltip = ({ text }) => {
+    const iconRef = useRef(null);
+    const [visible, setVisible] = useState(false);
+    const [pos, setPos] = useState({ top: 0, left: 0 });
+
+    const show = () => {
+      const r = iconRef.current?.getBoundingClientRect();
+      if (r) {
+        setPos({ top: r.bottom + 8, left: r.left + r.width / 2 });
+      }
+      setVisible(true);
+    };
+    const hide = () => setVisible(false);
+
+    return (
+      <>
+        <span ref={iconRef} onMouseEnter={show} onMouseLeave={hide} className="inline-flex items-center ml-1 align-middle">
+          <HelpCircle className="w-4 h-4 text-gray-400 hover:text-gray-600" aria-label="Info" />
+        </span>
+        {visible && createPortal(
+          <div className="fixed z-[999] pointer-events-none" style={{ top: pos.top, left: pos.left, transform: 'translateX(-50%)' }}>
+            <span className="bg-gray-900 text-white text-xs rounded-md px-2 py-1 whitespace-nowrap shadow-lg">
+              {text}
+            </span>
+          </div>,
+          document.body
+        )}
+      </>
+    );
+  };
 
   const SegmentCard = ({ seg, idx }) => {
     const {
@@ -83,6 +106,7 @@ export default function SegmentationDashboard() {
           });
         }}
         className="bg-white rounded-3xl shadow-2xl overflow-visible cursor-pointer hover:shadow-indigo-200 transform hover:scale-105 transition duration-300 border border-gray-200"
+        // className="bg-white rounded-3xl shadow-2xl overflow-visible cursor-pointer hover:shadow-indigo-200 transform hover:scale-105 transition duration-300 border border-gray-200"
       >
         {/* Header gradient uses Tailwind arbitrary color from hex */}
         <div className={`h-36 bg-gradient-to-br from-[${COLORS[idx % COLORS.length]}] to-indigo-600 flex items-center justify-between px-6`}>
