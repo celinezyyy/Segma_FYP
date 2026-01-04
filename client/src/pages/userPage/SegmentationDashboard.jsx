@@ -18,10 +18,11 @@ import {
   PieChart,
   Pie,
   Cell,
+  // Removed Radar/Treemap as we switch to bar charts
 } from 'recharts';
 import { Users, DollarSign, ShoppingBag, TrendingUp, ArrowLeft, Save, FileText, HelpCircle } from 'lucide-react';
 
-const COLORS = ['#41d6f7ff', '#6366F1', '#F59E0B', '#10B981', '#EF4444'];
+const COLORS = ['#41d6f7ff', '#6366F1', '#F59E0B', '#10B981', '#EF4444', , '#c1cf44ff'];
 
 export default function SegmentationDashboard() {
   const location = useLocation();
@@ -37,6 +38,10 @@ export default function SegmentationDashboard() {
   const [selectedCluster, setSelectedCluster] = useState('overview'); // 'overview' or cluster index
   const [topProductsSortOrder, setTopProductsSortOrder] = useState('desc'); // 'asc' | 'desc'
   const [spendSortOrder, setSpendSortOrder] = useState('desc'); // 'asc' | 'desc'
+  const [genderSortOrder, setGenderSortOrder] = useState('desc'); // 'asc' | 'desc'
+  const [ageSortOrder, setAgeSortOrder] = useState('desc'); // 'asc' | 'desc'
+  const [selectedGenderClusterIndex, setSelectedGenderClusterIndex] = useState(null);
+  const [selectedAgeClusterIndex, setSelectedAgeClusterIndex] = useState(null);
 
   // ---------------- Components ----------------
   const MetricCard = ({ title, value, icon, bgColor }) => (
@@ -210,6 +215,62 @@ export default function SegmentationDashboard() {
   
   // ---------------- Computed Data ----------------
   const { totalCustomers = 0, totalRevenue = 0, averageSpendOverall = 0, summaries = [] } = data || {};
+  // --- Gender aggregation for overview (grouped bars per cluster) ---
+  const hasGender = useMemo(() => summaries.some(s => Array.isArray(s.genders) && s.genders.length > 0), [summaries]);
+  const genderChartData = useMemo(() => {
+    const rows = (summaries || []).map((s, idx) => {
+      const male = (s.genders || []).find(g => /Male/i.test(g.name))?.count || 0;
+      const female = (s.genders || []).find(g => /Female/i.test(g.name))?.count || 0;
+      
+      return {
+        clusterIndex: idx,
+        cluster: `${s.suggestedName || `Cluster ${s.cluster}`} Group`,
+        male: Number(male || 0),
+        female: Number(female || 0),
+        total: Number(male + female)
+      };
+    });
+    rows.sort((a, b) => (genderSortOrder === 'asc' ? a.total - b.total : b.total - a.total));
+    return selectedGenderClusterIndex == null ? rows : rows.filter(r => r.clusterIndex === selectedGenderClusterIndex);
+  }, [summaries, genderSortOrder, selectedGenderClusterIndex]);
+
+  // --- Age group aggregation for overview (stacked bars per cluster) ---
+  const hasAgeGroup = useMemo(() => summaries.some(s => Array.isArray(s.ageGroups) && s.ageGroups.length > 0), [summaries]);
+  const ageGroupKeys = useMemo(() => {
+    const set = new Set();
+    summaries.forEach(s => (s.ageGroups || []).forEach(a => set.add(String(a.name))));
+    return Array.from(set);
+  }, [summaries]);
+  const ageStackData = useMemo(() => {
+    const rows = (summaries || []).map((s, idx) => {
+      const row = {
+        clusterIndex: idx,
+        cluster: `${s.suggestedName || `Cluster ${s.cluster}`} Group`,
+        total: 0,
+      };
+      ageGroupKeys.forEach(k => {
+        const found = (s.ageGroups || []).find(a => String(a.name) === k);
+        const val = Number(found?.count || 0);
+        row[k] = val;
+        row.total += val;
+      });
+      return row;
+    });
+    rows.sort((a, b) => (ageSortOrder === 'asc' ? a.total - b.total : b.total - a.total));
+    return selectedAgeClusterIndex == null ? rows : rows.filter(r => r.clusterIndex === selectedAgeClusterIndex);
+  }, [summaries, ageGroupKeys, ageSortOrder, selectedAgeClusterIndex]);
+
+  const handleGenderBarClick = (entry) => {
+    const idx = entry?.payload?.clusterIndex;
+    if (idx == null) return;
+    setSelectedGenderClusterIndex(prev => (prev === idx ? null : idx));
+  };
+
+  const handleAgeBarClick = (entry) => {
+    const idx = entry?.payload?.clusterIndex;
+    if (idx == null) return;
+    setSelectedAgeClusterIndex(prev => (prev === idx ? null : idx));
+  };
 
   const overallAvgRecency = useMemo(() => {
     if (!summaries.length) return 0;
@@ -244,10 +305,6 @@ export default function SegmentationDashboard() {
       .sort((a, b) => (topProductsSortOrder === 'asc' ? a.count - b.count : b.count - a.count))
       .slice(0, 5)
   ), [productCounts, topProductsSortOrder]);
-
-  const maxTopCount = useMemo(() => (
-    topProducts.reduce((m, p) => Math.max(m, Number(p.count || 0)), 0)
-  ), [topProducts]);
 
   // Cluster comparison datasets
   const clusterSpendData = useMemo(() => {
@@ -602,6 +659,69 @@ export default function SegmentationDashboard() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+
+            {/* Row: Gender & AgeGroup Overview (bar charts) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-8 ">
+              {/* Gender Grouped BarChart */}
+              <div className="bg-white p-8 rounded-3xl shadow-xl">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold text-gray-800">Gender by Cluster</h3>
+                  <button
+                    className="text-sm text-indigo-600 hover:underline"
+                    onClick={() => setGenderSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
+                    title="Toggle sort order"
+                  >
+                    Sort: {genderSortOrder === 'asc' ? '↑' : '↓'}
+                  </button>
+                </div>
+                {hasGender ? (
+                  <ResponsiveContainer width="100%" height={380}>
+                    <BarChart data={genderChartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="cluster" interval={0} height={70} tickMargin={8} tick={<WrappedXAxisTick />} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip formatter={v => Number(v || 0).toLocaleString()} />
+                      <Legend />
+                      <Bar dataKey="male" name="Male" fill={COLORS[1]} onClick={handleGenderBarClick} cursor="pointer" />
+                      <Bar dataKey="female" name="Female" fill={COLORS[2]} onClick={handleGenderBarClick} cursor="pointer" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-sm text-gray-500">No gender data available.</p>
+                )}
+              </div>
+
+              {/* Age Group Stacked BarChart */}
+              <div className="bg-white p-8 rounded-3xl shadow-xl">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold text-gray-800">Age Group by Cluster</h3>
+                  <button
+                    className="text-sm text-indigo-600 hover:underline"
+                    onClick={() => setAgeSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
+                    title="Toggle sort order"
+                  >
+                    Sort: {ageSortOrder === 'asc' ? '↑' : '↓'}
+                  </button>
+                </div>
+                {hasAgeGroup ? (
+                  <ResponsiveContainer width="100%" height={380}>
+                    <BarChart data={ageStackData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="cluster" interval={0} height={70} tickMargin={8}
+                    tick={<WrappedXAxisTick />} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip formatter={v => Number(v || 0).toLocaleString()} />
+                      <Legend />
+                      {ageGroupKeys.map((k, i) => (
+                        <Bar key={k} dataKey={k} stackId="age" fill={COLORS[i % COLORS.length]} onClick={handleAgeBarClick} cursor="pointer" />
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-sm text-gray-500">No age group data available.</p>
+                )}
               </div>
             </div>
 
