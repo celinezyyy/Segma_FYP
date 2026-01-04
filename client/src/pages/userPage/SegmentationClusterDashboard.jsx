@@ -43,6 +43,7 @@ export default function SegmentationClusterDashboard() {
   /* -------------------- DATA PREP -------------------- */
   const [stateSort, setStateSort] = useState('desc');
   const [citySort, setCitySort] = useState('desc');
+  
 
   const baseStates = useMemo(
     () => (seg.states || []).map(s => ({
@@ -94,7 +95,25 @@ export default function SegmentationClusterDashboard() {
     return [{ name: seg.topDayPart, value: 100 }];
   }, [seg]);
 
-  /* -------------------- UI -------------------- */
+  const genderInfo = useMemo(() => {
+    const list = Array.isArray(seg.genders) ? seg.genders : [];
+      const norm = (x) => String(x || '').trim().toLowerCase();
+      const male = list.find(g => norm(g.name) === 'male') || { count: 0, pct: 0 };
+      const female = list.find(g => norm(g.name) === 'female') || { count: 0, pct: 0 };
+
+    return {
+      male: male.count,
+      female: female.count,
+      total: male.count + female.count,
+      malePct: male.pct,
+      femalePct: female.pct,
+    };
+  }, [seg]);
+
+  // Age group data — use backend order and values directly
+    const ageChartData = useMemo(() => (
+      Array.isArray(seg.ageGroups) ? seg.ageGroups : []
+    ), [seg]);
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -218,25 +237,70 @@ export default function SegmentationClusterDashboard() {
 
           {/* ================= CITY ================= */}
           <div className="mt-6 mb-6">
-            <BarBox
-              title="Customers by City"
-              action={
-                <button
-                  onClick={() => setCitySort(prev => (prev === 'desc' ? 'asc' : 'desc'))}
-                  className="text-sm text-indigo-600 hover:underline"
-                >
-                  Sort {citySort === 'desc' ? '↓' : '↑'}
-                </button>
-              }
-            >
-              <SimpleBarChart
-                data={topCities}
-                valueKey="value"
-                xTickFontSize={12}
-                tickRenderer={<WrappedXAxisTickCluster />}
-                bottomMargin={60}
-              />
-            </BarBox>
+              {/* ================= GENDER & AGE GROUP (CLUSTER) ================= */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-1">
+                  <BarBox title="Gender">
+                    {genderInfo.total > 0 ? (
+                      <div className="grid grid-cols-1 gap-4">
+                        <MetricCard
+                          icon={<Users className="text-blue-600" />}
+                          title="Male"
+                          value={`${genderInfo.male.toLocaleString()} (${genderInfo.malePct}%)`}
+                          bgColor="bg-blue-100"
+                        />
+                        <MetricCard
+                          icon={<Users className="text-pink-600" />}
+                          title="Female"
+                          value={`${genderInfo.female.toLocaleString()} (${genderInfo.femalePct}%)`}
+                          bgColor="bg-pink-100"
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">No gender data available.</p>
+                    )}
+                  </BarBox>
+                </div>
+                <div className="lg:col-span-2">
+                  <BarBox title="Age Group Distribution">
+                    {(Array.isArray(seg.ageGroups) && seg.ageGroups.length > 0) ? (
+                      <SimpleBarChart
+                        data={ageChartData}
+                        valueKey="count"
+                        xTickFontSize={12}
+                        tickRenderer={<WrappedXAxisTickCluster />}
+                        xAxisLabel="Age Group"
+                        yAxisLabel="Number of Customers"
+                          height={240}
+                          bottomMargin={60}
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-500">No age group data available.</p>
+                    )}
+                  </BarBox>
+                </div>
+              </div>
+            <div className="mt-8">
+              <BarBox
+                title="Customers by City"
+                action={
+                  <button
+                    onClick={() => setCitySort(prev => (prev === 'desc' ? 'asc' : 'desc'))}
+                    className="text-sm text-indigo-600 hover:underline"
+                  >
+                    Sort {citySort === 'desc' ? '↓' : '↑'}
+                  </button>
+                }
+              >
+                <SimpleBarChart
+                  data={topCities}
+                  valueKey="value"
+                  xTickFontSize={12}
+                  tickRenderer={<WrappedXAxisTickCluster />}
+                  bottomMargin={60}
+                />
+              </BarBox>
+            </div>
           </div>
 
           {/* ================= PURCHASE TIMING ================= */}
@@ -411,7 +475,6 @@ function SimpleBarChart({
   tickRenderer = null,
   bottomMargin = 5,
   leftShift = 0, // New prop for shifting left (negative value shifts left)
-  yTickFormatter = (value) => value.length > 15 ? `${value.slice(0, 12)}...` : value, // New: Single-line truncation
   yTickWidth = 140,
   barCategoryGap = '12%',
   barGap = 2,
@@ -419,6 +482,8 @@ function SimpleBarChart({
   showLabels = false,
   labelFontSize = 12,
   labelFormatter = null,
+  xAxisLabel,
+  yAxisLabel,
 }) {
   const isHorizontal = orientation === 'horizontal';
   const computedHeight = height; // Use passed height (fixed now)
@@ -482,14 +547,14 @@ function SimpleBarChart({
           <>
             <XAxis dataKey="name" interval={0} tickMargin={8} tick={tickRenderer || { fontSize: xTickFontSize }} 
               label={{
-                value: 'Cities',
+                value: xAxisLabel || 'Cities',
                 position: 'insideBottom',
                 offset: -30,
                 dy:5
               }}
             />
             <YAxis tick={{ fontSize: xTickFontSize }} label={{
-                value: 'Number of Customers',
+                value: yAxisLabel || 'Number of Customers',
                 angle: -90,
                 position: 'insideStart',
                 offset: 0,

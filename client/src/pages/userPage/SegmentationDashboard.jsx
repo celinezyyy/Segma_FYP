@@ -22,7 +22,8 @@ import {
 } from 'recharts';
 import { Users, DollarSign, ShoppingBag, TrendingUp, ArrowLeft, Save, FileText, HelpCircle } from 'lucide-react';
 
-const COLORS = ['#41d6f7ff', '#6366F1', '#F59E0B', '#10B981', '#EF4444', , '#c1cf44ff'];
+// Use valid 6-digit hex colors (avoid undefined entries and 8-digit hex)
+const COLORS = ['#41D6F7', '#6366F1', '#F59E0B', '#10B981', '#EF4444', '#C1CF44'];
 
 export default function SegmentationDashboard() {
   const location = useLocation();
@@ -219,15 +220,16 @@ export default function SegmentationDashboard() {
   const hasGender = useMemo(() => summaries.some(s => Array.isArray(s.genders) && s.genders.length > 0), [summaries]);
   const genderChartData = useMemo(() => {
     const rows = (summaries || []).map((s, idx) => {
-      const male = (s.genders || []).find(g => /Male/i.test(g.name))?.count || 0;
-      const female = (s.genders || []).find(g => /Female/i.test(g.name))?.count || 0;
-      
+      const norm = (x) => String(x || '').trim().toLowerCase();
+      const male = (s.genders || []).find(g => norm(g.name) === 'male')?.count ?? 0;
+      const female = (s.genders || []).find(g => norm(g.name) === 'female')?.count ?? 0;
+
       return {
         clusterIndex: idx,
         cluster: `${s.suggestedName || `Cluster ${s.cluster}`} Group`,
-        male: Number(male || 0),
-        female: Number(female || 0),
-        total: Number(male + female)
+        male,
+        female,
+        total: male + female
       };
     });
     rows.sort((a, b) => (genderSortOrder === 'asc' ? a.total - b.total : b.total - a.total));
@@ -236,10 +238,12 @@ export default function SegmentationDashboard() {
 
   // --- Age group aggregation for overview (stacked bars per cluster) ---
   const hasAgeGroup = useMemo(() => summaries.some(s => Array.isArray(s.ageGroups) && s.ageGroups.length > 0), [summaries]);
+  // Use a fixed, natural age bucket order; include common variants
+  const AGE_ORDER = ['Below 18', '18-24', '25-34', '35-44', '45-54', '55-64', '65+', 'Above 65'];
   const ageGroupKeys = useMemo(() => {
-    const set = new Set();
-    summaries.forEach(s => (s.ageGroups || []).forEach(a => set.add(String(a.name))));
-    return Array.from(set);
+    const present = new Set();
+    summaries.forEach(s => (s.ageGroups || []).forEach(a => present.add(String(a.name))));
+    return AGE_ORDER.filter(k => present.has(k));
   }, [summaries]);
   const ageStackData = useMemo(() => {
     const rows = (summaries || []).map((s, idx) => {
@@ -594,7 +598,7 @@ export default function SegmentationDashboard() {
                       data={clusterDistribution}
                       dataKey="value"
                       nameKey="name"
-                      cx="40%"
+                      cx="50%"
                       cy="50%"
                       outerRadius={110}
                       label={entry => `${entry.value} (${entry.pct}%)`}
