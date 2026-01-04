@@ -15,6 +15,7 @@ import {
   Pie,
   Cell,
   Legend,
+  LabelList,
 } from 'recharts';
 
 const COLORS = ['#1d4ed8', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6'];
@@ -175,6 +176,7 @@ export default function SegmentationClusterDashboard() {
                   data={topStates}
                   valueKey="value"
                   orientation="horizontal"
+                  xTickFontSize={12}
                   height={360}
                   leftShift={10}
                   tickRenderer={<WrappedYAxisTickCluster />}
@@ -182,7 +184,7 @@ export default function SegmentationClusterDashboard() {
                   barCategoryGap="10%"
                   barGap={5}
                   xNumberTickFormatter={(v) => Math.round(Number(v || 0)).toLocaleString()}
-                  tooltipFormatter={(v, name, props) => [
+                  tooltipFormatter={(props) => [
                     (props?.payload?.count ?? 0).toLocaleString(),
                     'Customers',
                   ]}
@@ -242,13 +244,13 @@ export default function SegmentationClusterDashboard() {
               <BarBox title="Customer Preferred Purchase Hour">
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={purchaseHourData} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
-                    <XAxis dataKey="hour" interval={0} tickMargin={8} label={{
+                    <XAxis dataKey="hour" interval={0} tickMargin={8} tick={{ fontSize: 12 }} label={{
                       value: 'Purchase Hour',
                       position: 'insideBottom',
                       offset: -10,
                       dy:5
                     }}/>
-                    <YAxis label={{
+                    <YAxis tick={{ fontSize: 12 }} label={{
                       value: 'Number of Customers',
                       angle: -90,
                       position: 'insideLeft',
@@ -412,9 +414,28 @@ function SimpleBarChart({
   barCategoryGap = '12%',
   barGap = 2,
   xNumberTickFormatter = (v) => Math.round(Number(v || 0)).toLocaleString(),
+  showLabels = false,
+  labelFontSize = 12,
+  labelFormatter = null,
 }) {
   const isHorizontal = orientation === 'horizontal';
   const computedHeight = height; // Use passed height (fixed now)
+  const formatLabelValue = (v) => (labelFormatter ? labelFormatter(v) : Math.round(Number(v || 0)).toLocaleString());
+  const renderBarLabel = (props) => {
+    const { x, y, width, height, value } = props;
+    if (isHorizontal) {
+      const textX = x + (width || 0) + 4;
+      const textY = y + (height || 0) / 2;
+      return (
+        <text x={textX} y={textY} textAnchor="start" fontSize={labelFontSize} fill="#374151">{formatLabelValue(value)}</text>
+      );
+    }
+    const textX = x + (width || 0) / 2;
+    const textY = y - 6;
+    return (
+      <text x={textX} y={textY} textAnchor="middle" fontSize={labelFontSize} fill="#374151">{formatLabelValue(value)}</text>
+    );
+  };
 
   return (
     <ResponsiveContainer width="100%" height={computedHeight}>
@@ -428,27 +449,48 @@ function SimpleBarChart({
         <CartesianGrid strokeDasharray="3 3" />
         {isHorizontal ? (
           <>
-            <XAxis type="number" allowDecimals={false} tickFormatter={xNumberTickFormatter} />
+            <XAxis 
+              type="number" 
+              allowDecimals={false} 
+              tickFormatter={xNumberTickFormatter}
+              tick={{ fontSize: xTickFontSize }} 
+              label={{
+                value: 'Number of Customers',
+                position: 'insideBottom',
+                offset: 0,
+                dy:5
+              }}
+            />
             <YAxis
               type="category"
               dataKey="name"
               interval={0}
               tickFormatter={yTickFormatter}
-              tick={tickRenderer || { fontSize: xTickFontSize }}
+              label={{
+                value: 'State',
+                position: 'insideBottom',
+                offset: 90,
+                dy:5
+              }}
+              tick={ { fontSize: xTickFontSize }}
               width={yTickWidth}
             />
           </>
         ) : (
           <>
             <XAxis dataKey="name" interval={0} tickMargin={8} tick={tickRenderer || { fontSize: xTickFontSize }} />
-            <YAxis />
+            <YAxis tick={{ fontSize: xTickFontSize }} />
           </>
         )}
         <Tooltip
           formatter={(value) => [`${value}`, 'Customers']}
           labelFormatter={(label) => `City: ${label}`}
         />
-        <Bar dataKey={valueKey} fill="#3b82f6" />
+        <Bar dataKey={valueKey} fill="#3b82f6">
+          {showLabels && (
+            <LabelList position={isHorizontal ? 'right' : 'top'} content={renderBarLabel} />
+          )}
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   );
