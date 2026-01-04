@@ -1,11 +1,24 @@
 import PDFDocument from 'pdfkit';
 import { getReportsBucket } from '../utils/gridfs.js';
 
-export const generateAndStoreReportPDF = ({ report, userId }) => {
+const toSafe = (s) => String(s || '').replace(/\s+/g, '-').replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 80);
+
+const makeUniqueFilename = (report) => {
+  const parts = [
+    'seg', toSafe(report.segmentationId),
+    'cust', toSafe(report.customerDatasetId || 'na'),
+    'ord', toSafe(report.orderDatasetId || 'na'),
+    `${report.bestK}k`,
+    new Date().toISOString().replace(/[:.]/g, '-'),
+  ];
+  return `${parts.join('_')}.pdf`;
+};
+
+export const generateAndStoreReportPDF = ({ report, userId, images }) => {
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({ size: 'A4', margin: 36 });
-      const filename = `segmentation_report_${report.bestK}clusters_${new Date().toISOString().slice(0,10)}.pdf`;
+      const filename = makeUniqueFilename(report);
 
       const bucket = getReportsBucket();
       const uploadStream = bucket.openUploadStream(filename, {
@@ -40,6 +53,26 @@ export const generateAndStoreReportPDF = ({ report, userId }) => {
           `Total Revenue: ${report.kpis.totalRevenue ?? '-'}`,
           `Average Spend: ${report.kpis.averageSpendOverall ?? '-'}`,
         ], { bulletRadius: 2 });
+      }
+
+      // Optional dashboard images (overview + clusters)
+      const addImage = (img, caption) => {
+        try {
+          if (!img) return;
+          const base64 = String(img).replace(/^data:image\/[a-zA-Z]+;base64,/, '');
+          const buf = Buffer.from(base64, 'base64');
+          doc.addPage();
+          if (caption) {
+            doc.fontSize(14).text(caption, { underline: true });
+            doc.moveDown(0.5);
+          }
+          doc.image(buf, { fit: [520, 700], align: 'center' });
+        } catch {}
+      };
+
+      if (images?.overview) addImage(images.overview, 'Overview Dashboard');
+      if (Array.isArray(images?.clusters)) {
+        images.clusters.forEach((img, i) => addImage(img, `Cluster Dashboard ${i + 1}`));
       }
 
       // Clusters

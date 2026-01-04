@@ -70,5 +70,11 @@ const ReportSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Prevent duplicate reports per user & dataset/segmentation combination
+ReportSchema.index(
+  { userId: 1, segmentationId: 1, customerDatasetId: 1, orderDatasetId: 1 },
+  { unique: true, name: 'unique_user_segmentation_datasets' }
+);
+
 const Report = mongoose.model('report', ReportSchema);
 export default Report;

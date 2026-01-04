@@ -26,28 +26,42 @@ export const createReport = async (req, res) => {
       return res.json({ success: false, message: 'segmentationId and bestK are required' });
     }
 
-    const report = await Report.create({
+    // Check for existing report to avoid duplicates
+    const existing = await Report.findOne({
       userId,
       segmentationId,
-      title: (pair && (pair.title || pair.label)) || 'Segmentation Report',
       customerDatasetId: customerDatasetId || null,
       orderDatasetId: orderDatasetId || null,
-      datasetNames: datasetNames || {},
-      features: Array.isArray(features) ? features : [],
-      pair: pair || {},
-      bestK,
-      kpis: kpis || {},
-      clusters: Array.isArray(clusters) ? clusters : [],
-      pdfFileId: null,
-      pdfFilename: undefined,
-      pdfSize: undefined,
     });
+
+    let report;
+    if (existing) {
+      report = existing;
+    } else {
+      report = await Report.create({
+        userId,
+        segmentationId,
+        title: (pair && (pair.title || pair.label)) || 'Segmentation Report',
+        customerDatasetId: customerDatasetId || null,
+        orderDatasetId: orderDatasetId || null,
+        datasetNames: datasetNames || {},
+        features: Array.isArray(features) ? features : [],
+        pair: pair || {},
+        bestK,
+        kpis: kpis || {},
+        clusters: Array.isArray(clusters) ? clusters : [],
+        pdfFileId: null,
+        pdfFilename: undefined,
+        pdfSize: undefined,
+      });
+    }
 
     // Optionally generate PDF and attach to report
     let pdfInfo = null;
-    if (generatePdf) {
+    const images = req.body?.images || null; // optional base64 images from client
+    if (generatePdf && !report.pdfFileId) {
       try {
-        const result = await generateAndStoreReportPDF({ report, userId });
+        const result = await generateAndStoreReportPDF({ report, userId, images });
         if (result?.fileId) {
           report.pdfFileId = result.fileId;
           report.pdfFilename = result.filename;
@@ -59,7 +73,7 @@ export const createReport = async (req, res) => {
       }
     }
 
-    return res.json({ success: true, data: { id: report._id, pdf: pdfInfo } });
+    return res.json({ success: true, data: { id: report._id, pdf: pdfInfo, reused: Boolean(existing) } });
   } catch (err) {
     console.error('[createReport] error:', err);
     return res.status(500).json({ success: false, message: 'Failed to create report' });
