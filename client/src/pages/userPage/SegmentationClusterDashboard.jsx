@@ -239,27 +239,51 @@ export default function SegmentationClusterDashboard() {
 
           {/* ================= PURCHASE TIMING ================= */}
             <TwoCol>
-              <BarBox title="Preferred Purchase Hour">
+              <BarBox title="Customer Preferred Purchase Hour">
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={purchaseHourData} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
-                    <XAxis dataKey="hour" interval={0} tickMargin={8} />
-                    <YAxis />
-                    <Tooltip />
+                    <XAxis dataKey="hour" interval={0} tickMargin={8} label={{
+                      value: 'Purchase Hour',
+                      position: 'insideBottom',
+                      offset: -10,
+                      dy:5
+                    }}/>
+                    <YAxis label={{
+                      value: 'Number of Customers',
+                      angle: -90,
+                      position: 'insideLeft',
+                      dy:60
+                    }}/>
+                    <Tooltip
+                      formatter={(value) => [`${value} customers`]}
+                      labelFormatter={(label) => `Hour: ${label}`}
+                    />
                     <Bar dataKey={Array.isArray(seg.purchaseHours) && seg.purchaseHours.length ? 'count' : 'pct'} fill="#f59e0b" />
                   </BarChart>
                 </ResponsiveContainer>
               </BarBox>
 
-              <BarBox title="Preferred Day Part">
+              <BarBox title="Customer Preferred Day Part">
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
                       data={dayPartData}
                       dataKey="value"
                       outerRadius={100}
-                      label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(1)}%)`}
+                      label={({ value, percent }) => `${value} (${(percent * 100).toFixed(1)}%)`}
                     >
-                      <Cell fill="#8b5cf6" />
+                    <Tooltip
+                      formatter={(name, value) => [`${value}: ${name} customers`]}
+                    />
+                    <Legend
+                      layout="horizontal"
+                      verticalAlign="bottom"
+                      align="center"
+                      wrapperStyle={{ fontSize: 14, fontWeight: 400 }}
+                    />
+                    {dayPartData.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
                     </Pie>
                   </PieChart>
                 </ResponsiveContainer>
@@ -388,7 +412,6 @@ function SimpleBarChart({
   barCategoryGap = '12%',
   barGap = 2,
   xNumberTickFormatter = (v) => Math.round(Number(v || 0)).toLocaleString(),
-  tooltipFormatter = null,
 }) {
   const isHorizontal = orientation === 'horizontal';
   const computedHeight = height; // Use passed height (fixed now)
@@ -421,7 +444,10 @@ function SimpleBarChart({
             <YAxis />
           </>
         )}
-        <Tooltip formatter={tooltipFormatter || ((v) => Math.round(Number(v || 0)).toLocaleString())} />
+        <Tooltip
+          formatter={(value) => [`${value}`, 'Customers']}
+          labelFormatter={(label) => `City: ${label}`}
+        />
         <Bar dataKey={valueKey} fill="#3b82f6" />
       </BarChart>
     </ResponsiveContainer>
