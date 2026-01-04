@@ -44,14 +44,19 @@ export default function SegmentationClusterDashboard() {
   const [citySort, setCitySort] = useState('desc');
 
   const baseStates = useMemo(
-    () => (seg.states || []).map(s => ({ name: s.name, value: (s.revenue ?? s.count ?? 0) })),
+    () => (seg.states || []).map(s => ({
+      name: s.name,
+      value: (s.revenue ?? s.count ?? 0),
+      count: s.count ?? 0,
+      revenue: s.revenue ?? 0,
+    })),
     [seg]
   );
 
   const topStates = useMemo(() => {
     const data = [...baseStates];
     data.sort((a, b) => (stateSort === 'desc' ? b.value - a.value : a.value - b.value));
-    return data.slice(0, 10);
+    return data.slice(0, 15);
   }, [baseStates, stateSort]);
 
   const baseCities = useMemo(
@@ -169,38 +174,46 @@ export default function SegmentationClusterDashboard() {
                 <SimpleBarChart
                   data={topStates}
                   valueKey="value"
-                  xTickFontSize={12}
-                  tickRenderer={<WrappedXAxisTickCluster />}
-                  bottomMargin={60}
+                  orientation="horizontal"
+                  height={360}
+                  leftShift={10}
+                  tickRenderer={<WrappedYAxisTickCluster />}
+                  yTickWidth={100}
+                  barCategoryGap="10%"
+                  barGap={5}
+                  xNumberTickFormatter={(v) => Math.round(Number(v || 0)).toLocaleString()}
+                  tooltipFormatter={(v, name, props) => [
+                    (props?.payload?.count ?? 0).toLocaleString(),
+                    'Customers',
+                  ]}
                 />
               </BarBox>
               <div className="bg-white p-6 rounded-2xl shadow">
-            <h3 className="text-xl font-bold text-gray-800 mb-6">Top 5 Best Selling Products</h3>
-            <ResponsiveContainer width="100%" height={360}>
-              <PieChart>
-                <Pie
-                  data={topProducts}
-                  dataKey="count"
-                  nameKey="name"
-                  outerRadius={100}
-                  // cx="50%"
-                  label={({value, percent }) => `${value} (${(percent * 100).toFixed(1)}%)`}
-                >
-                  {topProducts.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend
-                  layout="horizontal"      // horizontal legend
-                  verticalAlign="bottom"   // place at bottom
-                  align="center"           // center horizontally
-                  wrapperStyle={{ fontSize: 14, fontWeight: 500 }} // adjust font
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          
+                <h3 className="text-xl font-bold text-gray-800 mb-6">Top 5 Best Selling Products</h3>
+                <ResponsiveContainer width="100%" height={360}>
+                  <PieChart>
+                    <Pie
+                      data={topProducts}
+                      dataKey="count"
+                      nameKey="name"
+                      outerRadius={100}
+                      // cx="50%"
+                      label={({value, percent }) => `${value} (${(percent * 100).toFixed(1)}%)`}
+                    >
+                      {topProducts.map((_, i) => (
+                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend
+                      layout="horizontal"      
+                      verticalAlign="bottom"   
+                      align="center"           
+                      wrapperStyle={{ fontSize: 14, fontWeight: 400 }} 
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
             </TwoCol>
 
           {/* ================= CITY ================= */}
@@ -290,7 +303,7 @@ function TwoCol({ children }) {
 function BarBox({ title, children, action }) {
   return (
     <div className="bg-white p-6 rounded-2xl shadow">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-6">
         <h3 className="text-lg font-semibold">{title}</h3>
         {action || null}
       </div>
@@ -334,14 +347,90 @@ function WrappedXAxisTickCluster({ x, y, payload }) {
   );
 }
 
-function SimpleBarChart({ data, valueKey = 'count', xTickFontSize = 12, tickRenderer = null, bottomMargin = 20 }) {
+function WrappedYAxisTickCluster({ x, y, payload }) {
+  const raw = String(payload?.value || '');
+  const cleaned = raw.replace(/Wilayah\s+Persekutuan/gi, '').trim().replace(/\s{2,}/g, ' ');
+  const words = cleaned.split(/\s+/);
+  const MAX_LINES = 2;
+  const PER_LINE = 15; // approx characters per line for Y-axis labels
+
+  const lines = [];
+  let current = '';
+  for (const w of words) {
+    const candidate = current ? `${current} ${w}` : w;
+    if (candidate.length <= PER_LINE) {
+      current = candidate;
+    } else {
+      if (current) lines.push(current);
+      current = w;
+    }
+    if (lines.length === MAX_LINES) break;
+  }
+  if (current && lines.length < MAX_LINES) {
+    lines.push(current.length > PER_LINE ? `${current.slice(0, Math.max(PER_LINE - 1, 1))}…` : current);
+  }
+  const displayLines = lines.length ? lines : [''];
+
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={data} margin={{ top: 10, right: 20, bottom: bottomMargin, left: 10 }}>
+    <g transform={`translate(${x},${y})`}>
+      <text textAnchor="end" fill="#374151" fontSize={12}>
+        {displayLines.map((line, index) => (
+          <tspan key={index} x="0" dy={index === 0 ? 4 : 14}>{line}</tspan>
+        ))}
+        <title>{cleaned}</title>
+      </text>
+    </g>
+  );
+}
+
+function SimpleBarChart({
+  data,
+  valueKey = 'count',
+  orientation = 'vertical', // 'vertical' or 'horizontal'
+  height = 360, // Default to 360 to match product chart
+  xTickFontSize = 12,
+  tickRenderer = null,
+  bottomMargin = 5,
+  leftShift = 0, // New prop for shifting left (negative value shifts left)
+  yTickFormatter = (value) => value.length > 15 ? `${value.slice(0, 12)}...` : value, // New: Single-line truncation
+  yTickWidth = 140,
+  barCategoryGap = '12%',
+  barGap = 2,
+  xNumberTickFormatter = (v) => Math.round(Number(v || 0)).toLocaleString(),
+  tooltipFormatter = null,
+}) {
+  const isHorizontal = orientation === 'horizontal';
+  const computedHeight = height; // Use passed height (fixed now)
+
+  return (
+    <ResponsiveContainer width="100%" height={computedHeight}>
+      <BarChart
+        data={data}
+        layout={isHorizontal ? 'vertical' : 'horizontal'}
+        margin={{ top: 10, right: 20 + Math.abs(leftShift), bottom: bottomMargin, left: 10 - leftShift }} // Adjust left/right for shift
+        barCategoryGap={barCategoryGap}
+        barGap={barGap}
+      >
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="name" interval={0} tickMargin={8} tick={tickRenderer || { fontSize: xTickFontSize }} />
-        <YAxis />
-        <Tooltip />
+        {isHorizontal ? (
+          <>
+            <XAxis type="number" allowDecimals={false} tickFormatter={xNumberTickFormatter} />
+            <YAxis
+              type="category"
+              dataKey="name"
+              interval={0}
+              tickFormatter={yTickFormatter}
+              tick={tickRenderer || { fontSize: xTickFontSize }}
+              width={yTickWidth}
+            />
+          </>
+        ) : (
+          <>
+            <XAxis dataKey="name" interval={0} tickMargin={8} tick={tickRenderer || { fontSize: xTickFontSize }} />
+            <YAxis />
+          </>
+        )}
+        <Tooltip formatter={tooltipFormatter || ((v) => Math.round(Number(v || 0)).toLocaleString())} />
         <Bar dataKey={valueKey} fill="#3b82f6" />
       </BarChart>
     </ResponsiveContainer>
