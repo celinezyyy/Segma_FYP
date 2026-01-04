@@ -60,7 +60,7 @@ export default function SegmentationClusterDashboard() {
   }, [baseStates, stateSort]);
 
   const baseCities = useMemo(
-    () => (seg.cities || []).map(c => ({ name: c.name, value: (c.count ?? c.revenue ?? 0) })),
+    () => (seg.cities || []).map(c => ({ name: c.name, value: (c.count ?? 0) })),
     [seg]
   );
 
@@ -188,8 +188,7 @@ export default function SegmentationClusterDashboard() {
                   ]}
                 />
               </BarBox>
-              <div className="bg-white p-6 rounded-2xl shadow">
-                <h3 className="text-xl font-bold text-gray-800 mb-6">Top 5 Best Selling Products</h3>
+              <BarBox title="Top 5 Best Selling Products">
                 <ResponsiveContainer width="100%" height={360}>
                   <PieChart>
                     <Pie
@@ -197,8 +196,7 @@ export default function SegmentationClusterDashboard() {
                       dataKey="count"
                       nameKey="name"
                       outerRadius={100}
-                      // cx="50%"
-                      label={({value, percent }) => `${value} (${(percent * 100).toFixed(1)}%)`}
+                      label={({ value, percent }) => `${value} (${(percent * 100).toFixed(1)}%)`}
                     >
                       {topProducts.map((_, i) => (
                         <Cell key={i} fill={COLORS[i % COLORS.length]} />
@@ -206,36 +204,38 @@ export default function SegmentationClusterDashboard() {
                     </Pie>
                     <Tooltip />
                     <Legend
-                      layout="horizontal"      
-                      verticalAlign="bottom"   
-                      align="center"           
-                      wrapperStyle={{ fontSize: 14, fontWeight: 400 }} 
+                      layout="horizontal"
+                      verticalAlign="bottom"
+                      align="center"
+                      wrapperStyle={{ fontSize: 14, fontWeight: 400 }}
                     />
                   </PieChart>
                 </ResponsiveContainer>
-              </div>
+              </BarBox>
             </TwoCol>
 
           {/* ================= CITY ================= */}
-          <BarBox
-            title="Customers by City"
-            action={
-              <button
-                onClick={() => setCitySort(prev => (prev === 'desc' ? 'asc' : 'desc'))}
-                className="text-sm text-indigo-600 hover:underline"
-              >
-                Sort {citySort === 'desc' ? '↓' : '↑'}
-              </button>
-            }
-          >
-            <SimpleBarChart
-              data={topCities}
-              valueKey="value"
-              xTickFontSize={12}
-              tickRenderer={<WrappedXAxisTickCluster />}
-              bottomMargin={60}
-            />
-          </BarBox>
+          <div className="mt-6 mb-6">
+            <BarBox
+              title="Customers by City"
+              action={
+                <button
+                  onClick={() => setCitySort(prev => (prev === 'desc' ? 'asc' : 'desc'))}
+                  className="text-sm text-indigo-600 hover:underline"
+                >
+                  Sort {citySort === 'desc' ? '↓' : '↑'}
+                </button>
+              }
+            >
+              <SimpleBarChart
+                data={topCities}
+                valueKey="value"
+                xTickFontSize={12}
+                tickRenderer={<WrappedXAxisTickCluster />}
+                bottomMargin={60}
+              />
+            </BarBox>
+          </div>
 
           {/* ================= PURCHASE TIMING ================= */}
             <TwoCol>
@@ -282,15 +282,6 @@ const MetricCard = ({ title, value, icon, bgColor }) => (
     <p className="text-center text-2xl font-bold text-gray-900">{value}</p>
   </div>
 );
-
-function Section({ title, children }) {
-  return (
-    <div className="mb-12">
-      <h2 className="text-2xl font-bold text-indigo-900 mb-5">{title}</h2>
-      {children}
-    </div>
-  );
-}
 
 function TwoCol({ children }) {
   return (
