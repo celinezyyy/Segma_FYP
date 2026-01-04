@@ -70,6 +70,8 @@ export default function SegmentationDashboard() {
       avgFrequencyPerMonth,  // Assume available
     } = seg;
 
+    const desc = seg?.description || 'Classic RFM group based on recency, frequency, and monetary value to highlight VIPs and churn risks.';
+
     const currency = useMemo(() => new Intl.NumberFormat('en-MY', { style: 'currency', currency: 'MYR', maximumFractionDigits: 2 }), []);
     const percentFmt = v => `${(Number(v) || 0).toFixed(2)}%`;
 
@@ -84,7 +86,7 @@ export default function SegmentationDashboard() {
       >
         {/* Header gradient uses Tailwind arbitrary color from hex */}
         <div className={`h-36 bg-gradient-to-br from-[${COLORS[idx % COLORS.length]}] to-indigo-600 flex items-center justify-between px-6`}>
-          <h3 className="text-2xl md:text-xl font-bold text-black">{`${suggestedName} Group`}</h3>
+          <h3 className="text-2xl md:text-xl font-bold text-black inline-flex items-center gap-2">{`${suggestedName} Group`} <InfoTooltip text={desc} /></h3>
           <span className="ml-3 inline-flex items-center px-2 py-1 rounded-md bg-black/10 text-black text-xs md:text-sm font-semibold">Group {idx + 1}</span>
         </div>
 
@@ -171,7 +173,7 @@ export default function SegmentationDashboard() {
         const res = await axios.post(`${backendUrl}/api/segmentation/${segmentationId}/dashboard`, { features: selectedFeatures }, { withCredentials: true });
         if (res.data.success) {
           console.log('Segmentation dashboard data:', res.data.data.summaries);
-          const summaries = res.data.data.summaries.map((s, i) => ({ ...s, suggestedName: s.suggestedName || `Segment ${i + 1}` }));
+          const summaries = res.data.data.summaries.map((s, i) => ({ ...s, suggestedName: s.suggestedNameAndDesc.name || `Segment ${i + 1}` }));
           setData({ ...res.data.data, summaries });
           localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), payload: { ...res.data.data, summaries } }));
         }
@@ -436,6 +438,26 @@ export default function SegmentationDashboard() {
               </div>
             </div>
             <p className="text-sm text-gray-600 mb-4">We found {summaries.length} customer groups.</p>
+
+            {/* Customer Groups quick overview chips with hover descriptions */}
+            <div className="bg-white p-4 rounded-2xl shadow-md border border-gray-200 mb-6">
+              <h3 className="text-md font-semibold text-gray-800 mb-3">Customer Groups</h3>
+              <div className="flex flex-wrap gap-2">
+                {summaries.map((s, i) => {
+                  const chipName = `${s.suggestedName || `Cluster ${s.cluster}`} Group`;
+                  const chipDesc = s?.description || 'Classic RFM group based on recency, frequency, and monetary value.';
+                  return (
+                    <div key={`chip-${s.cluster}`} className="group relative inline-flex items-center px-3 py-1 rounded-md border border-gray-300 bg-gray-50 text-gray-800 text-xs md:text-sm hover:bg-gray-100 cursor-default">
+                      <span className="font-medium">{chipName}</span>
+                      <span className="ml-2 inline-block px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] md:text-xs">#{i + 1}</span>
+                      <div className="absolute top-full left-0 mt-2 hidden group-hover:block p-2 bg-gray-800 text-white text-xs rounded-md shadow-lg z-50 max-w-xs">
+                        {chipDesc}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
               <MetricCard title="Total Customers" value={totalCustomers.toLocaleString()} icon={<Users className="w-7 h-7 text-blue-600" />} bgColor="bg-blue-100" />

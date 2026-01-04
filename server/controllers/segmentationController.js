@@ -1001,18 +1001,40 @@ export const showSegmentationResultInDashboard = async (req, res) => {
       const m = percentileRank(cluster.avgSpend, allSpend);
 
       // Define archetype prototypes in R,F,M space
-      const prototypes = [
-        { name: 'Top Customers',          r: 1.00, f: 1.00, m: 1.00 }, // High R, F, M
-        { name: 'Loyal Customers',        r: 0.85, f: 0.85, m: 0.65 }, // Frequent & recent, moderate spend
-        { name: 'Growing Customers',      r: 0.85, f: 0.60, m: 0.60 }, // Moderate engagement, can grow
-        { name: 'New Customers',          r: 0.95, f: 0.20, m: 0.20 }, // Recently joined
-        { name: 'Slipping Customers',     r: 0.50, f: 0.90, m: 0.90 }, // Valuable but declining
-        { name: 'At-Risk Customers',      r: 0.20, f: 0.90, m: 0.90 }, // High-value, low recency
-        { name: 'Regular Customers',      r: 0.50, f: 0.50, m: 0.50 }, // Average across RFM
-        { name: 'Steady Customers',       r: 0.50, f: 0.30, m: 0.60 }, // Stable buyers, not growing fast
-        { name: 'About-to-Sleep Customers', r: 0.30, f: 0.50, m: 0.50 }, // Engagement declining
-        { name: 'Hibernating Customers',  r: 0.20, f: 0.20, m: 0.50 }, // Rarely buy, low activity
-        { name: 'Lost Customers',         r: 0.10, f: 0.10, m: 0.10 }  // Inactive long-term
+    const prototypes = [
+        { name: 'Top Customers', 
+          r: 1.00, f: 1.00, m: 1.00,
+          description: 'High spending, frequent, and recent customers. Reward them with loyalty perks.' },
+        { name: 'Loyal Customers', 
+          r: 0.85, f: 0.85, m: 0.65,
+          description: 'Frequent buyers with stable spending. Encourage repeat purchases.' },
+        { name: 'Growing Customers',
+          r: 0.85, f: 0.60, m: 0.60,
+          description: 'Moderate engagement, potential to become loyal. Upsell opportunities.' },
+        { name: 'New Customers',
+          r: 0.95, f: 0.20, m: 0.20,
+          description: 'Recently acquired customers. Onboard them and encourage repeat buying.' },
+        { name: 'Slipping Customers',
+          r: 0.50, f: 0.90, m: 0.90,
+          description: 'Valuable but declining engagement. Reactivation campaigns recommended.' },
+        { name: 'At-Risk Customers',
+          r: 0.20, f: 0.90, m: 0.90,
+          description: 'High-value customers who haven’t purchased recently. Re-engage quickly.' },
+        { name: 'Regular Customers',
+          r: 0.50, f: 0.50, m: 0.50,
+          description: 'Average buyers. Maintain engagement with promotions.' },
+        { name: 'Steady Customers',
+          r: 0.50, f: 0.30, m: 0.60,
+          description: 'Stable but slow-growing. Encourage higher purchase frequency.' },
+        { name: 'About-to-Sleep Customers',
+          r: 0.30, f: 0.50, m: 0.50,
+          description: 'Engagement dropping. Target with personalized offers.' },
+        { name: 'Hibernating Customers',
+          r: 0.20, f: 0.20, m: 0.50,
+          description: 'Rarely purchase. Consider special campaigns to wake them up.' },
+        { name: 'Lost Customers',
+          r: 0.10, f: 0.10, m: 0.10,
+          description: 'Inactive long-term. Re-engagement may be costly or unlikely.' }
     ];
 
       // Weighted Euclidean distance (bias towards Recency if desired)
@@ -1029,14 +1051,17 @@ export const showSegmentationResultInDashboard = async (req, res) => {
           best = p;
         }
       }
-      return best.name;
+      return { name: best.name, description: best.description };
     };
 
     const usableClusters = enrichedSummaries.filter(s => s.cluster !== -1);
     enrichedSummaries
       .filter(s => s.cluster !== -1)
       .forEach((s) => {
-        s.suggestedName = assignRFMNameStrict(s, usableClusters);
+        s.suggestedNameAndDesc = assignRFMNameStrict(s, usableClusters);
+        // Surface name and description at top level for frontend convenience
+        s.suggestedName = s.suggestedNameAndDesc?.name;
+        s.description = s.suggestedNameAndDesc?.description;
       });
 
     res.json({
