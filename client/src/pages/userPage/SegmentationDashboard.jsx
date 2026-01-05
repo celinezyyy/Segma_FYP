@@ -22,6 +22,7 @@ import {
 } from 'recharts';
 import { Users, DollarSign, ShoppingBag, TrendingUp, ArrowLeft, Save, FileText, HelpCircle } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { buildSegmentationKey, getCache, setCache, pruneExpired, pruneToCapacity } from '../../utils/localCache';
 
 // Use valid 6-digit hex colors (avoid undefined entries and 8-digit hex)
 const COLORS = ['#41D6F7', '#6366F1', '#F59E0B', '#10B981', '#EF4444', '#C1CF44'];
@@ -190,30 +191,41 @@ export default function SegmentationDashboard() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const featuresKey = Array.isArray(selectedFeatures) ? selectedFeatures.join(',') : String(selectedFeatures);
-        const cacheKey = `segmentationDashboard:${segmentationId}:${featuresKey}`;
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (parsed?.timestamp && Date.now() - parsed.timestamp < 5 * 60 * 1000) {
-            setData(parsed.payload);
-            return;
+        let customerDatasetId = null;
+        let orderDatasetId = null;
+        try {
+          const raw = localStorage.getItem('segmentationCache');
+          if (raw) {
+            const cached = JSON.parse(raw);
+            customerDatasetId = cached?.customerDatasetId || null;
+            orderDatasetId = cached?.orderDatasetId || null;
           }
+        } catch (_) {}
+
+        const cacheKey = buildSegmentationKey(segmentationId, customerDatasetId, orderDatasetId);
+        pruneExpired();
+        const cachedPayload = getCache(cacheKey, 5 * 60 * 1000);
+        if (cachedPayload) {
+          setData(cachedPayload);
+          setLoading(false);
+          return;
         }
 
         const res = await axios.post(`${backendUrl}/api/segmentation/${segmentationId}/dashboard`, { features: selectedFeatures }, { withCredentials: true });
         if (res.data.success) {
           console.log('Segmentation dashboard data:', res.data.data.summaries);
           const summaries = res.data.data.summaries.map((s, i) => ({ ...s, suggestedName: s.suggestedNameAndDesc.name || `Segment ${i + 1}` }));
-          setData({ ...res.data.data, summaries });
-          localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), payload: { ...res.data.data, summaries } }));
+          const payload = { ...res.data.data, summaries };
+          setData(payload);
+          setCache(cacheKey, payload, 5 * 60 * 1000);
+          pruneToCapacity(10);
         }
       } catch (err) { console.error(err); } 
       finally { setLoading(false); }
     };
 
     fetchData();
-  }, [segmentationId, selectedFeatures, backendUrl]);
+  }, [segmentationId, backendUrl]);
   
   // ---------------- Computed Data ----------------
   const { totalCustomers = 0, totalRevenue = 0, averageSpendOverall = 0, summaries = [] } = data || {};
@@ -246,6 +258,7 @@ export default function SegmentationDashboard() {
     summaries.forEach(s => (s.ageGroups || []).forEach(a => present.add(String(a.name))));
     return AGE_ORDER.filter(k => present.has(k));
   }, [summaries]);
+  
   const ageStackData = useMemo(() => {
     const rows = (summaries || []).map((s, idx) => {
       const row = {
@@ -495,7 +508,7 @@ export default function SegmentationDashboard() {
           clusters: summaries,
           generatePdf: true,
         };
-        const res = await axios.post(`${backendUrl}/api/reports`, payload, { withCredentials: true });
+        const res = await axios.post(`${backendUrl}/api/reports/save-report`, payload, { withCredentials: true });
         const id = res?.data?.data?.id;
         const pdf = res?.data?.data?.pdf;
         const reused = res?.data?.data?.reused;

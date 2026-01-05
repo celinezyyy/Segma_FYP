@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../context/AppContext';
 import Swal from 'sweetalert2';
 import axios from 'axios';
+import { clearNamespace } from '../utils/localCache';
 
 const Navbar = () => {
   const { setIsLoggedin, setUserData, backendUrl } = useContext(AppContext);
@@ -21,6 +22,16 @@ const Navbar = () => {
           timer: 3000,
           showConfirmButton: false,
         });
+        // Clear application caches on logout
+        try {
+          clearNamespace();
+        } catch {}
+        try {
+          localStorage.clear();
+        } catch {}
+        try {
+          sessionStorage.clear();
+        } catch {}
         setIsLoggedin(false);
         setUserData(false);
         navigate('/');
