@@ -43,7 +43,6 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
         `Segmentation ID: ${report.segmentationId}`,
         `Best K: ${report.bestK}`,
         `Datasets: ${report?.datasetNames?.customer || report.customerDatasetId || '-'} / ${report?.datasetNames?.order || report.orderDatasetId || '-'}`,
-        `Features: ${(report.features || []).join(', ') || '-'}`,
       ]);
       if (report.kpis) {
         doc.moveDown(0.5);

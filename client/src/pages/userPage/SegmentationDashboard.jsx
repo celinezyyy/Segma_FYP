@@ -501,8 +501,6 @@ export default function SegmentationDashboard() {
           segmentationId,
           customerDatasetId,
           orderDatasetId,
-          features: Array.isArray(selectedFeatures) ? selectedFeatures : [],
-          pair: activePair ? { id: activePair, label: pairDescriptions[activePair]?.title, tagline: pairDescriptions[activePair]?.summary } : {},
           bestK: summaries.length,
           kpis: { totalCustomers, totalRevenue, averageSpendOverall },
           clusters: summaries,
