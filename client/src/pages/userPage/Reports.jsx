@@ -14,7 +14,7 @@ export default function Reports() {
   const fetchReports = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`${backendUrl}/api/reports`, { withCredentials: true });
+      const res = await axios.get(`${backendUrl}/api/reports/get-all-reports`, { withCredentials: true });
       setItems(Array.isArray(res?.data?.data) ? res.data.data : []);
     } catch (e) {
       console.error('Failed to load reports', e);
@@ -38,32 +38,36 @@ export default function Reports() {
     });
     if (!confirm.isConfirmed) return;
     try {
-      await axios.delete(`${backendUrl}/api/reports/${id}`, { withCredentials: true });
+      await axios.delete(`${backendUrl}/api/reports/delete-report/${id}`, { withCredentials: true });
       setItems(prev => prev.filter(x => x._id !== id));
-      Swal.fire({ icon: 'success', title: 'Deleted', showConfirmButton: false, timer: 1200 });
+      Swal.fire({ icon: 'success', title: 'Deleted', text: 'Report has been deleted successfully.', showConfirmButton: false, timer: 1800 });
     } catch (e) {
       console.error('Failed to delete report', e);
       Swal.fire({ icon: 'error', title: 'Delete failed', text: e.response?.data?.message || 'Please try again', showConfirmButton: false, timer: 1800 });
     }
   };
-  // Inline edit removed per request
 
   return (
     <div className="flex min-h-screen">
       <UserSidebar />
       <main className="flex-grow px-4 md:px-8 pt-20 pb-20 min-h-[calc(100vh-5rem)] relative">
         <Navbar />
-        <h1 className="text-2xl font-bold mb-6 text-center text-[#2C3E50]">Reports</h1>
+        <div className="mb-6 relative flex items-center">
+          {/* Centered title */}
+          <h1 className="absolute left-1/2 -translate-x-1/2 text-2xl font-bold text-[#2C3E50]">
+            Reports
+          </h1>
 
-        {/* Top bar with search (mirrors dataset page style) */}
-        <div className="mb-6 flex flex-wrap items-center justify-end">
-          <input
-            type="text"
-            placeholder="Search reports..."
-            className="border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value.toLowerCase())}
-          />
+          {/* Right-aligned search */}
+          <div className="ml-auto">
+            <input
+              type="text"
+              placeholder="Search reports..."
+              className="border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value.toLowerCase())}
+            />
+          </div>
         </div>
 
         {loading ? (

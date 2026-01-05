@@ -85,8 +85,8 @@ export const listReports = async (req, res) => {
     const userId = req.userId;
     const items = await Report.find({ userId })
       .sort({ createdAt: -1 })
-      .select('title segmentationId bestK features createdAt pdfFileId datasetNames pair')
-      .lean();
+      .select('title segmentationId createdAt pdfFileId datasetNames')
+      .lean();  // performance optimization, Converts Mongoose documents into plain JavaScript objects, Removes extra Mongoose methods
     return res.json({ success: true, data: items });
   } catch (err) {
     console.error('[listReports] error:', err);
