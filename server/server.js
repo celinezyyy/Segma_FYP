@@ -56,7 +56,9 @@ io.on("connection", (socket) => {
 });
 
 const allowedOrigins = 'http://localhost:5173'
-app.use(express.json());
+// Increase JSON body size limit to accept dashboard images (base64)
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 app.use(cookieParser());
 app.use(cors({origin: allowedOrigins, credentials: true}));
 
