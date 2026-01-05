@@ -216,7 +216,7 @@ export default function SegmentationClusterDashboard() {
                       data={topProducts}
                       dataKey="count"
                       nameKey="name"
-                      outerRadius={100}
+                      outerRadius={90}
                       label={({ value, percent }) => `${value} (${(percent * 100).toFixed(1)}%)`}
                     >
                       {topProducts.map((_, i) => (
@@ -228,7 +228,7 @@ export default function SegmentationClusterDashboard() {
                       layout="horizontal"
                       verticalAlign="bottom"
                       align="center"
-                      wrapperStyle={{ fontSize: 14, fontWeight: 400 }}
+                      wrapperStyle={{ fontSize: 12, fontWeight: 400 }}
                     />
                   </PieChart>
                 </ResponsiveContainer>

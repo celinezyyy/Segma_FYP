@@ -660,6 +660,7 @@ export default function SegmentationDashboard() {
                       layout="vertical"
                       align="right"
                       verticalAlign="middle"
+                      wrapperStyle={{ fontSize: 12, fontWeight: 400 }}
                     />
                   </PieChart>
                 </ResponsiveContainer>
