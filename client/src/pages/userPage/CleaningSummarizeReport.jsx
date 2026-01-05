@@ -250,14 +250,8 @@ const DataQualityReport = () => {
             )}
             {summary.duplicates_removed_rows !== undefined && (
               <div className="bg-white rounded-lg p-3 text-center shadow-sm">
-                <p className="text-2xl font-bold text-red-500">{summary.duplicates_removed_rows}</p>
+                <p className="text-2xl font-bold text-red-500">{summary.duplicates_removed_rows + (summary.initial_rows-summary.rows_after_deduplication - summary.duplicates_removed_rows)}</p>
                 <p className="text-xs text-gray-600 mt-1">Duplicates Removed</p>
-              </div>
-            )}
-            {summary.rows_after_deduplication && (
-              <div className="bg-white rounded-lg p-3 text-center shadow-sm">
-                <p className="text-2xl font-bold text-blue-500">{summary.rows_after_deduplication}</p>
-                <p className="text-xs text-gray-600 mt-1">After Deduplication</p>
               </div>
             )}
             <div className="bg-white rounded-lg p-3 text-center shadow-sm">

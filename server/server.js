@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import 'dotenv/config';
-import { createServer } from "http";     // ✅ Required for Socket.IO
+import { createServer } from "http";     
 import { Server } from "socket.io";  
 import cookieParser from "cookie-parser";
 import connectDB from "./config/mongodb.js";
