@@ -69,10 +69,30 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
         } catch {}
       };
 
-      if (images?.overview) addImage(images.overview, 'Overview Dashboard');
+      if (Array.isArray(images?.overview)) {
+        images.overview.forEach((img, i) => addImage(img, `Overview Panel ${i + 1}`));
+      } else if (images?.overview) {
+        addImage(images.overview, 'Overview Dashboard');
+      }
       if (Array.isArray(images?.clusters)) {
         images.clusters.forEach((img, i) => addImage(img, `Cluster Dashboard ${i + 1}`));
       }
+
+      // Utilities: simple key-value table for cluster summary
+      const drawKVTable = (rows, startY = doc.y) => {
+        const labelW = 180;
+        const valueW = 320;
+        let y = startY;
+        doc.fontSize(10);
+        rows.forEach((r) => {
+          doc.text(String(r.label || ''), 36, y, { width: labelW });
+          doc.text(String(r.value || ''), 36 + labelW + 12, y, { width: valueW });
+          y += 16;
+        });
+        doc.moveTo(36, y).lineTo(540, y).strokeColor('#ddd').stroke();
+        doc.fillColor('#000');
+        return y + 8;
+      };
 
       // Clusters
       const clusters = report.clusters || [];
@@ -80,16 +100,17 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
         doc.moveDown(1);
         doc.fontSize(14).text(`Clusters (${clusters.length})`, { underline: true });
         clusters.forEach((c, idx) => {
+          doc.addPage();
+          doc.fontSize(12).text(`${idx + 1}. ${c.suggestedName || `Cluster ${c.cluster}`}`, { underline: true });
           doc.moveDown(0.5);
-          doc.fontSize(12).text(`${idx + 1}. ${c.suggestedName || `Cluster ${c.cluster}`}`);
-          doc.fontSize(10).list([
-            `Customers: ${c.sizePct ?? '-'}%`,
-            `Revenue Share: ${c.revenuePct ?? '-'}%`,
-            `Avg Spend: ${c.avgSpend ?? '-'}`,
-            `Top State: ${c.topState || '-'}`,
-            c.segmentType ? `Type: ${c.segmentType}` : null,
-            c.keyInsight ? `Insight: ${c.keyInsight}` : null,
-            c.recommendedAction ? `Action: ${c.recommendedAction}` : null,
+          const nextY = drawKVTable([
+            { label: 'Customers %', value: c.sizePct ?? '-' },
+            { label: 'Revenue Share %', value: c.revenuePct ?? '-' },
+            { label: 'Average Spend', value: c.avgSpend ?? '-' },
+            { label: 'Top State', value: c.topState || '-' },
+            c.segmentType ? { label: 'Type', value: c.segmentType } : null,
+            c.keyInsight ? { label: 'Insight', value: c.keyInsight } : null,
+            c.recommendedAction ? { label: 'Action', value: c.recommendedAction } : null,
           ].filter(Boolean));
 
           const topStates = (c.states || []).slice(0, 5).map(s => `${s.name}: ${s.revenue}`);

@@ -3,6 +3,7 @@ import React, { useEffect, useState, useContext, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { toPng } from 'html-to-image';
 import { AppContext } from '../../context/AppContext';
 import UserSidebar from '../../components/UserSidebar';
 import Navbar from '../../components/Navbar';
@@ -33,6 +34,11 @@ export default function SegmentationDashboard() {
   const { segmentationId, selectedFeatures } = location.state || {};
   const { backendUrl } = useContext(AppContext);
   const stateChartWrapperRef = useRef(null);
+  const spendPanelRef = useRef(null);
+  const distributionPanelRef = useRef(null);
+  const productsPanelRef = useRef(null);
+  const genderPanelRef = useRef(null);
+  const agePanelRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [stateSortOrder, setStateSortOrder] = useState('desc'); // 'asc' | 'desc'
   const [selectedStateFilter, setSelectedStateFilter] = useState(null);
@@ -506,6 +512,28 @@ export default function SegmentationDashboard() {
           clusters: summaries,
           generatePdf: true,
         };
+
+        // Capture key dashboard panels as images for clearer PDF pages
+        const panelNodes = [
+          spendPanelRef.current,
+          distributionPanelRef.current,
+          productsPanelRef.current,
+          genderPanelRef.current,
+          agePanelRef.current,
+          stateChartWrapperRef.current,
+        ].filter(Boolean);
+        try {
+          const overviewImages = [];
+          for (const node of panelNodes) {
+            const img = await toPng(node, { cacheBust: true, pixelRatio: 2, backgroundColor: '#ffffff' });
+            overviewImages.push(img);
+          }
+          if (overviewImages.length) {
+            payload.images = { overview: overviewImages };
+          }
+        } catch (captureErr) {
+          console.warn('Panel capture failed, continuing without images:', captureErr?.message);
+        }
         const res = await axios.post(`${backendUrl}/api/reports/save-report`, payload, { withCredentials: true });
         const id = res?.data?.data?.id;
         const pdf = res?.data?.data?.pdf;
@@ -602,7 +630,7 @@ export default function SegmentationDashboard() {
             {/* Row: Left spans 2 rows, right has two stacked panels */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-8 ">
               {/* Left: Avg Spend spanning two rows */}
-              <div className="bg-white p-8 rounded-3xl shadow-xl lg:row-span-2">
+              <div className="bg-white p-8 rounded-3xl shadow-xl lg:row-span-2" ref={spendPanelRef}>
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xl font-bold text-gray-800">Average Customer Spend per Segment</h3>
                   <button
@@ -636,7 +664,7 @@ export default function SegmentationDashboard() {
               </div>
 
               {/* Right top: Customer distribution by cluster */}
-              <div className="bg-white p-4 rounded-3xl shadow-xl">
+              <div className="bg-white p-4 rounded-3xl shadow-xl" ref={distributionPanelRef}>
                 <h3 className="text-xl font-bold text-gray-800 mb-6">Customer Distribution by Cluster</h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
@@ -665,7 +693,7 @@ export default function SegmentationDashboard() {
               </div>
 
               {/* Right bottom: Top Products (Table) */}
-              <div className="bg-white p-6 rounded-3xl shadow-xl self-start">
+              <div className="bg-white p-6 rounded-3xl shadow-xl self-start" ref={productsPanelRef}>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-xl font-bold text-gray-800 mb-6">Products by Popularity</h3>
                   <button
@@ -716,7 +744,7 @@ export default function SegmentationDashboard() {
             {/* Row: Gender & AgeGroup Overview (bar charts) */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-8 ">
               {/* Gender Grouped BarChart */}
-              <div className="bg-white p-8 rounded-3xl shadow-xl">
+              <div className="bg-white p-8 rounded-3xl shadow-xl" ref={genderPanelRef}>
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xl font-bold text-gray-800">Gender by Cluster</h3>
                   <button
@@ -745,7 +773,7 @@ export default function SegmentationDashboard() {
               </div>
 
               {/* Age Group Stacked BarChart */}
-              <div className="bg-white p-8 rounded-3xl shadow-xl">
+              <div className="bg-white p-8 rounded-3xl shadow-xl" ref={agePanelRef}>
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xl font-bold text-gray-800">Age Group by Cluster</h3>
                   <button

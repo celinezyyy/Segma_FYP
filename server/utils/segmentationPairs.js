@@ -2,16 +2,17 @@ export const segmentationPairs = [
   {
     id: "rfm",
     label: "Classic RFM",
-    tagline: "The timeless industry standard",
+    tagline: "Understand loyalty and value at a glance",
+    overview: "RFM groups customers by how recently and how often they buy, and how much they spend. It’s a simple, reliable way to spot loyal fans, VIPs, and customers at risk of churning.",
     features: [
-      { key: "recency", label: "Recency", unit: "days since last purchase" },
-      { key: "frequency", label: "Purchase Frequency", unit: "orders/month" },
-      { key: "monetary", label: "Monetary Value", unit: "MYR" }
+      { key: "Recency", label: "Recency", unit: "days since last purchase" },
+      { key: "Frequency", label: "Purchase Frequency", unit: "orders/month" },
+      { key: "Monetary", label: "Total Spend", unit: "MYR" }
     ],
     benefits: [
-      "Find VIPs, frequent buyers, and churn-risk customers",
-      "Widely used and proven in retail & e-commerce",
-      "Clear and reliable for most SMEs"
+      "Detect early churn through timing patterns",
+      "Learn customers’ preferred buying hours",
+      "Useful for scheduling promotions at the right time"
     ],
     icon: "🏆"
   },
@@ -20,9 +21,9 @@ export const segmentationPairs = [
     label: "Spending Behavior",
     tagline: "Focus on how much they spend",
     features: [
-      { key: "totalSpend", label: "Total Spend", unit: "MYR" },
-      { key: "avgOrderValue", label: "Average Order Value", unit: "MYR" },
-      { key: "totalOrders", label: "Total Orders", unit: "orders" }
+      { key: "Monetary", label: "Total Spend", unit: "MYR" },
+      { key: "AvgOrderValue", label: "Average Order Value", unit: "MYR" },
+      { key: "TotalOrders", label: "Total Orders", unit: "orders" }
     ],
     benefits: [
       "Identify high-spending vs low-spending customers",
@@ -34,11 +35,11 @@ export const segmentationPairs = [
   {
     id: "lifetime",
     label: "Customer Lifetime + Behavior",
-    tagline: "Loyalty & long-teMYR value",
+    tagline: "Loyalty & long-term value",
     features: [
-      { key: "customerLifetimeMonths", label: "Customer Lifetime", unit: "months" },
-      { key: "purchaseFrequency", label: "Purchase Frequency", unit: "orders/month" },
-      { key: "totalSpend", label: "Total Spend", unit: "MYR" }
+      { key: "CustomerLifetimeMonths", label: "Customer Lifetime", unit: "months" },
+      { key: "Frequency", label: "Purchase Frequency", unit: "orders/month" },
+      { key: "Monetary", label: "Total Spend", unit: "MYR" }
     ],
     benefits: [
       "See who stays with your brand the longest",
@@ -47,22 +48,6 @@ export const segmentationPairs = [
     ],
     icon: "❤️"
   },
-  {
-    id: "timebased",
-    label: "Time-based Behavior",
-    tagline: "Spot churn early",
-    features: [
-      { key: "recency", label: "Recency", unit: "days since last purchase" },
-      { key: "favoritePurchaseHour", label: "Favorite Purchase Hour", unit: "hour of day" },
-      { key: "purchaseFrequency", label: "Purchase Frequency", unit: "orders/month" }
-    ],
-    benefits: [
-      "Detect early churn through timing patterns",
-      "Learn customers’ preferred buying hours",
-      "Useful for scheduling promotions at the right time"
-    ],
-    icon: "⏳"
-  }
 ];
 
 export default segmentationPairs;
