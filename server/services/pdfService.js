@@ -29,7 +29,7 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       // Pipe PDF into GridFS
       doc.pipe(uploadStream);
 
-      // PDF Header
+      // ===================== PDF Header =====================
       doc.font('Helvetica-Bold').fontSize(20).text('Customer Segmentation Report', { align: 'center' });
       doc.moveDown(0.3);
       doc.fontSize(10).fillColor('#666').text(`Generated: ${new Date().toLocaleString()}`, { align: 'center' });
@@ -299,7 +299,7 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       }
     }
     doc.fillColor('#000');
-// ============Images ============
+  // ======================== Overview Charts ========================
       // Optional dashboard images (overview + clusters)
       const addImage = (img, caption) => {
         try {
@@ -318,7 +318,7 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       };
 
       if (Array.isArray(images?.overview)) {
-        images.overview.forEach((img, i) => addImage(img, `Overview Panel ${i + 1}`));
+        images.overview.forEach((img, i) => addImage(img, `Overview Chart ${i + 1}`));
       } else if (images?.overview) {
         addImage(images.overview, 'Overview Dashboard');
       }
@@ -342,7 +342,7 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
         return y + 8;
       };
 
-      // Clusters
+      // ======================== Overview Clusters =========================
       const clusters = report.clusters || [];
       if (clusters.length) {
         doc.moveDown(1);

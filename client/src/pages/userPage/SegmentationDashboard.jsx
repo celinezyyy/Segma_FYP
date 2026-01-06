@@ -524,16 +524,33 @@ export default function SegmentationDashboard() {
           spendPanelRef.current,
           distributionPanelRef.current,
           productsPanelRef.current,
-          genderPanelRef.current,
-          agePanelRef.current,
+          hasGender ? genderPanelRef.current : null,
+          hasAgeGroup ? agePanelRef.current : null,
           stateChartWrapperRef.current,
         ].filter(Boolean);
         try {
           const overviewImages = [];
+          // for (const node of panelNodes) {
+          //   const img = await toPng(node, { cacheBust: true, pixelRatio: 2, backgroundColor: '#ffffff' });
+          //   overviewImages.push(img);
+          // }
+
           for (const node of panelNodes) {
-            const img = await toPng(node, { cacheBust: true, pixelRatio: 2, backgroundColor: '#ffffff' });
+            // Force a tiny delay + reflow to ensure labels are rendered
+            await new Promise(resolve => setTimeout(resolve, 500)); // 500ms usually enough
+            
+            const img = await toPng(node, { 
+              cacheBust: true, 
+              pixelRatio: 2, 
+              backgroundColor: '#ffffff',
+              // Optional: improve SVG text rendering
+              style: {
+                transform: 'scale(1)' // forces reflow
+              }
+            });
             overviewImages.push(img);
           }
+
           if (overviewImages.length) {
             payload.images = { overview: overviewImages };
           }
