@@ -1,4 +1,5 @@
 import Report from '../models/reportModel.js';
+import datasetModel from '../models/datasetModel.js';
 import { getReportsBucket } from '../utils/gridfs.js';
 import { Types } from 'mongoose';
 import { generateAndStoreReportPDF } from '../services/pdfService.js';
@@ -36,13 +37,25 @@ export const createReport = async (req, res) => {
     if (existing) {
       report = existing;
     } else {
+      // Fetch dataset original names for display
+      let datasetNamesResolved = {};
+      try {
+        if (customerDatasetId) {
+          const cDoc = await datasetModel.findOne({ _id: customerDatasetId, user: userId }).lean();
+          if (cDoc?.originalname) datasetNamesResolved.customer = cDoc.originalname;
+        }
+        if (orderDatasetId) {
+          const oDoc = await datasetModel.findOne({ _id: orderDatasetId, user: userId }).lean();
+          if (oDoc?.originalname) datasetNamesResolved.order = oDoc.originalname;
+        }
+      } catch (_) {}
       report = await Report.create({
         userId,
         segmentationId,
         title: 'Segmentation Report -' + new Date().toLocaleString(),
         customerDatasetId: customerDatasetId || null,
         orderDatasetId: orderDatasetId || null,
-        datasetNames: datasetNames || {},
+        datasetNames: Object.keys(datasetNamesResolved).length ? datasetNamesResolved : (datasetNames || {}),
         bestK,
         kpis: kpis || {},
         clusters: Array.isArray(clusters) ? clusters : [],

@@ -4,6 +4,7 @@ const ClusterSummarySchema = new mongoose.Schema(
   {
     cluster: { type: Number, required: true },
     suggestedName: { type: String },
+    description: { type: String },
     sizePct: { type: Number },
     revenuePct: { type: Number },
     avgSpend: { type: Number },
@@ -57,6 +58,8 @@ const ReportSchema = new mongoose.Schema(
       totalCustomers: { type: Number },
       totalRevenue: { type: Number },
       averageSpendOverall: { type: Number },
+      overallAvgRecency: { type: Number },
+      overallAvgFrequency: { type: Number },
     },
 
     // Cluster summaries

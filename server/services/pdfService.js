@@ -17,7 +17,7 @@ const makeUniqueFilename = (report) => {
 export const generateAndStoreReportPDF = ({ report, userId, images }) => {
   return new Promise((resolve, reject) => {
     try {
-      const doc = new PDFDocument({ size: 'A4', margin: 36 });
+      const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 36 });
       const filename = makeUniqueFilename(report);
 
       const bucket = getReportsBucket();
@@ -30,7 +30,7 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       doc.pipe(uploadStream);
 
       // Header
-      doc.fontSize(18).text('Customer Segmentation Report', { align: 'center' });
+      doc.fontSize(20).text('Customer Segmentation Report', { align: 'center' });
       doc.moveDown(0.5);
       doc.fontSize(10).fillColor('#666').text(`Generated: ${new Date().toLocaleString()}`, { align: 'center' });
       doc.moveDown(1);
@@ -39,20 +39,102 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       // Overview
       doc.fontSize(14).text(`Overview`, { underline: true });
       doc.moveDown(0.5);
-      doc.fontSize(11).list([
-        `Segmentation ID: ${report.segmentationId}`,
-        `Best K: ${report.bestK}`,
-        `Datasets: ${report?.datasetNames?.customer || report.customerDatasetId || '-'} / ${report?.datasetNames?.order || report.orderDatasetId || '-'}`,
-      ]);
-      if (report.kpis) {
+      // Datasets Used
+      doc.fontSize(13).text('Datasets Used');
+      doc.moveDown(0.2);
+      const custName = report?.datasetNames?.customer || report.customerDatasetId || '-';
+      const ordName = report?.datasetNames?.order || report.orderDatasetId || '-';
+      doc.fontSize(12).text(`Customer dataset: ${custName}`);
+      doc.fontSize(12).text(`Order dataset: ${ordName}`);
+      doc.moveDown(0.3);
+
+      // Segments table (Name + Description)
+      const segments = Array.isArray(report.clusters) ? report.clusters : [];
+      if (segments.length) {
         doc.moveDown(0.5);
-        doc.text(`KPIs:`);
-        doc.list([
-          `Total Customers: ${report.kpis.totalCustomers ?? '-'}`,
-          `Total Revenue: ${report.kpis.totalRevenue ?? '-'}`,
-          `Average Spend: ${report.kpis.averageSpendOverall ?? '-'}`,
-        ], { bulletRadius: 2 });
+        doc.font('Helvetica-Bold').fontSize(13).text(`${segments.length} Customer Segments Found`, { align: 'center' });
+
+        const startY = doc.y + 12; // Add a bit of space after title
+        const colW1 = 220; // Name column width
+        const colW2 = Math.max(300, (doc.page.width - 36 * 2 - colW1 - 12)); // Description width, adjusted for right margin
+        const tableWidth = colW1 + 12 + colW2;
+        const leftX = 36; // Left margin
+        const midX = leftX + colW1 + 6; // Middle separator (centered in 12pt gap)
+        const rightX = leftX + tableWidth;
+        const rowHeight = 24; // Fixed row height for simplicity; adjust if text wraps a lot
+        let y = startY;
+
+        // Set styles for borders
+        const borderColor = '#CCC'; // Light gray for borders
+        const borderWidth = 0.5; // Thin lines
+        doc.lineWidth(borderWidth).strokeColor(borderColor);
+
+        // Header row
+        doc.font('Helvetica-Bold').fontSize(12).fillColor('#111');
+        doc.text('Segment', leftX + 6, y + 6, { width: colW1 }); // Padding inside cell
+        doc.text('Description', midX + 6, y + 6, { width: colW2 });
+
+        // Draw header borders
+        doc.rect(leftX, y, tableWidth, rowHeight).stroke(); // Outer header rect
+        doc.moveTo(midX, y).lineTo(midX, y + rowHeight).stroke(); // Vertical separator
+        y += rowHeight;
+
+        // Body rows
+        doc.font('Helvetica').fillColor('#000'); // Reset to regular font
+        segments.forEach((s, idx) => {
+          if (y + rowHeight > (doc.page.height - 36 * 2)) { // Check for page break (with bottom margin)
+            doc.addPage();
+            y = 36; // Reset to top margin on new page
+            // Optionally redraw header on new page if needed: repeat header code here
+          }
+
+          const name = s.suggestedName || `Cluster ${s.cluster ?? idx + 1}`;
+          const desc = s.description || '—';
+
+          // Draw row text with padding
+          doc.fontSize(11).text(String(name), leftX + 6, y + 6, { width: colW1 });
+          doc.fontSize(10).fillColor('#333').text(String(desc), midX + 6, y + 6, { width: colW2 });
+
+          // Draw row borders
+          doc.rect(leftX, y, tableWidth, rowHeight).stroke(); // Outer row rect
+          doc.moveTo(midX, y).lineTo(midX, y + rowHeight).stroke(); // Vertical separator
+
+          y += rowHeight;
+        });
+
+        // Optional: Draw bottom border if not already covered by last row
+        doc.moveTo(leftX, y).lineTo(rightX, y).stroke(); // Ensure bottom closes
+
+        // Reset styles
+        doc.fillColor('#000').strokeColor('#000').lineWidth(1);
       }
+      // KPI cards (grid-like boxes)
+      const k = report.kpis || {};
+      const cards = [
+        { title: 'Total Customers', value: k.totalCustomers },
+        { title: 'Total Revenue', value: k.totalRevenue },
+        { title: 'Average Spend', value: k.averageSpendOverall },
+        { title: 'Average Days Since Last Purchase', value: k.overallAvgRecency },
+        { title: 'Average Purchases Per Month', value: k.overallAvgFrequency },
+      ];
+      doc.moveDown(0.5);
+      doc.fontSize(13).text('Key Metrics');
+      doc.moveDown(0.3);
+      const cardW = 250;
+      const cardH = 72;
+      const gap = 16;
+      const startX = 36;
+      let cx = startX;
+      let cy = doc.y;
+      const usableWidth = doc.page.width - 72;
+      cards.forEach((c) => {
+        if (cx + cardW > usableWidth) { cx = startX; cy += cardH + gap; }
+        doc.roundedRect(cx, cy, cardW, cardH, 8).fillAndStroke('#F3F4F6', '#E5E7EB');
+        doc.fillColor('#111').fontSize(11).text(c.title, cx + 10, cy + 10, { width: cardW - 20 });
+        doc.fontSize(16).fillColor('#0F172A').text(String(c.value ?? '—'), cx + 10, cy + 34, { width: cardW - 20 });
+        cx += cardW + gap;
+        doc.fillColor('#000');
+      });
 
       // Optional dashboard images (overview + clusters)
       const addImage = (img, caption) => {
@@ -65,7 +147,9 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
             doc.fontSize(14).text(caption, { underline: true });
             doc.moveDown(0.5);
           }
-          doc.image(buf, { fit: [520, 700], align: 'center' });
+          const fitW = doc.page.width - 72; // account for margins
+          const fitH = doc.page.height - 144; // header + margin space
+          doc.image(buf, { fit: [fitW, fitH], align: 'center' });
         } catch {}
       };
 

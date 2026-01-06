@@ -504,7 +504,7 @@ export default function SegmentationDashboard() {
           customerDatasetId,
           orderDatasetId,
           bestK: summaries.length,
-          kpis: { totalCustomers, totalRevenue, averageSpendOverall },
+          kpis: { totalCustomers, totalRevenue, averageSpendOverall, overallAvgRecency, overallAvgFrequency },
           clusters: summaries,
           generatePdf: true,
         };
