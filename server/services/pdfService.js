@@ -30,112 +30,218 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       doc.pipe(uploadStream);
 
       // Header
-      doc.fontSize(20).text('Customer Segmentation Report', { align: 'center' });
-      doc.moveDown(0.5);
+      doc.font('Helvetica-Bold').fontSize(20).text('Customer Segmentation Report', { align: 'center' });
+      doc.moveDown(0.3);
       doc.fontSize(10).fillColor('#666').text(`Generated: ${new Date().toLocaleString()}`, { align: 'center' });
       doc.moveDown(1);
       doc.fillColor('#000');
 
       // Overview
-      doc.fontSize(14).text(`Overview`, { underline: true });
+      doc.font('Helvetica-Bold').fontSize(15).text(`Customer Segmentation Dashboard Overview`, { underline: true });
       doc.moveDown(0.5);
       // Datasets Used
-      doc.fontSize(13).text('Datasets Used');
+      doc.font('Helvetica-Bold').fontSize(14).text('Datasets Used');
       doc.moveDown(0.2);
       const custName = report?.datasetNames?.customer || report.customerDatasetId || '-';
       const ordName = report?.datasetNames?.order || report.orderDatasetId || '-';
-      doc.fontSize(12).text(`Customer dataset: ${custName}`);
-      doc.fontSize(12).text(`Order dataset: ${ordName}`);
+      // First line: Bold label, regular value
+      doc.font('Helvetica-Bold').fontSize(12).text('Customer dataset: ', { continued: true });
+      doc.font('Helvetica').text(`${custName}`);
+
+      // Second line: Bold label, regular value
+      doc.font('Helvetica-Bold').fontSize(12).text('Order dataset: ', { continued: true });
+      doc.font('Helvetica').text(`${ordName}`);
       doc.moveDown(0.3);
 
-      // Segments table (Name + Description)
       const segments = Array.isArray(report.clusters) ? report.clusters : [];
       if (segments.length) {
         doc.moveDown(0.5);
-        doc.font('Helvetica-Bold').fontSize(13).text(`${segments.length} Customer Segments Found`, { align: 'center' });
+        doc.font('Helvetica-Bold').fontSize(14).text(`${segments.length} Customer Segments Found`, { align: 'center' });
 
-        const startY = doc.y + 12; // Add a bit of space after title
-        const colW1 = 220; // Name column width
-        const colW2 = Math.max(300, (doc.page.width - 36 * 2 - colW1 - 12)); // Description width, adjusted for right margin
+        const startY = doc.y + 10;
+        const colW1 = 220;                    // Name column
+        const colW2 = doc.page.width - 36 * 2 - colW1 - 12; // Description column (full remaining width)
         const tableWidth = colW1 + 12 + colW2;
-        const leftX = 36; // Left margin
-        const midX = leftX + colW1 + 6; // Middle separator (centered in 12pt gap)
+        const leftX = 36;
+        const midX = leftX + colW1 + 6;        // Vertical separator position
         const rightX = leftX + tableWidth;
-        const rowHeight = 24; // Fixed row height for simplicity; adjust if text wraps a lot
+
+        const borderColor = '#CCC';
+        const headerBgColor = '#F0F0F0';       // Light gray background for header
+        const cellPadding = 6;
+
+        doc.lineWidth(0.5).strokeColor(borderColor);
+
         let y = startY;
 
-        // Set styles for borders
-        const borderColor = '#CCC'; // Light gray for borders
-        const borderWidth = 0.5; // Thin lines
-        doc.lineWidth(borderWidth).strokeColor(borderColor);
+        // === HEADER ROW ===
+        const headerHeight = 24;
+        const headerTextY = y + cellPadding;
 
-        // Header row
-        doc.font('Helvetica-Bold').fontSize(12).fillColor('#111');
-        doc.text('Segment', leftX + 6, y + 6, { width: colW1 }); // Padding inside cell
-        doc.text('Description', midX + 6, y + 6, { width: colW2 });
+        // Background fill for header
+        doc.fillColor(headerBgColor)
+          .rect(leftX, y, tableWidth, headerHeight)
+          .fill();
 
-        // Draw header borders
-        doc.rect(leftX, y, tableWidth, rowHeight).stroke(); // Outer header rect
-        doc.moveTo(midX, y).lineTo(midX, y + rowHeight).stroke(); // Vertical separator
-        y += rowHeight;
+        // Header text (bold, dark)
+        doc.fillColor('#111').font('Helvetica-Bold').fontSize(12);
+        doc.text('Segment Name', leftX + cellPadding, headerTextY, { width: colW1 });
+        doc.text('Description', midX + cellPadding, headerTextY, { width: colW2 });
 
-        // Body rows
-        doc.font('Helvetica').fillColor('#000'); // Reset to regular font
+        // Header borders (stroke over the fill)
+        doc.strokeColor(borderColor)
+          .rect(leftX, y, tableWidth, headerHeight)
+          .stroke();
+        doc.moveTo(midX, y).lineTo(midX, y + headerHeight).stroke();
+
+        y += headerHeight;
+
+        // === BODY ROWS (with dynamic height) ===
+        doc.font('Helvetica').fontSize(11).fillColor('#000');
+
         segments.forEach((s, idx) => {
-          if (y + rowHeight > (doc.page.height - 36 * 2)) { // Check for page break (with bottom margin)
-            doc.addPage();
-            y = 36; // Reset to top margin on new page
-            // Optionally redraw header on new page if needed: repeat header code here
-          }
-
-          const name = s.suggestedName || `Cluster ${s.cluster ?? idx + 1}`;
+          const name = s.suggestedName || `${s.cluster ?? idx + 1} Group`;
           const desc = s.description || '—';
 
-          // Draw row text with padding
-          doc.fontSize(11).text(String(name), leftX + 6, y + 6, { width: colW1 });
-          doc.fontSize(10).fillColor('#333').text(String(desc), midX + 6, y + 6, { width: colW2 });
+          // Temporarily measure height of both columns
+          const nameHeight = doc.heightOfString(String(name), {
+            width: colW1 - 2 * cellPadding,
+            lineGap: 2
+          });
+          const descHeight = doc.heightOfString(String(desc), {
+            width: colW2 - 2 * cellPadding,
+            fontSize: 10,
+            lineGap: 2
+          });
 
-          // Draw row borders
-          doc.rect(leftX, y, tableWidth, rowHeight).stroke(); // Outer row rect
-          doc.moveTo(midX, y).lineTo(midX, y + rowHeight).stroke(); // Vertical separator
+          const contentHeight = Math.max(nameHeight, descHeight);
+          const rowHeight = contentHeight + 2 * cellPadding + 8; // Extra padding at top/bottom
+
+          // Page break check
+          if (y + rowHeight > doc.page.height - 72) {
+            doc.addPage();
+
+            // Optional: Redraw header on new page
+            y = 36 + 10; // Top margin + spacing
+            doc.fillColor(headerBgColor)
+              .rect(leftX, y, tableWidth, headerHeight)
+              .fill();
+            doc.fillColor('#111').font('Helvetica-Bold').fontSize(12);
+            doc.text('Segment', leftX + cellPadding, y + cellPadding, { width: colW1 });
+            doc.text('Description', midX + cellPadding, y + cellPadding, { width: colW2 });
+            doc.strokeColor(borderColor)
+              .rect(leftX, y, tableWidth, headerHeight)
+              .stroke();
+            doc.moveTo(midX, y).lineTo(midX, y + headerHeight).stroke();
+
+            y += headerHeight;
+          }
+
+          // Draw cell background (optional: alternate row colors)
+          // doc.fillColor(idx % 2 === 0 ? '#FAFAFA' : '#FFFFFF').rect(leftX, y, tableWidth, rowHeight).fill();
+
+          // Draw text
+          doc.fillColor('#000').fontSize(11);
+          doc.text(String(name), leftX + cellPadding, y + cellPadding, {
+            width: colW1 - 2 * cellPadding,
+            lineBreak: true
+          });
+
+          doc.fontSize(10).fillColor('#333');
+          doc.text(String(desc), midX + cellPadding, y + cellPadding, {
+            width: colW2 - 2 * cellPadding,
+            lineBreak: true
+          });
+
+          // Draw borders
+          doc.strokeColor(borderColor)
+            .rect(leftX, y, tableWidth, rowHeight)
+            .stroke();
+          doc.moveTo(midX, y).lineTo(midX, y + rowHeight).stroke();
 
           y += rowHeight;
         });
 
-        // Optional: Draw bottom border if not already covered by last row
-        doc.moveTo(leftX, y).lineTo(rightX, y).stroke(); // Ensure bottom closes
+        // Final bottom line
+        doc.moveTo(leftX, y).lineTo(rightX, y).stroke();
 
-        // Reset styles
+        // Reset defaults
         doc.fillColor('#000').strokeColor('#000').lineWidth(1);
       }
-      // KPI cards (grid-like boxes)
-      const k = report.kpis || {};
-      const cards = [
-        { title: 'Total Customers', value: k.totalCustomers },
-        { title: 'Total Revenue', value: k.totalRevenue },
-        { title: 'Average Spend', value: k.averageSpendOverall },
-        { title: 'Average Days Since Last Purchase', value: k.overallAvgRecency },
-        { title: 'Average Purchases Per Month', value: k.overallAvgFrequency },
-      ];
-      doc.moveDown(0.5);
-      doc.fontSize(13).text('Key Metrics');
-      doc.moveDown(0.3);
-      const cardW = 250;
-      const cardH = 72;
-      const gap = 16;
-      const startX = 36;
-      let cx = startX;
-      let cy = doc.y;
-      const usableWidth = doc.page.width - 72;
-      cards.forEach((c) => {
-        if (cx + cardW > usableWidth) { cx = startX; cy += cardH + gap; }
-        doc.roundedRect(cx, cy, cardW, cardH, 8).fillAndStroke('#F3F4F6', '#E5E7EB');
-        doc.fillColor('#111').fontSize(11).text(c.title, cx + 10, cy + 10, { width: cardW - 20 });
-        doc.fontSize(16).fillColor('#0F172A').text(String(c.value ?? '—'), cx + 10, cy + 34, { width: cardW - 20 });
-        cx += cardW + gap;
-        doc.fillColor('#000');
-      });
 
+      // KPI cards (compact grid)
+    const k = report.kpis || {};
+    const cards = [
+      { title: 'Total Customers', value: k.totalCustomers ?? '—' },
+      { title: 'Total Revenue', value: k.totalRevenue ?? '—' },
+      { title: 'Average Spend', value: k.averageSpendOverall ?? '—' },
+      { title: 'Average Days Since Last Purchase', value: k.overallAvgRecency ?? '—' },
+      { title: 'Average Purchases Per Month', value: k.overallAvgFrequency ?? '—' },
+    ];
+
+    doc.moveDown(1.0);
+    doc.font('Helvetica-Bold').fontSize(14).text('Key Metrics', { align: 'center' });
+    doc.moveDown(0.5);
+
+    const cardWidth = 170;        // Smaller card
+    const cardHeight = 55;        // Compact height
+    const horizontalGap = 20;
+    const verticalGap = 16;
+    const cardsPerRow = 3;        // Fits nicely on A4 with margins
+    const startX = 36;
+    const startY = doc.y;
+
+    let x = startX;
+    let y = startY;
+    const maxX = doc.page.width - 36 - cardWidth; // Right boundary
+
+    cards.forEach((card, index) => {
+      // Start new row if needed
+      if (index > 0 && index % cardsPerRow === 0) {
+        x = startX;
+        y += cardHeight + verticalGap;
+      }
+
+      // Optional: page break if running out of space
+      if (y + cardHeight > doc.page.height - 72) {
+        doc.addPage();
+        y = 36; // Top margin on new page
+      }
+
+      // Card background + border
+      doc.roundedRect(x, y, cardWidth, cardHeight, 8)
+        .fillAndStroke('#F8FAFC', '#E2E8F0'); // Very light background, soft border
+
+      // Title (bold, smaller, wraps if long)
+      doc.fillColor('#374151')
+        .font('Helvetica-Bold')
+        .fontSize(10)
+        .text(card.title, x + 12, y + 10, {
+          width: cardWidth - 24,
+          lineBreak: true,
+          ellipsis: true // Adds "..." if still too long (rare)
+        });
+
+      // Value (large, bold, handles numbers or text)
+      const valueText = typeof card.value === 'number'
+        ? Number(card.value).toLocaleString(undefined, { maximumFractionDigits: 2 })
+        : String(card.value);
+
+      doc.fillColor('#11142D')
+        .font('Helvetica-Bold')
+        .fontSize(16)
+        .text(valueText, x + 12, y + 28, {
+          width: cardWidth - 24,
+          lineBreak: true
+        });
+
+      // Move to next position
+      x += cardWidth + horizontalGap;
+    });
+
+    // Reset fill color for rest of document
+    doc.fillColor('#000');
+// ============Images ============
       // Optional dashboard images (overview + clusters)
       const addImage = (img, caption) => {
         try {
