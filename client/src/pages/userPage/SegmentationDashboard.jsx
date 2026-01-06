@@ -50,6 +50,7 @@ export default function SegmentationDashboard() {
   const [ageSortOrder, setAgeSortOrder] = useState('desc'); // 'asc' | 'desc'
   const [selectedGenderClusterIndex, setSelectedGenderClusterIndex] = useState(null);
   const [selectedAgeClusterIndex, setSelectedAgeClusterIndex] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   // ---------------- Components ----------------
   const MetricCard = ({ title, value, icon, bgColor }) => (
@@ -487,7 +488,16 @@ export default function SegmentationDashboard() {
   // ---------------- Render Overview ----------------
     const handleSaveReport = async () => {
       try {
+        if (saving) return;
         if (!segmentationId || !Array.isArray(summaries) || summaries.length === 0) return;
+        setSaving(true);
+        Swal.fire({
+          title: 'Saving report…',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          didOpen: () => { Swal.showLoading(); },
+        });
         // Retrieve dataset IDs from cache so dedup works server-side
         let customerDatasetId = null;
         let orderDatasetId = null;
@@ -535,6 +545,7 @@ export default function SegmentationDashboard() {
         const pdf = res?.data?.data?.pdf;
         const reused = res?.data?.data?.reused;
         if (id) {
+          Swal.close();
           if (reused) {
             await Swal.fire({
               icon: 'info',
@@ -560,7 +571,10 @@ export default function SegmentationDashboard() {
       } catch (e) {
         console.error('Failed to save report', e);
         const msg = e.response?.data?.message || e.message || 'Unable to save report.';
+        Swal.close();
         Swal.fire({ icon: 'error', title: 'Save failed', text: msg });
+      } finally {
+        setSaving(false);
       }
     };
 
@@ -580,9 +594,10 @@ export default function SegmentationDashboard() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={handleSaveReport}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100"
+                  disabled={saving}
+                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-md border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 ${saving ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
-                  <Save size={16} /> Save Report (PDF)
+                  <Save size={16} /> {saving ? 'Saving…' : 'Save Report (PDF)'}
                 </button>
                 <button
                   onClick={() => navigate('/reports')}

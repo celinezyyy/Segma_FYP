@@ -37,7 +37,12 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       doc.fillColor('#000');
 
       // Overview
-      doc.font('Helvetica-Bold').fontSize(15).text(`Customer Segmentation Dashboard Overview`, { underline: true });
+      doc.font('Helvetica-Bold').fontSize(15)
+        .text(`Customer Segmentation Dashboard Overview`, 36, doc.y, {
+          width: doc.page.width - 72,
+          underline: true,
+          align: 'center'
+        });
       doc.moveDown(0.5);
       // Datasets Used
       doc.font('Helvetica-Bold').fontSize(14).text('Datasets Used');
@@ -47,7 +52,7 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       // First line: Bold label, regular value
       doc.font('Helvetica-Bold').fontSize(12).text('Customer dataset: ', { continued: true });
       doc.font('Helvetica').text(`${custName}`);
-
+      doc.moveDown(0.2);
       // Second line: Bold label, regular value
       doc.font('Helvetica-Bold').fontSize(12).text('Order dataset: ', { continued: true });
       doc.font('Helvetica').text(`${ordName}`);
@@ -56,9 +61,13 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       const segments = Array.isArray(report.clusters) ? report.clusters : [];
       if (segments.length) {
         doc.moveDown(0.5);
-        doc.font('Helvetica-Bold').fontSize(14).text(`${segments.length} Customer Segments Found`, { align: 'center' });
+        doc.font('Helvetica-Bold').fontSize(14)
+          .text(`${segments.length} Customer Segments Found`, 36, doc.y, {
+            width: doc.page.width - 72,
+            align: 'center'
+          });
 
-        const startY = doc.y + 10;
+        const startY = doc.y + 20;
         const colW1 = 220;                    // Name column
         const colW2 = doc.page.width - 36 * 2 - colW1 - 12; // Description column (full remaining width)
         const tableWidth = colW1 + 12 + colW2;
@@ -68,14 +77,14 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
 
         const borderColor = '#CCC';
         const headerBgColor = '#F0F0F0';       // Light gray background for header
-        const cellPadding = 6;
+        const cellPadding = 2;
 
         doc.lineWidth(0.5).strokeColor(borderColor);
 
         let y = startY;
 
         // === HEADER ROW ===
-        const headerHeight = 24;
+        const headerHeight = 30;
         const headerTextY = y + cellPadding;
 
         // Background fill for header
@@ -97,7 +106,7 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
         y += headerHeight;
 
         // === BODY ROWS (with dynamic height) ===
-        doc.font('Helvetica').fontSize(11).fillColor('#000');
+        doc.font('Helvetica').fontSize(12).fillColor('#000');
 
         segments.forEach((s, idx) => {
           const name = s.suggestedName || `${s.cluster ?? idx + 1} Group`;
@@ -127,7 +136,7 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
               .rect(leftX, y, tableWidth, headerHeight)
               .fill();
             doc.fillColor('#111').font('Helvetica-Bold').fontSize(12);
-            doc.text('Segment', leftX + cellPadding, y + cellPadding, { width: colW1 });
+            doc.text('Segment Name', leftX + cellPadding, y + cellPadding, { width: colW1 });
             doc.text('Description', midX + cellPadding, y + cellPadding, { width: colW2 });
             doc.strokeColor(borderColor)
               .rect(leftX, y, tableWidth, headerHeight)
@@ -141,7 +150,7 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
           // doc.fillColor(idx % 2 === 0 ? '#FAFAFA' : '#FFFFFF').rect(leftX, y, tableWidth, rowHeight).fill();
 
           // Draw text
-          doc.fillColor('#000').fontSize(11);
+          doc.fillColor('#000').fontSize(12);
           doc.text(String(name), leftX + cellPadding, y + cellPadding, {
             width: colW1 - 2 * cellPadding,
             lineBreak: true
@@ -180,7 +189,10 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
     ];
 
     doc.moveDown(1.0);
-    doc.font('Helvetica-Bold').fontSize(14).text('Key Metrics', { align: 'center' });
+    // Ensure heading is centered relative to content area
+    const headingX = 36;
+    const headingWidth = doc.page.width - 72;
+    doc.font('Helvetica-Bold').fontSize(14).text('Key Metrics', headingX, doc.y, { width: headingWidth, align: 'center' });
     doc.moveDown(0.5);
 
     const cardWidth = 170;        // Smaller card
@@ -188,55 +200,74 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
     const horizontalGap = 20;
     const verticalGap = 16;
     const cardsPerRow = 3;        // Fits nicely on A4 with margins
-    const startX = 36;
+    const margin = 36;            // Page margin used when creating PDF
+    const contentWidth = doc.page.width - margin * 2;
     const startY = doc.y;
 
-    let x = startX;
-    let y = startY;
-    const maxX = doc.page.width - 36 - cardWidth; // Right boundary
+    // Helper to center a row with N items
+    const centerXForRow = (items) => {
+      const rowWidth = items * cardWidth + (items - 1) * horizontalGap;
+      return margin + Math.max(0, (contentWidth - rowWidth) / 2);
+    };
 
+    let y = startY;
     cards.forEach((card, index) => {
-      // Start new row if needed
-      if (index > 0 && index % cardsPerRow === 0) {
-        x = startX;
+      const inRowIndex = index % cardsPerRow;
+      const isRowStart = inRowIndex === 0;
+      const itemsThisRow = Math.min(cardsPerRow, cards.length - index);
+
+      // Move to next row (except on very first)
+      if (index > 0 && isRowStart) {
         y += cardHeight + verticalGap;
       }
 
-      // Optional: page break if running out of space
-      if (y + cardHeight > doc.page.height - 72) {
+      // Page break check before drawing new row
+      if (isRowStart && y + cardHeight > doc.page.height - 72) {
         doc.addPage();
-        y = 36; // Top margin on new page
+        y = margin; // reset to top margin
       }
+
+      // Compute x for this card, centered per row
+      const rowStartX = centerXForRow(itemsThisRow);
+      const x = rowStartX + inRowIndex * (cardWidth + horizontalGap);
 
       // Card background + border
       doc.roundedRect(x, y, cardWidth, cardHeight, 8)
-        .fillAndStroke('#F8FAFC', '#E2E8F0'); // Very light background, soft border
+        .fillAndStroke('#F8FAFC', '#E2E8F0');
 
-      // Title (bold, smaller, wraps if long)
-      doc.fillColor('#374151')
-        .font('Helvetica-Bold')
-        .fontSize(10)
-        .text(card.title, x + 12, y + 10, {
-          width: cardWidth - 24,
-          lineBreak: true,
-          ellipsis: true // Adds "..." if still too long (rare)
-        });
+      // Title (fit to width by reducing font size if needed)
+      doc.fillColor('#374151').font('Helvetica-Bold');
+      let titleFont = 10;
+      const titleMax = 10;
+      const titleMin = 8;
+      const titleBox = cardWidth - 24;
+      while (titleFont > titleMin && doc.widthOfString(String(card.title), { font: 'Helvetica-Bold', size: titleFont }) > titleBox) {
+        titleFont -= 1;
+      }
+      doc.fontSize(titleFont).text(String(card.title), x + 12, y + 10, {
+        width: titleBox,
+        lineBreak: true,
+        ellipsis: true
+      });
 
-      // Value (large, bold, handles numbers or text)
+      // Value
       const valueText = typeof card.value === 'number'
         ? Number(card.value).toLocaleString(undefined, { maximumFractionDigits: 2 })
         : String(card.value);
 
-      doc.fillColor('#11142D')
-        .font('Helvetica-Bold')
-        .fontSize(16)
-        .text(valueText, x + 12, y + 28, {
-          width: cardWidth - 24,
-          lineBreak: true
-        });
-
-      // Move to next position
-      x += cardWidth + horizontalGap;
+      // Value (shrink-to-fit then ellipsis)
+      doc.fillColor('#11142D').font('Helvetica-Bold');
+      let valueFont = 16;
+      const valueMin = 10;
+      const valueBox = cardWidth - 24;
+      while (valueFont > valueMin && doc.widthOfString(String(valueText), { font: 'Helvetica-Bold', size: valueFont }) > valueBox) {
+        valueFont -= 1;
+      }
+      doc.fontSize(valueFont).text(String(valueText), x + 12, y + 28, {
+        width: valueBox,
+        lineBreak: false,
+        ellipsis: true
+      });
     });
 
     // Reset fill color for rest of document
