@@ -44,7 +44,6 @@ export default function SegmentationDashboard() {
   const [selectedStateFilter, setSelectedStateFilter] = useState(null);
   const [stateChartWidth, setStateChartWidth] = useState(0);
   const [data, setData] = useState(null);
-  const [selectedCluster, setSelectedCluster] = useState('overview'); // 'overview' or cluster index
   const [topProductsSortOrder, setTopProductsSortOrder] = useState('desc'); // 'asc' | 'desc'
   const [spendSortOrder, setSpendSortOrder] = useState('desc'); // 'asc' | 'desc'
   const [genderSortOrder, setGenderSortOrder] = useState('desc'); // 'asc' | 'desc'
@@ -486,7 +485,6 @@ export default function SegmentationDashboard() {
   if (!data) return <div className="p-20 text-center text-red-600 text-xl">No segmentation data available</div>;
 
   // ---------------- Render Overview ----------------
-  if (selectedCluster === 'overview') {
     const handleSaveReport = async () => {
       try {
         if (!segmentationId || !Array.isArray(summaries) || summaries.length === 0) return;
@@ -878,4 +876,3 @@ export default function SegmentationDashboard() {
       </div>
     );
   }
-}
