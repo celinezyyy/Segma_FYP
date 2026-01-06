@@ -36,14 +36,14 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       doc.moveDown(1);
       doc.fillColor('#000');
 
-      // Overview Dashboard
+      // ===================== Overview Dashboard =====================
       doc.font('Helvetica-Bold').fontSize(15)
         .text(`Customer Segmentation Dashboard Overview`, 36, doc.y, {
           width: doc.page.width - 72,
           underline: true,
           align: 'center'
         });
-      doc.moveDown(0.5);
+      doc.moveDown(1.0);
       // Datasets Used
       doc.font('Helvetica-Bold').fontSize(14).text('Datasets Used');
       doc.moveDown(0.2);
@@ -61,7 +61,7 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       // Segment Table
       const segments = Array.isArray(report.clusters) ? report.clusters : [];
       if (segments.length) {
-        doc.moveDown(0.5);
+        doc.moveDown(2.0);
         doc.font('Helvetica-Bold').fontSize(14)
           .text(`${segments.length} Customer Segments Found`, 36, doc.y, {
             width: doc.page.width - 72,
@@ -203,10 +203,10 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
 
     doc.moveDown(2.0);
 
-    const cardWidth = 160;        // Slightly smaller card width for portrait
-    const cardHeight = 55;        // Card height
+    const cardWidth = 165;        // Slightly smaller card width for portrait
+    const cardHeight = 60;        // Card height
     const horizontalGap = 20;
-    const verticalGap = 16;
+    const verticalGap = 18;
     const margin = 36;            // Page margin used when creating PDF
     const contentWidth = doc.page.width - margin * 2;
     const startY = doc.y;
@@ -219,32 +219,22 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       return margin + Math.max(0, (contentWidth - rowWidth) / 2);
     };
 
+    // Custom layout: 3 cards in first row, 2 in second row.
+    const totalCards = cards.length;
+    const row1Count = Math.min(3, totalCards);
+    const row2Count = Math.max(0, totalCards - row1Count);
+
     let y = startY;
-    cards.forEach((card, index) => {
-      const inRowIndex = index % maxPerRow;
-      const isRowStart = inRowIndex === 0;
-      const itemsThisRow = Math.min(maxPerRow, cards.length - index);
+    const row1StartX = centerXForRow(row1Count);
+    const row1Xs = Array.from({ length: row1Count }, (_, i) => row1StartX + i * (cardWidth + horizontalGap));
 
-      // Move to next row (except on very first)
-      if (index > 0 && isRowStart) {
-        y += cardHeight + verticalGap;
-      }
-
-      // Page break check before drawing new row
-      if (isRowStart && y + cardHeight > doc.page.height - 72) {
-        doc.addPage();
-        y = margin; // reset to top margin
-      }
-
-      // Compute x for this card, centered per row
-      const rowStartX = centerXForRow(itemsThisRow);
-      const x = rowStartX + inRowIndex * (cardWidth + horizontalGap);
-
+    // Render first row (up to 3 cards)
+    for (let i = 0; i < row1Count; i++) {
+      const card = cards[i];
+      const x = row1Xs[i];
       // Card background + border
-      doc.roundedRect(x, y, cardWidth, cardHeight, 8)
-        .fillAndStroke('#F8FAFC', '#E2E8F0');
-
-      // Title (fit to width by reducing font size if needed)
+      doc.roundedRect(x, y, cardWidth, cardHeight, 8).fillAndStroke('#F8FAFC', '#E2E8F0');
+      // Title shrink-to-fit
       doc.fillColor('#374151').font('Helvetica-Bold');
       let titleFont = 10;
       const titleMin = 8;
@@ -252,18 +242,9 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       while (titleFont > titleMin && doc.widthOfString(String(card.title), { font: 'Helvetica-Bold', size: titleFont }) > titleBox) {
         titleFont -= 1;
       }
-      doc.fontSize(titleFont).text(String(card.title), x + 12, y + 10, {
-        width: titleBox,
-        lineBreak: true,
-        ellipsis: true
-      });
-
-      // Value
-      const valueText = typeof card.value === 'number'
-        ? Number(card.value).toLocaleString(undefined, { maximumFractionDigits: 2 })
-        : String(card.value);
-
-      // Value (shrink-to-fit then ellipsis)
+      doc.fontSize(titleFont).text(String(card.title), x + 12, y + 10, { width: titleBox, lineBreak: true, ellipsis: true });
+      // Value shrink-to-fit
+      const valueText = typeof card.value === 'number' ? Number(card.value).toLocaleString(undefined, { maximumFractionDigits: 2 }) : String(card.value);
       doc.fillColor('#11142D').font('Helvetica-Bold');
       let valueFont = 16;
       const valueMin = 10;
@@ -271,14 +252,52 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       while (valueFont > valueMin && doc.widthOfString(String(valueText), { font: 'Helvetica-Bold', size: valueFont }) > valueBox) {
         valueFont -= 1;
       }
-      doc.fontSize(valueFont).text(String(valueText), x + 12, y + 28, {
-        width: valueBox,
-        lineBreak: false,
-        ellipsis: true
-      });
-    });
+      doc.fontSize(valueFont).text(String(valueText), x + 12, y + 28, { width: valueBox, lineBreak: false, ellipsis: true });
+    }
 
-    // Reset fill color for rest of document
+    // Move to second row
+    if (row2Count > 0) {
+      let y2 = y + cardHeight + verticalGap;
+      if (y2 + cardHeight > doc.page.height - 72) { doc.addPage(); y2 = margin; }
+
+      // Compute second-row Xs: if exactly 2 cards under 3-card row, place them centered in the gaps between row1 cards
+      let row2Xs;
+      if (row1Count === 3 && row2Count === 2) {
+        const gapCenters = [
+          (row1Xs[0] + cardWidth + row1Xs[1]) / 2,
+          (row1Xs[1] + cardWidth + row1Xs[2]) / 2,
+        ];
+        row2Xs = gapCenters.map(gc => gc - cardWidth / 2);
+      } else {
+        const row2StartX = centerXForRow(row2Count);
+        row2Xs = Array.from({ length: row2Count }, (_, i) => row2StartX + i * (cardWidth + horizontalGap));
+      }
+
+      for (let j = 0; j < row2Count; j++) {
+        const card = cards[row1Count + j];
+        const x = row2Xs[j];
+        doc.roundedRect(x, y2, cardWidth, cardHeight, 8).fillAndStroke('#F8FAFC', '#E2E8F0');
+        // Title
+        doc.fillColor('#374151').font('Helvetica-Bold');
+        let titleFont = 10;
+        const titleMin = 8;
+        const titleBox = cardWidth - 24;
+        while (titleFont > titleMin && doc.widthOfString(String(card.title), { font: 'Helvetica-Bold', size: titleFont }) > titleBox) {
+          titleFont -= 1;
+        }
+        doc.fontSize(titleFont).text(String(card.title), x + 12, y2 + 10, { width: titleBox, lineBreak: true, ellipsis: true });
+        // Value
+        const valueText = typeof card.value === 'number' ? Number(card.value).toLocaleString(undefined, { maximumFractionDigits: 2 }) : String(card.value);
+        doc.fillColor('#11142D').font('Helvetica-Bold');
+        let valueFont = 16;
+        const valueMin = 10;
+        const valueBox = cardWidth - 24;
+        while (valueFont > valueMin && doc.widthOfString(String(valueText), { font: 'Helvetica-Bold', size: valueFont }) > valueBox) {
+          valueFont -= 1;
+        }
+        doc.fontSize(valueFont).text(String(valueText), x + 12, y2 + 28, { width: valueBox, lineBreak: false, ellipsis: true });
+      }
+    }
     doc.fillColor('#000');
 // ============Images ============
       // Optional dashboard images (overview + clusters)
