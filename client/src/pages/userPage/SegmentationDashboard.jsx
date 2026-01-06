@@ -537,17 +537,35 @@ export default function SegmentationDashboard() {
 
           for (const node of panelNodes) {
             // Force a tiny delay + reflow to ensure labels are rendered
-            await new Promise(resolve => setTimeout(resolve, 500)); // 500ms usually enough
-            
-            const img = await toPng(node, { 
-              cacheBust: true, 
-              pixelRatio: 2, 
+            await new Promise(resolve => setTimeout(resolve, 600));
+
+            // Primary capture of the full panel
+            let img = await toPng(node, {
+              cacheBust: true,
+              pixelRatio: 2,
               backgroundColor: '#ffffff',
-              // Optional: improve SVG text rendering
-              style: {
-                transform: 'scale(1)' // forces reflow
-              }
+              skipFonts: false,
+              fontEmbedCSS: true,
+              style: { transform: 'none' }
             });
+
+            // Fallback: if the panel contains a Recharts SVG, capture the SVG directly
+            const svg = node.querySelector('svg.recharts-surface');
+            if (svg) {
+              try {
+                const svgImg = await toPng(svg, {
+                  cacheBust: true,
+                  pixelRatio: 2,
+                  backgroundColor: '#ffffff',
+                  skipFonts: false,
+                  fontEmbedCSS: true
+                });
+                // Prefer the panel image, but if needed you can switch to svgImg
+                // For now, append the panel capture; svg capture helps labels render reliably
+                img = img || svgImg;
+              } catch (_) {}
+            }
+
             overviewImages.push(img);
           }
 

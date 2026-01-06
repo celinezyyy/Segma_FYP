@@ -300,30 +300,50 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
     }
     doc.fillColor('#000');
   // ======================== Overview Charts ========================
-      // Optional dashboard images (overview + clusters)
-      const addImage = (img, caption) => {
-        try {
-          if (!img) return;
-          const base64 = String(img).replace(/^data:image\/[a-zA-Z]+;base64,/, '');
-          const buf = Buffer.from(base64, 'base64');
-          doc.addPage();
-          if (caption) {
-            doc.fontSize(14).text(caption, { underline: true });
-            doc.moveDown(0.5);
-          }
-          const fitW = doc.page.width - 72; // account for margins
-          const fitH = doc.page.height - 144; // header + margin space
-          doc.image(buf, { fit: [fitW, fitH], align: 'center' });
-        } catch {}
+      // Group multiple dashboard images per page (up to 3 per page)
+      const toBuffer = (img) => {
+        if (!img) return null;
+        const base64 = String(img).replace(/^data:image\/[a-zA-Z]+;base64,/, '');
+        try { return Buffer.from(base64, 'base64'); } catch { return null; }
       };
 
-      if (Array.isArray(images?.overview)) {
-        images.overview.forEach((img, i) => addImage(img, `Overview Chart ${i + 1}`));
-      } else if (images?.overview) {
-        addImage(images.overview, 'Overview Dashboard');
-      }
-      if (Array.isArray(images?.clusters)) {
-        images.clusters.forEach((img, i) => addImage(img, `Cluster Dashboard ${i + 1}`));
+      const addImagesPage = (imgs, captions) => {
+        const valid = imgs.map(toBuffer).filter(Boolean);
+        if (!valid.length) return;
+        doc.addPage();
+        const top = 36; // margin top
+        const left = 36; // margin left
+        const right = doc.page.width - 36; // margin right
+        const bottom = doc.page.height - 36; // margin bottom
+        const availableW = right - left;
+        const availableH = bottom - top;
+        const gap = 12;
+        const rows = valid.length; // stack vertically
+        const slotH = Math.floor((availableH - gap * (rows - 1)) / rows);
+
+        valid.forEach((buf, i) => {
+          const y = top + i * (slotH + gap);
+          // Optional caption
+          const caption = captions?.[i];
+          let captionOffset = 0;
+          if (caption) {
+            doc.fontSize(12).text(String(caption), left, y, { width: availableW, align: 'left' });
+            captionOffset = 18;
+          }
+          doc.image(buf, left, y + captionOffset, { fit: [availableW, slotH - captionOffset], align: 'center' });
+        });
+      };
+
+      const overviewImgs = Array.isArray(images?.overview) ? images.overview : (images?.overview ? [images.overview] : []);
+      if (overviewImgs.length) {
+        // Page 1: Spend, Distribution, Products
+        const page1 = overviewImgs.slice(0, 3);
+        addImagesPage(page1, ['Average Customer Spend per Segment', 'Customer Distribution by Cluster', 'Products by Popularity']);
+
+        // Page 2: Gender (if any), Age Group (if any), States by Revenue
+        const page2 = overviewImgs.slice(3);
+        const captions2 = ['Gender by Cluster', 'Age Group by Cluster', 'States by Revenue'].slice(0, page2.length);
+        addImagesPage(page2, captions2);
       }
 
       // Utilities: simple key-value table for cluster summary
@@ -342,6 +362,7 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
         return y + 8;
       };
 
+      doc.addPage();
       // ======================== Overview Clusters =========================
       const clusters = report.clusters || [];
       if (clusters.length) {
