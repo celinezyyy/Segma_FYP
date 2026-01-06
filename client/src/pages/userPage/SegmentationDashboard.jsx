@@ -326,9 +326,7 @@ export default function SegmentationDashboard() {
   const topProducts = useMemo(() => (
     Object.entries(productCounts)
       .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => (topProductsSortOrder === 'asc' ? a.count - b.count : b.count - a.count))
-      .slice(0, 5)
-  ), [productCounts, topProductsSortOrder]);
+  ), [productCounts]);
 
   // Cluster comparison datasets
   const clusterSpendData = useMemo(() => {
@@ -713,28 +711,30 @@ export default function SegmentationDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {topProducts
-                        .slice() // make a copy
-                        .sort((a, b) => topProductsSortOrder === 'asc' ? a.count - b.count : b.count - a.count)
-                        .map((p, index, arr) => {
-                          const rank = index; // 0 = first row
-                          const total = arr.length - 1;
-                          // Map rank to intensity: first row = darkest, last row = lightest
-                          const intensity = total > 0 ? 0.2 + ((total - rank) / total) * 0.6 : 0.2;
+                      {(() => {
+                        const sorted = topProducts
+                          .slice()
+                          .sort((a, b) => (topProductsSortOrder === 'asc' ? a.count - b.count : b.count - a.count));
+                        const counts = sorted.map(x => x.count);
+                        const minC = counts.length ? Math.min(...counts) : 0;
+                        const maxC = counts.length ? Math.max(...counts) : 0;
+                        const norm = (c) => (maxC === minC ? 0.5 : (c - minC) / (maxC - minC));
 
+                        return sorted.map((p) => {
+                          const t = norm(p.count);
+                          const intensity = 0.2 + t * 0.6; // 0.2 (light) to 0.8 (dark)
                           return (
                             <tr
                               key={p.name}
                               className="transition-colors hover:bg-gray-100"
-                              style={{
-                                backgroundColor: `rgba(37, 99, 235, ${intensity})`,
-                              }}
+                              style={{ backgroundColor: `rgba(37, 99, 235, ${intensity})` }}
                             >
                               <td className="py-2 px-3 border-b border-r border-gray-400">{p.name}</td>
                               <td className="py-2 px-3 text-right border-b border-gray-400">{p.count.toLocaleString()}</td>
                             </tr>
                           );
-                        })}
+                        });
+                      })()}
                     </tbody>
                   </table>
                 </div>
