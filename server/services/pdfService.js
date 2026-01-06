@@ -331,19 +331,25 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
             captionOffset = 18;
           }
           doc.image(buf, left, y + captionOffset, { fit: [availableW, slotH - captionOffset], align: 'center' });
+          // Border around chart area
+          doc.save().strokeColor('#E2E8F0').lineWidth(0.75)
+            .roundedRect(left, y + captionOffset, availableW, Math.max(0, slotH - captionOffset), 6)
+            .stroke().restore();
         });
       };
 
       const overviewImgs = Array.isArray(images?.overview) ? images.overview : (images?.overview ? [images.overview] : []);
+      const overviewCaptions = Array.isArray(images?.overviewCaptions) ? images.overviewCaptions : [];
       if (overviewImgs.length) {
         // Page 1: Spend, Distribution, Products
         const page1 = overviewImgs.slice(0, 3);
-        addImagesPage(page1, ['Average Customer Spend per Segment', 'Customer Distribution by Cluster', 'Products by Popularity']);
+        const cap1 = overviewCaptions.slice(0, page1.length);
+        addImagesPage(page1, cap1);
 
         // Page 2: Gender (if any), Age Group (if any), States by Revenue
-        const page2 = overviewImgs.slice(3);
-        const captions2 = ['Gender by Cluster', 'Age Group by Cluster', 'States by Revenue'].slice(0, page2.length);
-        addImagesPage(page2, captions2);
+        const page2 = overviewImgs.slice(page1.length);
+        const cap2 = overviewCaptions.slice(page1.length, page1.length + page2.length);
+        addImagesPage(page2, cap2);
       }
 
       // Utilities: simple key-value table for cluster summary

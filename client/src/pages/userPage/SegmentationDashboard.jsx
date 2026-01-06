@@ -491,13 +491,6 @@ export default function SegmentationDashboard() {
         if (saving) return;
         if (!segmentationId || !Array.isArray(summaries) || summaries.length === 0) return;
         setSaving(true);
-        Swal.fire({
-          title: 'Saving report…',
-          allowOutsideClick: false,
-          allowEscapeKey: false,
-          showConfirmButton: false,
-          didOpen: () => { Swal.showLoading(); },
-        });
         // Retrieve dataset IDs from cache so dedup works server-side
         let customerDatasetId = null;
         let orderDatasetId = null;
@@ -520,22 +513,26 @@ export default function SegmentationDashboard() {
         };
 
         // Capture key dashboard panels as images for clearer PDF pages
-        const panelNodes = [
-          spendPanelRef.current,
-          distributionPanelRef.current,
-          productsPanelRef.current,
-          hasGender ? genderPanelRef.current : null,
-          hasAgeGroup ? agePanelRef.current : null,
-          stateChartWrapperRef.current,
+        const nodesWithCaptions = [
+          { node: spendPanelRef.current, caption: 'Average Customer Spend per Segment' },
+          { node: distributionPanelRef.current, caption: 'Customer Distribution by Cluster' },
+          { node: productsPanelRef.current, caption: 'Products by Popularity' },
+          hasGender ? { node: genderPanelRef.current, caption: 'Gender by Cluster' } : null,
+          hasAgeGroup ? { node: agePanelRef.current, caption: 'Age Group by Cluster' } : null,
+          { node: stateChartWrapperRef.current, caption: 'States by Revenue' },
         ].filter(Boolean);
         try {
           const overviewImages = [];
+          const overviewCaptions = [];
           // for (const node of panelNodes) {
           //   const img = await toPng(node, { cacheBust: true, pixelRatio: 2, backgroundColor: '#ffffff' });
           //   overviewImages.push(img);
           // }
 
-          for (const node of panelNodes) {
+          // Let charts finish rendering text/labels
+          await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+
+          for (const { node, caption } of nodesWithCaptions) {
             // Force a tiny delay + reflow to ensure labels are rendered
             await new Promise(resolve => setTimeout(resolve, 600));
 
@@ -567,14 +564,23 @@ export default function SegmentationDashboard() {
             }
 
             overviewImages.push(img);
+            overviewCaptions.push(caption);
           }
 
           if (overviewImages.length) {
-            payload.images = { overview: overviewImages };
+            payload.images = { overview: overviewImages, overviewCaptions };
           }
         } catch (captureErr) {
           console.warn('Panel capture failed, continuing without images:', captureErr?.message);
         }
+        // Show loading spinner only after captures complete, to avoid interfering with chart rendering
+        Swal.fire({
+          title: 'Saving report…',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          didOpen: () => { Swal.showLoading(); },
+        });
         const res = await axios.post(`${backendUrl}/api/reports/save-report`, payload, { withCredentials: true });
         const id = res?.data?.data?.id;
         const pdf = res?.data?.data?.pdf;
