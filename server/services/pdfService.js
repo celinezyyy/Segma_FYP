@@ -29,14 +29,14 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       // Pipe PDF into GridFS
       doc.pipe(uploadStream);
 
-      // Header
+      // PDF Header
       doc.font('Helvetica-Bold').fontSize(20).text('Customer Segmentation Report', { align: 'center' });
       doc.moveDown(0.3);
       doc.fontSize(10).fillColor('#666').text(`Generated: ${new Date().toLocaleString()}`, { align: 'center' });
       doc.moveDown(1);
       doc.fillColor('#000');
 
-      // Overview
+      // Overview Dashboard
       doc.font('Helvetica-Bold').fontSize(15)
         .text(`Customer Segmentation Dashboard Overview`, 36, doc.y, {
           width: doc.page.width - 72,
@@ -58,6 +58,7 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       doc.font('Helvetica').text(`${ordName}`);
       doc.moveDown(0.3);
 
+      // Segment Table
       const segments = Array.isArray(report.clusters) ? report.clusters : [];
       if (segments.length) {
         doc.moveDown(0.5);
@@ -67,7 +68,8 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
             align: 'center'
           });
 
-        const startY = doc.y + 20;
+        // Reduce top padding before the table by using a smaller offset
+        const startY = doc.y + 10;
         const colW1 = 220;                    // Name column
         const colW2 = doc.page.width - 36 * 2 - colW1 - 12; // Description column (full remaining width)
         const tableWidth = colW1 + 12 + colW2;
@@ -77,7 +79,7 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
 
         const borderColor = '#CCC';
         const headerBgColor = '#F0F0F0';       // Light gray background for header
-        const cellPadding = 2;
+        const cellPadding = 10;
 
         doc.lineWidth(0.5).strokeColor(borderColor);
 
@@ -119,7 +121,7 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
           });
           const descHeight = doc.heightOfString(String(desc), {
             width: colW2 - 2 * cellPadding,
-            fontSize: 10,
+            fontSize: 12,
             lineGap: 2
           });
 
@@ -146,21 +148,20 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
             y += headerHeight;
           }
 
-          // Draw cell background (optional: alternate row colors)
-          // doc.fillColor(idx % 2 === 0 ? '#FAFAFA' : '#FFFFFF').rect(leftX, y, tableWidth, rowHeight).fill();
-
-          // Draw text
+          // Draw text inside cells (explicit positions per row)
+          doc.save();
           doc.fillColor('#000').fontSize(12);
           doc.text(String(name), leftX + cellPadding, y + cellPadding, {
             width: colW1 - 2 * cellPadding,
-            lineBreak: true
+            align: 'left'
           });
 
-          doc.fontSize(10).fillColor('#333');
+          doc.fontSize(12).fillColor('#333');
           doc.text(String(desc), midX + cellPadding, y + cellPadding, {
             width: colW2 - 2 * cellPadding,
-            lineBreak: true
+            align: 'left'
           });
+          doc.restore();
 
           // Draw borders
           doc.strokeColor(borderColor)
