@@ -17,7 +17,7 @@ const makeUniqueFilename = (report) => {
 export const generateAndStoreReportPDF = ({ report, userId, images }) => {
   return new Promise((resolve, reject) => {
     try {
-      const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 36 });
+      const doc = new PDFDocument({ size: 'A4', layout: 'portrait', margin: 36 });
       const filename = makeUniqueFilename(report);
 
       const bucket = getReportsBucket();
@@ -79,14 +79,20 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
 
         const borderColor = '#CCC';
         const headerBgColor = '#F0F0F0';       // Light gray background for header
-        const cellPadding = 10;
+        const cellPadding = 12;
 
         doc.lineWidth(0.5).strokeColor(borderColor);
 
         let y = startY;
 
         // === HEADER ROW ===
-        const headerHeight = 30;
+        // Header height: follow single-line body row height (fixed)
+        doc.font('Helvetica-Bold').fontSize(13);
+        const headerLineHeight = Math.max(
+          doc.heightOfString('Segment Name', { width: colW1 - 2 * cellPadding, lineGap: 0 }),
+          doc.heightOfString('Description', { width: colW2 - 2 * cellPadding, lineGap: 0 })
+        );
+        const headerHeight = headerLineHeight + 2 * cellPadding;
         const headerTextY = y + cellPadding;
 
         // Background fill for header
@@ -96,8 +102,8 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
 
         // Header text (bold, dark)
         doc.fillColor('#111').font('Helvetica-Bold').fontSize(12);
-        doc.text('Segment Name', leftX + cellPadding, headerTextY, { width: colW1 });
-        doc.text('Description', midX + cellPadding, headerTextY, { width: colW2 });
+        doc.text('Segment Name', leftX + cellPadding, headerTextY, { width: colW1, lineBreak: false });
+        doc.text('Description', midX + cellPadding, headerTextY, { width: colW2, lineBreak: false });
 
         // Header borders (stroke over the fill)
         doc.strokeColor(borderColor)
@@ -114,19 +120,21 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
           const name = s.suggestedName || `${s.cluster ?? idx + 1} Group`;
           const desc = s.description || '—';
 
-          // Temporarily measure height of both columns
+          // Measure heights using actual font sizes and a small line gap for readability
+          doc.fontSize(12);
           const nameHeight = doc.heightOfString(String(name), {
             width: colW1 - 2 * cellPadding,
             lineGap: 2
           });
+          doc.fontSize(10);
           const descHeight = doc.heightOfString(String(desc), {
             width: colW2 - 2 * cellPadding,
-            fontSize: 12,
             lineGap: 2
           });
+          doc.fontSize(12); // restore default for subsequent drawing
 
           const contentHeight = Math.max(nameHeight, descHeight);
-          const rowHeight = contentHeight + 2 * cellPadding + 8; // Extra padding at top/bottom
+          const rowHeight = contentHeight + 2 * cellPadding; // minimal padding
 
           // Page break check
           if (y + rowHeight > doc.page.height - 72) {
@@ -138,8 +146,8 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
               .rect(leftX, y, tableWidth, headerHeight)
               .fill();
             doc.fillColor('#111').font('Helvetica-Bold').fontSize(12);
-            doc.text('Segment Name', leftX + cellPadding, y + cellPadding, { width: colW1 });
-            doc.text('Description', midX + cellPadding, y + cellPadding, { width: colW2 });
+            doc.text('Segment Name', leftX + cellPadding, y + cellPadding, { width: colW1, lineBreak: false });
+            doc.text('Description', midX + cellPadding, y + cellPadding, { width: colW2, lineBreak: false });
             doc.strokeColor(borderColor)
               .rect(leftX, y, tableWidth, headerHeight)
               .stroke();
@@ -153,13 +161,17 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
           doc.fillColor('#000').fontSize(12);
           doc.text(String(name), leftX + cellPadding, y + cellPadding, {
             width: colW1 - 2 * cellPadding,
-            align: 'left'
+            align: 'left',
+            lineBreak: true,
+            lineGap: 2
           });
 
           doc.fontSize(12).fillColor('#333');
           doc.text(String(desc), midX + cellPadding, y + cellPadding, {
             width: colW2 - 2 * cellPadding,
-            align: 'left'
+            align: 'left',
+            lineBreak: true,
+            lineGap: 2
           });
           doc.restore();
 
@@ -189,21 +201,17 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       { title: 'Average Purchases Per Month', value: k.overallAvgFrequency ?? '—' },
     ];
 
-    doc.moveDown(1.0);
-    // Ensure heading is centered relative to content area
-    const headingX = 36;
-    const headingWidth = doc.page.width - 72;
-    doc.font('Helvetica-Bold').fontSize(14).text('Key Metrics', headingX, doc.y, { width: headingWidth, align: 'center' });
-    doc.moveDown(0.5);
+    doc.moveDown(2.0);
 
-    const cardWidth = 170;        // Smaller card
-    const cardHeight = 55;        // Compact height
+    const cardWidth = 160;        // Slightly smaller card width for portrait
+    const cardHeight = 55;        // Card height
     const horizontalGap = 20;
     const verticalGap = 16;
-    const cardsPerRow = 3;        // Fits nicely on A4 with margins
     const margin = 36;            // Page margin used when creating PDF
     const contentWidth = doc.page.width - margin * 2;
     const startY = doc.y;
+    // Determine max cards per row based on available width (portrait-safe)
+    const maxPerRow = Math.max(1, Math.floor((contentWidth + horizontalGap) / (cardWidth + horizontalGap)));
 
     // Helper to center a row with N items
     const centerXForRow = (items) => {
@@ -213,9 +221,9 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
 
     let y = startY;
     cards.forEach((card, index) => {
-      const inRowIndex = index % cardsPerRow;
+      const inRowIndex = index % maxPerRow;
       const isRowStart = inRowIndex === 0;
-      const itemsThisRow = Math.min(cardsPerRow, cards.length - index);
+      const itemsThisRow = Math.min(maxPerRow, cards.length - index);
 
       // Move to next row (except on very first)
       if (index > 0 && isRowStart) {
@@ -239,7 +247,6 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       // Title (fit to width by reducing font size if needed)
       doc.fillColor('#374151').font('Helvetica-Bold');
       let titleFont = 10;
-      const titleMax = 10;
       const titleMin = 8;
       const titleBox = cardWidth - 24;
       while (titleFont > titleMin && doc.widthOfString(String(card.title), { font: 'Helvetica-Bold', size: titleFont }) > titleBox) {
