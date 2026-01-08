@@ -649,7 +649,6 @@ export default function SegmentationDashboard() {
             }
 
             pages.push(canvas.toDataURL('image/png'));
-            captions.push('Dashboard Overview');
           } else {
             // Fallback: push any available individual image
             const seq = [spendImg, distImg, prodImg, ageImg, genderImg, stateImg].filter(Boolean);

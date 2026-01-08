@@ -259,7 +259,7 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       const kpiImgs = Array.isArray(images?.kpi) ? images.kpi : (images?.kpi ? [images.kpi] : []);
       if (kpiImgs.length) {
         // Render KPI images inline after the table (no new page unless necessary)
-        kpiImgs.forEach((img) => addImageInline(img, 'Key Metrics'));
+        kpiImgs.forEach((img) => addImageInline(img));
       } else {
         // Fallback: draw KPI cards (legacy)
         const k = report.kpis || {};
@@ -398,7 +398,7 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       // ======================== Segment Cards =========================
       const segmentImgs = Array.isArray(images?.segments) ? images.segments : (images?.segments ? [images.segments] : []);
       if (segmentImgs.length) {
-        segmentImgs.forEach((img) => addImagesPage([img], ['Customer Groups']));
+        segmentImgs.forEach((img) => addImagesPage([img]));
       } else {
         // Fallback: legacy text-based cluster details
         doc.addPage();
