@@ -557,59 +557,78 @@ export default function SegmentationDashboard() {
           const ageImg = hasAgeGroup ? await capture(agePanelRef.current) : null;
           const stateImg = await capture(stateChartWrapperRef.current);
 
+          // Compose ALL sections into a SINGLE page image
           const pages = [];
           const captions = [];
 
-          // Compose Page 1: Spend (left span 2), Distribution (top-right), Products (bottom-right)
           if (spendImg && distImg && prodImg) {
-            const W = 1800, H = 1200; const pad = 24; const gap = 24;
-            const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H; const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
-            const colLeftW = Math.round((W - pad * 2 - gap) * 0.6);
-            const colRightW = (W - pad * 2 - gap) - colLeftW;
-            const leftX = pad, leftY = pad, leftH = H - pad * 2;
-            const rightX = leftX + colLeftW + gap;
-            const rightTopY = pad, rightBotY = Math.round(pad + (leftH - gap) / 2) + gap;
-            const rightSlotH = Math.round((leftH - gap) / 2);
+            const W = 1800; const pad = 24; const gap = 24;
+            // Preload images and compute dimensions
             const imSpend = await loadImage(spendImg);
             const imDist = await loadImage(distImg);
             const imProd = await loadImage(prodImg);
+            const imAge = ageImg ? await loadImage(ageImg) : null;
+            const imGender = genderImg ? await loadImage(genderImg) : null;
+            const imState = stateImg ? await loadImage(stateImg) : null;
+            const hasDemographics = Boolean(imAge || imGender);
+
+            // Layout sizes
+            const topH = 1100; // region for spend + distribution/products
+            const demoTopH = hasDemographics ? 480 : 0; // age/gender row height
+            const stateH = imState ? Math.max(300, Math.round((imState.height * W) / imState.width)) : 0; // scale state to full canvas width
+            const bottomH = (hasDemographics ? demoTopH : 0) + (imState ? (hasDemographics ? gap : 0) + stateH : 0);
+            const H = pad + topH + (bottomH ? gap + bottomH : 0) + pad;
+
+            const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H; const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+
+            // Inner dimensions for top and demographics
+            const innerW = W - pad * 2;
+            const colLeftW = Math.round(innerW * 0.6);
+            const colRightW = innerW - colLeftW - gap;
+
+            // Top section positions
+            const leftX = pad, leftY = pad, leftH = topH;
+            const rightX = leftX + colLeftW + gap;
+            const rightTopY = pad, rightBotY = pad + Math.round((topH - gap) / 2) + gap;
+            const rightSlotH = Math.round((topH - gap) / 2);
+
+            // Draw top three charts
             drawContain(ctx, imSpend, leftX, leftY, colLeftW, leftH);
             drawContain(ctx, imDist, rightX, rightTopY, colRightW, rightSlotH);
             drawContain(ctx, imProd, rightX, rightBotY, colRightW, rightSlotH);
-            pages.push(canvas.toDataURL('image/png'));
-            captions.push('Overview: Spend, Distribution, Products');
-          }
 
-          // Compose Page 2 according to availability
-          const hasDemographics = Boolean(genderImg || ageImg);
-          if (hasDemographics && stateImg) {
-            const W = 1800, H = 1200; const pad = 24; const gap = 24;
-            const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H; const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
-            const topH = Math.round((H - pad * 2 - gap) * 0.45);
-            const botH = (H - pad * 2 - gap) - topH;
-            const halfW = Math.round((W - pad * 2 - gap) / 2);
-            let xL = pad, xR = pad + halfW + gap; const topY = pad; const botY = pad + topH + gap;
-            const imAge = ageImg ? await loadImage(ageImg) : null;
-            const imGender = genderImg ? await loadImage(genderImg) : null;
-            const imState = await loadImage(stateImg);
-            if (imAge && imGender) {
-              drawContain(ctx, imAge, xL, topY, halfW, topH);
-              drawContain(ctx, imGender, xR, topY, halfW, topH);
-            } else if (imAge || imGender) {
-              // center single top chart
-              const single = imAge || imGender;
-              const cX = pad + (W - pad * 2 - halfW) / 2 - halfW / 2;
-              drawContain(ctx, single, cX, topY, halfW, topH);
+            // Bottom section start Y
+            const bottomY = pad + topH + (bottomH ? gap : 0);
+            if (hasDemographics) {
+              const halfW = Math.round((innerW - gap) / 2);
+              const xL = pad; const xR = pad + halfW + gap;
+              if (imAge && imGender) {
+                drawContain(ctx, imAge, xL, bottomY, halfW, demoTopH);
+                drawContain(ctx, imGender, xR, bottomY, halfW, demoTopH);
+              } else {
+                const single = imAge || imGender;
+                if (single) {
+                  const cX = pad + (innerW - halfW) / 2 - halfW / 2;
+                  drawContain(ctx, single, cX, bottomY, halfW, demoTopH);
+                }
+              }
             }
-            drawContain(ctx, imState, pad, botY, W - pad * 2, botH);
+            if (imState) {
+              const stateY = hasDemographics ? bottomY + demoTopH + gap : bottomY;
+              // Draw state chart at full canvas width (no left/right padding), preserving aspect ratio
+              ctx.drawImage(imState, 0, stateY, W, stateH);
+            }
+
             pages.push(canvas.toDataURL('image/png'));
-            captions.push('Demographics & States');
-          } else if (stateImg) {
-            // Only state in its own page
-            pages.push(stateImg);
-            captions.push('States by Revenue');
+            captions.push('Dashboard Overview');
+          } else {
+            // Fallback: push any available individual image
+            const seq = [spendImg, distImg, prodImg, ageImg, genderImg, stateImg].filter(Boolean);
+            if (seq.length) {
+              pages.push(seq[0]);
+              captions.push('Dashboard Overview');
+            }
           }
 
           if (pages.length) {
