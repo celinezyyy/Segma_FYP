@@ -341,15 +341,8 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       const overviewImgs = Array.isArray(images?.overview) ? images.overview : (images?.overview ? [images.overview] : []);
       const overviewCaptions = Array.isArray(images?.overviewCaptions) ? images.overviewCaptions : [];
       if (overviewImgs.length) {
-        // Page 1: Spend, Distribution, Products
-        const page1 = overviewImgs.slice(0, 3);
-        const cap1 = overviewCaptions.slice(0, page1.length);
-        addImagesPage(page1, cap1);
-
-        // Page 2: Gender (if any), Age Group (if any), States by Revenue
-        const page2 = overviewImgs.slice(page1.length);
-        const cap2 = overviewCaptions.slice(page1.length, page1.length + page2.length);
-        addImagesPage(page2, cap2);
+        // Each overview image is already a composed page. Render one per PDF page.
+        overviewImgs.forEach((img, i) => addImagesPage([img], [overviewCaptions[i]]));
       }
 
       // Utilities: simple key-value table for cluster summary
@@ -373,9 +366,13 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
       const clusters = report.clusters || [];
       if (clusters.length) {
         doc.moveDown(1);
-        doc.fontSize(14).text(`Clusters (${clusters.length})`, { underline: true });
         clusters.forEach((c, idx) => {
           doc.addPage();
+            doc.font('Helvetica-Bold').fontSize(15).text(`Customer Group Detailed Dashboard`, 36, doc.y, {
+              width: doc.page.width - 72,
+              underline: true,
+              align: 'center'
+            });
           doc.fontSize(12).text(`${idx + 1}. ${c.suggestedName || `Cluster ${c.cluster}`}`, { underline: true });
           doc.moveDown(0.5);
           const nextY = drawKVTable([

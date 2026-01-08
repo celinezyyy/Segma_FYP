@@ -512,31 +512,14 @@ export default function SegmentationDashboard() {
           generatePdf: true,
         };
 
-        // Capture key dashboard panels as images for clearer PDF pages
-        const nodesWithCaptions = [
-          { node: spendPanelRef.current, caption: 'Average Customer Spend per Segment' },
-          { node: distributionPanelRef.current, caption: 'Customer Distribution by Cluster' },
-          { node: productsPanelRef.current, caption: 'Products by Popularity' },
-          hasGender ? { node: genderPanelRef.current, caption: 'Gender by Cluster' } : null,
-          hasAgeGroup ? { node: agePanelRef.current, caption: 'Age Group by Cluster' } : null,
-          { node: stateChartWrapperRef.current, caption: 'States by Revenue' },
-        ].filter(Boolean);
+        // Capture and COMPOSE images into page-specific grids for PDF only (do not change UI)
         try {
-          const overviewImages = [];
-          const overviewCaptions = [];
-          // for (const node of panelNodes) {
-          //   const img = await toPng(node, { cacheBust: true, pixelRatio: 2, backgroundColor: '#ffffff' });
-          //   overviewImages.push(img);
-          // }
-
-          // Let charts finish rendering text/labels
-          await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
-
-          for (const { node, caption } of nodesWithCaptions) {
-            // Force a tiny delay + reflow to ensure labels are rendered
-            await new Promise(resolve => setTimeout(resolve, 600));
-
-            // Primary capture of the full panel
+          // Helpers
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          const capture = async (node) => {
+            if (!node) return null;
+            // small delay to ensure labels render
+            await sleep(1000);
             let img = await toPng(node, {
               cacheBust: true,
               pixelRatio: 2,
@@ -545,30 +528,92 @@ export default function SegmentationDashboard() {
               fontEmbedCSS: true,
               style: { transform: 'none' }
             });
-
-            // Fallback: if the panel contains a Recharts SVG, capture the SVG directly
-            const svg = node.querySelector('svg.recharts-surface');
+            const svg = node.querySelector?.('svg.recharts-surface');
             if (svg) {
               try {
-                const svgImg = await toPng(svg, {
-                  cacheBust: true,
-                  pixelRatio: 2,
-                  backgroundColor: '#ffffff',
-                  skipFonts: false,
-                  fontEmbedCSS: true
-                });
-                // Prefer the panel image, but if needed you can switch to svgImg
-                // For now, append the panel capture; svg capture helps labels render reliably
+                const svgImg = await toPng(svg, { cacheBust: true, pixelRatio: 2, backgroundColor: '#ffffff' });
                 img = img || svgImg;
-              } catch (_) {}
+              } catch {}
             }
+            return img;
+          };
+          const loadImage = (src) => new Promise((resolve) => { const im = new Image(); im.onload = () => resolve(im); im.src = src; });
+          const drawContain = (ctx, im, x, y, w, h) => {
+            if (!im) return;
+            const sx = w / im.width; const sy = h / im.height; const s = Math.min(sx, sy);
+            const dw = im.width * s; const dh = im.height * s;
+            const dx = x + (w - dw) / 2; const dy = y + (h - dh) / 2;
+            ctx.drawImage(im, dx, dy, dw, dh);
+          };
 
-            overviewImages.push(img);
-            overviewCaptions.push(caption);
+          // Let charts finish initial render
+          await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+
+          // Capture panels individually
+          const spendImg = await capture(spendPanelRef.current);
+          const distImg = await capture(distributionPanelRef.current);
+          const prodImg = await capture(productsPanelRef.current);
+          const genderImg = hasGender ? await capture(genderPanelRef.current) : null;
+          const ageImg = hasAgeGroup ? await capture(agePanelRef.current) : null;
+          const stateImg = await capture(stateChartWrapperRef.current);
+
+          const pages = [];
+          const captions = [];
+
+          // Compose Page 1: Spend (left span 2), Distribution (top-right), Products (bottom-right)
+          if (spendImg && distImg && prodImg) {
+            const W = 1800, H = 1200; const pad = 24; const gap = 24;
+            const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H; const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+            const colLeftW = Math.round((W - pad * 2 - gap) * 0.6);
+            const colRightW = (W - pad * 2 - gap) - colLeftW;
+            const leftX = pad, leftY = pad, leftH = H - pad * 2;
+            const rightX = leftX + colLeftW + gap;
+            const rightTopY = pad, rightBotY = Math.round(pad + (leftH - gap) / 2) + gap;
+            const rightSlotH = Math.round((leftH - gap) / 2);
+            const imSpend = await loadImage(spendImg);
+            const imDist = await loadImage(distImg);
+            const imProd = await loadImage(prodImg);
+            drawContain(ctx, imSpend, leftX, leftY, colLeftW, leftH);
+            drawContain(ctx, imDist, rightX, rightTopY, colRightW, rightSlotH);
+            drawContain(ctx, imProd, rightX, rightBotY, colRightW, rightSlotH);
+            pages.push(canvas.toDataURL('image/png'));
+            captions.push('Overview: Spend, Distribution, Products');
           }
 
-          if (overviewImages.length) {
-            payload.images = { overview: overviewImages, overviewCaptions };
+          // Compose Page 2 according to availability
+          const hasDemographics = Boolean(genderImg || ageImg);
+          if (hasDemographics && stateImg) {
+            const W = 1800, H = 1200; const pad = 24; const gap = 24;
+            const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H; const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+            const topH = Math.round((H - pad * 2 - gap) * 0.45);
+            const botH = (H - pad * 2 - gap) - topH;
+            const halfW = Math.round((W - pad * 2 - gap) / 2);
+            let xL = pad, xR = pad + halfW + gap; const topY = pad; const botY = pad + topH + gap;
+            const imAge = ageImg ? await loadImage(ageImg) : null;
+            const imGender = genderImg ? await loadImage(genderImg) : null;
+            const imState = await loadImage(stateImg);
+            if (imAge && imGender) {
+              drawContain(ctx, imAge, xL, topY, halfW, topH);
+              drawContain(ctx, imGender, xR, topY, halfW, topH);
+            } else if (imAge || imGender) {
+              // center single top chart
+              const single = imAge || imGender;
+              const cX = pad + (W - pad * 2 - halfW) / 2 - halfW / 2;
+              drawContain(ctx, single, cX, topY, halfW, topH);
+            }
+            drawContain(ctx, imState, pad, botY, W - pad * 2, botH);
+            pages.push(canvas.toDataURL('image/png'));
+            captions.push('Demographics & States');
+          } else if (stateImg) {
+            // Only state in its own page
+            pages.push(stateImg);
+            captions.push('States by Revenue');
+          }
+
+          if (pages.length) {
+            payload.images = { overview: pages, overviewCaptions: captions };
           }
         } catch (captureErr) {
           console.warn('Panel capture failed, continuing without images:', captureErr?.message);
