@@ -22,6 +22,7 @@ import {
   // Removed Radar/Treemap as we switch to bar charts
 } from 'recharts';
 import { Users, DollarSign, ShoppingBag, TrendingUp, ArrowLeft, Save, FileText, HelpCircle } from 'lucide-react';
+import ClusterDetailView from '../../components/ClusterDetailView';
 import Swal from 'sweetalert2';
 import { buildSegmentationKey, getCache, setCache, pruneExpired, pruneToCapacity } from '../../utils/localCache';
 
@@ -41,6 +42,9 @@ export default function SegmentationDashboard() {
   const productsPanelRef = useRef(null);
   const genderPanelRef = useRef(null);
   const agePanelRef = useRef(null);
+  const overviewCaptureRef = useRef(null);
+  const clusterSnapshotsContainerRef = useRef(null);
+  const clusterSnapRefs = useRef([]);
   const [loading, setLoading] = useState(true);
   const [stateSortOrder, setStateSortOrder] = useState('desc'); // 'asc' | 'desc'
   const [selectedStateFilter, setSelectedStateFilter] = useState(null);
@@ -185,6 +189,7 @@ export default function SegmentationDashboard() {
       </div>
     );
   };
+
   
   // ---------------- Hooks / Data ----------------
   // RFM-only: simplify pair handling
@@ -574,94 +579,28 @@ export default function SegmentationDashboard() {
           // Let charts finish initial render
           await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
 
-          // Capture panels individually
-          const spendImg = await capture(spendPanelRef.current);
-          const distImg = await capture(distributionPanelRef.current);
-          const prodImg = await capture(productsPanelRef.current);
-          const genderImg = hasGender ? await capture(genderPanelRef.current) : null;
-          const ageImg = hasAgeGroup ? await capture(agePanelRef.current) : null;
-          const stateImg = await capture(stateChartWrapperRef.current);
           // Capture KPI grid and Segment cards grid exactly as seen
           const kpiImg = await capture(kpiGridRef.current);
           const segmentsImg = await capture(segmentsGridRef.current);
 
-          // Compose ALL sections into a SINGLE page image
-          const pages = [];
-          const captions = [];
-
-          if (spendImg && distImg && prodImg) {
-            const W = 1800; const pad = 24; const gap = 24;
-            // Preload images and compute dimensions
-            const imSpend = await loadImage(spendImg);
-            const imDist = await loadImage(distImg);
-            const imProd = await loadImage(prodImg);
-            const imAge = ageImg ? await loadImage(ageImg) : null;
-            const imGender = genderImg ? await loadImage(genderImg) : null;
-            const imState = stateImg ? await loadImage(stateImg) : null;
-            const hasDemographics = Boolean(imAge || imGender);
-
-            // Layout sizes
-            const topH = 1100; // region for spend + distribution/products
-            const demoTopH = hasDemographics ? 480 : 0; // age/gender row height
-            const stateH = imState ? Math.max(300, Math.round((imState.height * W) / imState.width)) : 0; // scale state to full canvas width
-            const bottomH = (hasDemographics ? demoTopH : 0) + (imState ? (hasDemographics ? gap : 0) + stateH : 0);
-            const H = pad + topH + (bottomH ? gap + bottomH : 0) + pad;
-
-            const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H; const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
-
-            // Inner dimensions for top and demographics
-            const innerW = W - pad * 2;
-            const colLeftW = Math.round(innerW * 0.6);
-            const colRightW = innerW - colLeftW - gap;
-
-            // Top section positions
-            const leftX = pad, leftY = pad, leftH = topH;
-            const rightX = leftX + colLeftW + gap;
-            const rightTopY = pad, rightBotY = pad + Math.round((topH - gap) / 2) + gap;
-            const rightSlotH = Math.round((topH - gap) / 2);
-
-            // Draw top three charts
-            drawContain(ctx, imSpend, leftX, leftY, colLeftW, leftH);
-            drawContain(ctx, imDist, rightX, rightTopY, colRightW, rightSlotH);
-            drawContain(ctx, imProd, rightX, rightBotY, colRightW, rightSlotH);
-
-            // Bottom section start Y
-            const bottomY = pad + topH + (bottomH ? gap : 0);
-            if (hasDemographics) {
-              const halfW = Math.round((innerW - gap) / 2);
-              const xL = pad; const xR = pad + halfW + gap;
-              if (imAge && imGender) {
-                drawContain(ctx, imAge, xL, bottomY, halfW, demoTopH);
-                drawContain(ctx, imGender, xR, bottomY, halfW, demoTopH);
-              } else {
-                const single = imAge || imGender;
-                if (single) {
-                  const cX = pad + (innerW - halfW) / 2 - halfW / 2;
-                  drawContain(ctx, single, cX, bottomY, halfW, demoTopH);
-                }
-              }
+          // Capture Overview charts section as a single WYSIWYG image (like cluster pages)
+          let pages = [];
+          try {
+            const overviewImg = await toPng(overviewCaptureRef.current, {
+              cacheBust: true,
+              pixelRatio: 2,
+              backgroundColor: '#ffffff',
+              // Render at fixed width for consistent PDF scaling
+              style: { width: '1800px' }
+            });
+            if (overviewImg) {
+              pages = await sliceIntoPages(overviewImg);
             }
-            if (imState) {
-              const stateY = hasDemographics ? bottomY + demoTopH + gap : bottomY;
-              // Draw state chart at full canvas width (no left/right padding), preserving aspect ratio
-              ctx.drawImage(imState, 0, stateY, W, stateH);
-            }
-
-            pages.push(canvas.toDataURL('image/png'));
-          } else {
-            // Fallback: push any available individual image
-            const seq = [spendImg, distImg, prodImg, ageImg, genderImg, stateImg].filter(Boolean);
-            if (seq.length) {
-              pages.push(seq[0]);
-              captions.push('Dashboard Overview');
-            }
-          }
+          } catch {}
 
           const imagesPayload = {};
           if (pages.length) {
             imagesPayload.overview = pages;
-            imagesPayload.overviewCaptions = captions;
           }
           // KPI grid as its own image page(s)
           if (kpiImg) {
@@ -673,6 +612,22 @@ export default function SegmentationDashboard() {
             const segPages = await sliceIntoPages(segmentsImg);
             if (segPages.length) imagesPayload.segments = segPages;
           }
+          // Cluster detail snapshots (one page per cluster)
+          try {
+            // Ensure the hidden snapshots are rendered
+            await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+            const clusterPages = [];
+            for (let i = 0; i < (summaries?.length || 0); i++) {
+              const node = clusterSnapRefs.current[i];
+              if (!node) continue;
+              const img = await toPng(node, { cacheBust: true, pixelRatio: 2, backgroundColor: '#ffffff' });
+              if (img) clusterPages.push(img);
+            }
+            if (clusterPages.length) imagesPayload.clusterDashboards = clusterPages;
+          } catch (e) {
+            console.warn('Cluster snapshot capture failed:', e?.message);
+          }
+
           if (Object.keys(imagesPayload).length) payload.images = imagesPayload;
         } catch (captureErr) {
           console.warn('Panel capture failed, continuing without images:', captureErr?.message);
@@ -783,6 +738,8 @@ export default function SegmentationDashboard() {
               <MetricCard title="Average Purchases Per Month" value={`${overallAvgFrequency}`} icon={<TrendingUp className="w-7 h-7 text-purple-600" />} bgColor="bg-purple-100" />
             </div>
 
+            {/* Overview charts wrapper for WYSIWYG PDF capture */}
+            <div ref={overviewCaptureRef}>
             {/* Row: Left spans 2 rows, right has two stacked panels */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-8 ">
               {/* Left: Avg Spend spanning two rows */}
@@ -1023,12 +980,21 @@ export default function SegmentationDashboard() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+            </div>
 
             {/* Segment Cards */}
             <h2 className="text-3xl font-bold text-center mt-16 mb-10 text-indigo-900">Explore Individual Segments</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8" ref={segmentsGridRef}>
               {summaries.map((seg, idx) => (
                 <SegmentCard key={seg.cluster} seg={seg} idx={idx} pairDescription={pairDescriptions[activePair]} />
+              ))}
+            </div>
+            {/* Hidden offscreen cluster snapshots for PDF capture */}
+            <div ref={clusterSnapshotsContainerRef} className="absolute -left-[20000px] top-0">
+              {summaries.map((seg, idx) => (
+                <div key={`snap-${seg.cluster}`} ref={el => (clusterSnapRefs.current[idx] = el)} className="mb-6 w-[1800px]">
+                  <ClusterDetailView seg={seg} />
+                </div>
               ))}
             </div>
           </div>

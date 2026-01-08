@@ -218,7 +218,9 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
           const caption = captions?.[i];
           let captionOffset = 0;
           if (caption) {
-            doc.fontSize(12).text(String(caption), left, y, { width: availableW, align: 'left' });
+            doc.font('Helvetica-Bold').fontSize(12).text(String(caption), left, y, { width: availableW, align: 'left' });
+            // restore default font for subsequent drawings
+            doc.font('Helvetica');
             captionOffset = 18;
           }
           doc.image(buf, left, y + captionOffset, { fit: [availableW, slotH - captionOffset], align: 'center' });
@@ -437,6 +439,55 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
               doc.list(topItems, { bulletRadius: 2 });
             }
           });
+        }
+      }
+
+      // ======================== Cluster Dashboards =========================
+      const clusterDashImgs = Array.isArray(images?.clusterDashboards) ? images.clusterDashboards : (images?.clusterDashboards ? [images.clusterDashboards] : []);
+      if (clusterDashImgs.length) {
+        const captions = clusterDashImgs.map((_, i) => {
+          const seg = segments?.[i];
+          const name = seg?.suggestedName || (typeof seg?.cluster !== 'undefined' ? `Cluster ${seg.cluster}` : `Cluster ${i + 1}`);
+          return `Customer Group ${i + 1} - \"${name}\"`;
+        });
+
+        // First cluster: draw section title and cluster 1 on the SAME page
+        const firstBuf = toBuffer(clusterDashImgs[0]);
+        if (firstBuf) {
+          const margin = 36;
+          const left = margin;
+          const top = margin;
+          const right = doc.page.width - margin;
+          const bottom = doc.page.height - margin;
+          const availableW = right - left;
+
+          doc.addPage();
+          // Section title (centered, underlined)
+          doc.font('Helvetica-Bold').fontSize(15)
+            .text('Customer Group Detailed Dashboard', left, top, {
+              width: availableW,
+              underline: true,
+              align: 'center'
+            });
+          let y = doc.y + 12;
+          // Caption for cluster 1 (bold)
+          const cap0 = captions[0];
+          if (cap0) {
+            doc.font('Helvetica-Bold').fontSize(12).text(String(cap0), left, y, { width: availableW, align: 'left' });
+            doc.font('Helvetica');
+            y += 18;
+          }
+          const slotH = Math.max(0, bottom - y);
+          if (slotH > 0) {
+            doc.image(firstBuf, left, y, { fit: [availableW, slotH], align: 'center' });
+            doc.save().strokeColor('#E2E8F0').lineWidth(0.75)
+              .roundedRect(left, y, availableW, slotH, 6).stroke().restore();
+          }
+        }
+
+        // Remaining clusters: one page per image with bold caption
+        for (let i = 1; i < clusterDashImgs.length; i++) {
+          addImagesPage([clusterDashImgs[i]], [captions[i]]);
         }
       }
 
