@@ -34,6 +34,8 @@ export default function SegmentationDashboard() {
   const { segmentationId, selectedFeatures } = location.state || {};
   const { backendUrl } = useContext(AppContext);
   const stateChartWrapperRef = useRef(null);
+  const kpiGridRef = useRef(null);
+  const segmentsGridRef = useRef(null);
   const spendPanelRef = useRef(null);
   const distributionPanelRef = useRef(null);
   const productsPanelRef = useRef(null);
@@ -545,6 +547,29 @@ export default function SegmentationDashboard() {
             const dx = x + (w - dw) / 2; const dy = y + (h - dh) / 2;
             ctx.drawImage(im, dx, dy, dw, dh);
           };
+          // Slice a tall image into A4-like pages for PDF
+          const sliceIntoPages = async (src, targetW = 1800, pageH = 2546) => {
+            if (!src) return [];
+            const srcIm = await loadImage(src);
+            const scale = targetW / srcIm.width;
+            const scaledH = Math.round(srcIm.height * scale);
+            const fullCanvas = document.createElement('canvas');
+            fullCanvas.width = targetW; fullCanvas.height = scaledH;
+            const fctx = fullCanvas.getContext('2d');
+            fctx.fillStyle = '#ffffff'; fctx.fillRect(0, 0, targetW, scaledH);
+            fctx.drawImage(srcIm, 0, 0, targetW, scaledH);
+            const pages = [];
+            for (let y = 0; y < scaledH; y += pageH) {
+              const h = Math.min(pageH, scaledH - y);
+              const p = document.createElement('canvas');
+              p.width = targetW; p.height = h;
+              const pctx = p.getContext('2d');
+              pctx.fillStyle = '#ffffff'; pctx.fillRect(0, 0, targetW, h);
+              pctx.drawImage(fullCanvas, 0, y, targetW, h, 0, 0, targetW, h);
+              pages.push(p.toDataURL('image/png'));
+            }
+            return pages;
+          };
 
           // Let charts finish initial render
           await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
@@ -556,6 +581,9 @@ export default function SegmentationDashboard() {
           const genderImg = hasGender ? await capture(genderPanelRef.current) : null;
           const ageImg = hasAgeGroup ? await capture(agePanelRef.current) : null;
           const stateImg = await capture(stateChartWrapperRef.current);
+          // Capture KPI grid and Segment cards grid exactly as seen
+          const kpiImg = await capture(kpiGridRef.current);
+          const segmentsImg = await capture(segmentsGridRef.current);
 
           // Compose ALL sections into a SINGLE page image
           const pages = [];
@@ -631,9 +659,22 @@ export default function SegmentationDashboard() {
             }
           }
 
+          const imagesPayload = {};
           if (pages.length) {
-            payload.images = { overview: pages, overviewCaptions: captions };
+            imagesPayload.overview = pages;
+            imagesPayload.overviewCaptions = captions;
           }
+          // KPI grid as its own image page(s)
+          if (kpiImg) {
+            const kpiPages = await sliceIntoPages(kpiImg);
+            if (kpiPages.length) imagesPayload.kpi = kpiPages;
+          }
+          // Segment cards potentially multiple pages
+          if (segmentsImg) {
+            const segPages = await sliceIntoPages(segmentsImg);
+            if (segPages.length) imagesPayload.segments = segPages;
+          }
+          if (Object.keys(imagesPayload).length) payload.images = imagesPayload;
         } catch (captureErr) {
           console.warn('Panel capture failed, continuing without images:', captureErr?.message);
         }
@@ -734,7 +775,7 @@ export default function SegmentationDashboard() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10" ref={kpiGridRef}>
               <MetricCard title="Total Customers" value={totalCustomers.toLocaleString()} icon={<Users className="w-7 h-7 text-blue-600" />} bgColor="bg-blue-100" />
               <MetricCard title="Total Revenue" value={`RM ${totalRevenue.toFixed(2).toLocaleString()}`} icon={<DollarSign className="w-7 h-7 text-green-600" />} bgColor="bg-green-100" />
               <MetricCard title="Segments Found" value={summaries.length} icon={<ShoppingBag className="w-7 h-7 text-orange-600" />} bgColor="bg-orange-100" />
@@ -986,7 +1027,7 @@ export default function SegmentationDashboard() {
 
             {/* Segment Cards */}
             <h2 className="text-3xl font-bold text-center mt-16 mb-10 text-indigo-900">Explore Individual Segments</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8" ref={segmentsGridRef}>
               {summaries.map((seg, idx) => (
                 <SegmentCard key={seg.cluster} seg={seg} idx={idx} pairDescription={pairDescriptions[activePair]} />
               ))}

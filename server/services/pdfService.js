@@ -186,121 +186,12 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
 
         // Final bottom line
         doc.moveTo(leftX, y).lineTo(rightX, y).stroke();
-
+        doc.y = y + 24;
         // Reset defaults
         doc.fillColor('#000').strokeColor('#000').lineWidth(1);
       }
 
-      // KPI cards (compact grid)
-    const k = report.kpis || {};
-    const cards = [
-      { title: 'Total Customers', value: k.totalCustomers ?? '—' },
-      { title: 'Total Revenue', value: k.totalRevenue ?? '—' },
-      { title: 'Average Spend', value: k.averageSpendOverall ?? '—' },
-      { title: 'Average Days Since Last Purchase', value: k.overallAvgRecency ?? '—' },
-      { title: 'Average Purchases Per Month', value: k.overallAvgFrequency ?? '—' },
-    ];
-
-    doc.moveDown(2.0);
-
-    const cardWidth = 165;        // Slightly smaller card width for portrait
-    const cardHeight = 60;        // Card height
-    const horizontalGap = 20;
-    const verticalGap = 18;
-    const margin = 36;            // Page margin used when creating PDF
-    const contentWidth = doc.page.width - margin * 2;
-    const startY = doc.y;
-    // Determine max cards per row based on available width (portrait-safe)
-    const maxPerRow = Math.max(1, Math.floor((contentWidth + horizontalGap) / (cardWidth + horizontalGap)));
-
-    // Helper to center a row with N items
-    const centerXForRow = (items) => {
-      const rowWidth = items * cardWidth + (items - 1) * horizontalGap;
-      return margin + Math.max(0, (contentWidth - rowWidth) / 2);
-    };
-
-    // Custom layout: 3 cards in first row, 2 in second row.
-    const totalCards = cards.length;
-    const row1Count = Math.min(3, totalCards);
-    const row2Count = Math.max(0, totalCards - row1Count);
-
-    let y = startY;
-    const row1StartX = centerXForRow(row1Count);
-    const row1Xs = Array.from({ length: row1Count }, (_, i) => row1StartX + i * (cardWidth + horizontalGap));
-
-    // Render first row (up to 3 cards)
-    for (let i = 0; i < row1Count; i++) {
-      const card = cards[i];
-      const x = row1Xs[i];
-      // Card background + border
-      doc.roundedRect(x, y, cardWidth, cardHeight, 8).fillAndStroke('#F8FAFC', '#E2E8F0');
-      // Title shrink-to-fit
-      doc.fillColor('#374151').font('Helvetica-Bold');
-      let titleFont = 10;
-      const titleMin = 8;
-      const titleBox = cardWidth - 24;
-      while (titleFont > titleMin && doc.widthOfString(String(card.title), { font: 'Helvetica-Bold', size: titleFont }) > titleBox) {
-        titleFont -= 1;
-      }
-      doc.fontSize(titleFont).text(String(card.title), x + 12, y + 10, { width: titleBox, lineBreak: true, ellipsis: true });
-      // Value shrink-to-fit
-      const valueText = typeof card.value === 'number' ? Number(card.value).toLocaleString(undefined, { maximumFractionDigits: 2 }) : String(card.value);
-      doc.fillColor('#11142D').font('Helvetica-Bold');
-      let valueFont = 16;
-      const valueMin = 10;
-      const valueBox = cardWidth - 24;
-      while (valueFont > valueMin && doc.widthOfString(String(valueText), { font: 'Helvetica-Bold', size: valueFont }) > valueBox) {
-        valueFont -= 1;
-      }
-      doc.fontSize(valueFont).text(String(valueText), x + 12, y + 28, { width: valueBox, lineBreak: false, ellipsis: true });
-    }
-
-    // Move to second row
-    if (row2Count > 0) {
-      let y2 = y + cardHeight + verticalGap;
-      if (y2 + cardHeight > doc.page.height - 72) { doc.addPage(); y2 = margin; }
-
-      // Compute second-row Xs: if exactly 2 cards under 3-card row, place them centered in the gaps between row1 cards
-      let row2Xs;
-      if (row1Count === 3 && row2Count === 2) {
-        const gapCenters = [
-          (row1Xs[0] + cardWidth + row1Xs[1]) / 2,
-          (row1Xs[1] + cardWidth + row1Xs[2]) / 2,
-        ];
-        row2Xs = gapCenters.map(gc => gc - cardWidth / 2);
-      } else {
-        const row2StartX = centerXForRow(row2Count);
-        row2Xs = Array.from({ length: row2Count }, (_, i) => row2StartX + i * (cardWidth + horizontalGap));
-      }
-
-      for (let j = 0; j < row2Count; j++) {
-        const card = cards[row1Count + j];
-        const x = row2Xs[j];
-        doc.roundedRect(x, y2, cardWidth, cardHeight, 8).fillAndStroke('#F8FAFC', '#E2E8F0');
-        // Title
-        doc.fillColor('#374151').font('Helvetica-Bold');
-        let titleFont = 10;
-        const titleMin = 8;
-        const titleBox = cardWidth - 24;
-        while (titleFont > titleMin && doc.widthOfString(String(card.title), { font: 'Helvetica-Bold', size: titleFont }) > titleBox) {
-          titleFont -= 1;
-        }
-        doc.fontSize(titleFont).text(String(card.title), x + 12, y2 + 10, { width: titleBox, lineBreak: true, ellipsis: true });
-        // Value
-        const valueText = typeof card.value === 'number' ? Number(card.value).toLocaleString(undefined, { maximumFractionDigits: 2 }) : String(card.value);
-        doc.fillColor('#11142D').font('Helvetica-Bold');
-        let valueFont = 16;
-        const valueMin = 10;
-        const valueBox = cardWidth - 24;
-        while (valueFont > valueMin && doc.widthOfString(String(valueText), { font: 'Helvetica-Bold', size: valueFont }) > valueBox) {
-          valueFont -= 1;
-        }
-        doc.fontSize(valueFont).text(String(valueText), x + 12, y2 + 28, { width: valueBox, lineBreak: false, ellipsis: true });
-      }
-    }
-    doc.fillColor('#000');
-  // ======================== Overview Charts ========================
-      // Group multiple dashboard images per page (up to 3 per page)
+      // Image helpers (available before KPI/overview/segments rendering)
       const toBuffer = (img) => {
         if (!img) return null;
         const base64 = String(img).replace(/^data:image\/[a-zA-Z]+;base64,/, '');
@@ -338,6 +229,149 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
         });
       };
 
+      // Draw a single image inline at current flow position; add page only if needed
+      const addImageInline = (img, caption) => {
+        const buf = toBuffer(img);
+        if (!buf) return;
+        const margin = 36;
+        const left = margin;
+        const contentW = doc.page.width - margin * 2;
+        // Space left on current page
+        const availableH = Math.max(0, (doc.page.height - margin) - doc.y);
+        const captionOffset = caption ? 18 : 0;
+        // If not enough space for a reasonable image height, go to new page
+        if (availableH < 120) {
+          doc.addPage();
+        }
+        const yStart = doc.y;
+        if (caption) {
+          doc.fontSize(12).text(String(caption), left, yStart, { width: contentW, align: 'left' });
+        }
+        const yImg = yStart + captionOffset;
+        const fitW = contentW;
+        const fitH = Math.max(120, (doc.page.height - margin) - yImg);
+        doc.image(buf, left, yImg, { fit: [fitW, fitH], align: 'center' });
+        // Advance flow to bottom of the reserved area (safe)
+        doc.y = yImg + fitH + 12;
+      };
+
+      // KPI section: prefer client-rendered image if provided, else fallback to drawn cards
+      const kpiImgs = Array.isArray(images?.kpi) ? images.kpi : (images?.kpi ? [images.kpi] : []);
+      if (kpiImgs.length) {
+        // Render KPI images inline after the table (no new page unless necessary)
+        kpiImgs.forEach((img) => addImageInline(img, 'Key Metrics'));
+      } else {
+        // Fallback: draw KPI cards (legacy)
+        const k = report.kpis || {};
+        const cards = [
+          { title: 'Total Customers', value: k.totalCustomers ?? '—' },
+          { title: 'Total Revenue', value: k.totalRevenue ?? '—' },
+          { title: 'Average Spend', value: k.averageSpendOverall ?? '—' },
+          { title: 'Average Days Since Last Purchase', value: k.overallAvgRecency ?? '—' },
+          { title: 'Average Purchases Per Month', value: k.overallAvgFrequency ?? '—' },
+        ];
+
+        doc.moveDown(2.0);
+
+        const cardWidth = 165;        // Slightly smaller card width for portrait
+        const cardHeight = 60;        // Card height
+        const horizontalGap = 20;
+        const verticalGap = 18;
+        const margin = 36;            // Page margin used when creating PDF
+        const contentWidth = doc.page.width - margin * 2;
+        const startY = doc.y;
+        // Determine max cards per row based on available width (portrait-safe)
+        const maxPerRow = Math.max(1, Math.floor((contentWidth + horizontalGap) / (cardWidth + horizontalGap)));
+
+        // Helper to center a row with N items
+        const centerXForRow = (items) => {
+          const rowWidth = items * cardWidth + (items - 1) * horizontalGap;
+          return margin + Math.max(0, (contentWidth - rowWidth) / 2);
+        };
+
+        // Custom layout: 3 cards in first row, 2 in second row.
+        const totalCards = cards.length;
+        const row1Count = Math.min(3, totalCards);
+        const row2Count = Math.max(0, totalCards - row1Count);
+
+        let y = startY;
+        const row1StartX = centerXForRow(row1Count);
+        const row1Xs = Array.from({ length: row1Count }, (_, i) => row1StartX + i * (cardWidth + horizontalGap));
+
+        // Render first row (up to 3 cards)
+        for (let i = 0; i < row1Count; i++) {
+          const card = cards[i];
+          const x = row1Xs[i];
+          // Card background + border
+          doc.roundedRect(x, y, cardWidth, cardHeight, 8).fillAndStroke('#F8FAFC', '#E2E8F0');
+          // Title shrink-to-fit
+          doc.fillColor('#374151').font('Helvetica-Bold');
+          let titleFont = 10;
+          const titleMin = 8;
+          const titleBox = cardWidth - 24;
+          while (titleFont > titleMin && doc.widthOfString(String(card.title), { font: 'Helvetica-Bold', size: titleFont }) > titleBox) {
+            titleFont -= 1;
+          }
+          doc.fontSize(titleFont).text(String(card.title), x + 12, y + 10, { width: titleBox, lineBreak: true, ellipsis: true });
+          // Value shrink-to-fit
+          const valueText = typeof card.value === 'number' ? Number(card.value).toLocaleString(undefined, { maximumFractionDigits: 2 }) : String(card.value);
+          doc.fillColor('#11142D').font('Helvetica-Bold');
+          let valueFont = 16;
+          const valueMin = 10;
+          const valueBox = cardWidth - 24;
+          while (valueFont > valueMin && doc.widthOfString(String(valueText), { font: 'Helvetica-Bold', size: valueFont }) > valueBox) {
+            valueFont -= 1;
+          }
+          doc.fontSize(valueFont).text(String(valueText), x + 12, y + 28, { width: valueBox, lineBreak: false, ellipsis: true });
+        }
+
+        // Move to second row
+        if (row2Count > 0) {
+          let y2 = y + cardHeight + verticalGap;
+          if (y2 + cardHeight > doc.page.height - 72) { doc.addPage(); y2 = margin; }
+
+          // Compute second-row Xs: if exactly 2 cards under 3-card row, place them centered in the gaps between row1 cards
+          let row2Xs;
+          if (row1Count === 3 && row2Count === 2) {
+            const gapCenters = [
+              (row1Xs[0] + cardWidth + row1Xs[1]) / 2,
+              (row1Xs[1] + cardWidth + row1Xs[2]) / 2,
+            ];
+            row2Xs = gapCenters.map(gc => gc - cardWidth / 2);
+          } else {
+            const row2StartX = centerXForRow(row2Count);
+            row2Xs = Array.from({ length: row2Count }, (_, i) => row2StartX + i * (cardWidth + horizontalGap));
+          }
+
+          for (let j = 0; j < row2Count; j++) {
+            const card = cards[row1Count + j];
+            const x = row2Xs[j];
+            doc.roundedRect(x, y2, cardWidth, cardHeight, 8).fillAndStroke('#F8FAFC', '#E2E8F0');
+            // Title
+            doc.fillColor('#374151').font('Helvetica-Bold');
+            let titleFont = 10;
+            const titleMin = 8;
+            const titleBox = cardWidth - 24;
+            while (titleFont > titleMin && doc.widthOfString(String(card.title), { font: 'Helvetica-Bold', size: titleFont }) > titleBox) {
+              titleFont -= 1;
+            }
+            doc.fontSize(titleFont).text(String(card.title), x + 12, y2 + 10, { width: titleBox, lineBreak: true, ellipsis: true });
+            // Value
+            const valueText = typeof card.value === 'number' ? Number(card.value).toLocaleString(undefined, { maximumFractionDigits: 2 }) : String(card.value);
+            doc.fillColor('#11142D').font('Helvetica-Bold');
+            let valueFont = 16;
+            const valueMin = 10;
+            const valueBox = cardWidth - 24;
+            while (valueFont > valueMin && doc.widthOfString(String(valueText), { font: 'Helvetica-Bold', size: valueFont }) > valueBox) {
+              valueFont -= 1;
+            }
+            doc.fontSize(valueFont).text(String(valueText), x + 12, y2 + 28, { width: valueBox, lineBreak: false, ellipsis: true });
+          }
+        }
+        doc.fillColor('#000');
+      }
+  // ======================== Overview Charts ========================
+
       const overviewImgs = Array.isArray(images?.overview) ? images.overview : (images?.overview ? [images.overview] : []);
       const overviewCaptions = Array.isArray(images?.overviewCaptions) ? images.overviewCaptions : [];
       if (overviewImgs.length) {
@@ -361,43 +395,49 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
         return y + 8;
       };
 
-      doc.addPage();
-      // ======================== Overview Clusters =========================
-      const clusters = report.clusters || [];
-      if (clusters.length) {
-        doc.moveDown(1);
-        clusters.forEach((c, idx) => {
-          doc.addPage();
-            doc.font('Helvetica-Bold').fontSize(15).text(`Customer Group Detailed Dashboard`, 36, doc.y, {
-              width: doc.page.width - 72,
-              underline: true,
-              align: 'center'
-            });
-          doc.fontSize(12).text(`${idx + 1}. ${c.suggestedName || `Cluster ${c.cluster}`}`, { underline: true });
-          doc.moveDown(0.5);
-          const nextY = drawKVTable([
-            { label: 'Customers %', value: c.sizePct ?? '-' },
-            { label: 'Revenue Share %', value: c.revenuePct ?? '-' },
-            { label: 'Average Spend', value: c.avgSpend ?? '-' },
-            { label: 'Top State', value: c.topState || '-' },
-            c.segmentType ? { label: 'Type', value: c.segmentType } : null,
-            c.keyInsight ? { label: 'Insight', value: c.keyInsight } : null,
-            c.recommendedAction ? { label: 'Action', value: c.recommendedAction } : null,
-          ].filter(Boolean));
+      // ======================== Segment Cards =========================
+      const segmentImgs = Array.isArray(images?.segments) ? images.segments : (images?.segments ? [images.segments] : []);
+      if (segmentImgs.length) {
+        segmentImgs.forEach((img) => addImagesPage([img], ['Customer Groups']));
+      } else {
+        // Fallback: legacy text-based cluster details
+        doc.addPage();
+        const clusters = report.clusters || [];
+        if (clusters.length) {
+          doc.moveDown(1);
+          clusters.forEach((c, idx) => {
+            doc.addPage();
+              doc.font('Helvetica-Bold').fontSize(15).text(`Customer Group Detailed Dashboard`, 36, doc.y, {
+                width: doc.page.width - 72,
+                underline: true,
+                align: 'center'
+              });
+            doc.fontSize(12).text(`${idx + 1}. ${c.suggestedName || `Cluster ${c.cluster}`}`, { underline: true });
+            doc.moveDown(0.5);
+            const nextY = drawKVTable([
+              { label: 'Customers %', value: c.sizePct ?? '-' },
+              { label: 'Revenue Share %', value: c.revenuePct ?? '-' },
+              { label: 'Average Spend', value: c.avgSpend ?? '-' },
+              { label: 'Top State', value: c.topState || '-' },
+              c.segmentType ? { label: 'Type', value: c.segmentType } : null,
+              c.keyInsight ? { label: 'Insight', value: c.keyInsight } : null,
+              c.recommendedAction ? { label: 'Action', value: c.recommendedAction } : null,
+            ].filter(Boolean));
 
-          const topStates = (c.states || []).slice(0, 5).map(s => `${s.name}: ${s.revenue}`);
-          if (topStates.length) {
-            doc.moveDown(0.2);
-            doc.text('Top States:');
-            doc.list(topStates, { bulletRadius: 2 });
-          }
-          const topItems = (c.items || []).slice(0, 5).map(i => `${i.name}: ${i.count}`);
-          if (topItems.length) {
-            doc.moveDown(0.2);
-            doc.text('Top Products:');
-            doc.list(topItems, { bulletRadius: 2 });
-          }
-        });
+            const topStates = (c.states || []).slice(0, 5).map(s => `${s.name}: ${s.revenue}`);
+            if (topStates.length) {
+              doc.moveDown(0.2);
+              doc.text('Top States:');
+              doc.list(topStates, { bulletRadius: 2 });
+            }
+            const topItems = (c.items || []).slice(0, 5).map(i => `${i.name}: ${i.count}`);
+            if (topItems.length) {
+              doc.moveDown(0.2);
+              doc.text('Top Products:');
+              doc.list(topItems, { bulletRadius: 2 });
+            }
+          });
+        }
       }
 
       doc.end();
