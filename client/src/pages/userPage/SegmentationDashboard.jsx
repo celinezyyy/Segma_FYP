@@ -57,6 +57,7 @@ export default function SegmentationDashboard() {
   const [selectedGenderClusterIndex, setSelectedGenderClusterIndex] = useState(null);
   const [selectedAgeClusterIndex, setSelectedAgeClusterIndex] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [hoveredStateClusterKey, setHoveredStateClusterKey] = useState(null);
 
   // ---------------- Components ----------------
   const MetricCard = ({ title, value, icon, bgColor }) => (
@@ -352,6 +353,11 @@ export default function SegmentationDashboard() {
       pct: Number((s.sizePct ?? 0).toFixed?.(2) || s.sizePct || 0),
     }))
   ), [summaries]);
+
+  // Use a deterministic order for clusters (largest overall revenue share first)
+  const orderedSummaries = useMemo(() => {
+    return (summaries || []).slice().sort((a, b) => (Number(b.revenuePct || 0) - Number(a.revenuePct || 0)) || (a.cluster - b.cluster));
+  }, [summaries]);
   
   // State chart data for States vs Revenue
   const stateChartData = useMemo(() => {
@@ -480,6 +486,28 @@ export default function SegmentationDashboard() {
     if (!stateName) return;
     setSelectedStateFilter(prev => (prev === stateName ? null : stateName));
   };
+
+  const FilteredTooltip = ({ active, payload, label, hoveredKey }) => {
+    if (!active || !payload || !payload.length) return null;
+    const items = hoveredKey ? payload.filter(p => p.dataKey === hoveredKey) : payload;
+    if (!items.length) return null;
+    return (
+      <div className="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-md shadow-md p-3 text-sm">
+        <div className="font-semibold text-gray-800 mb-1">{label}</div>
+        {items.map((it, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: it.color }} />
+            <span className="text-gray-700">{it.name}:</span>
+            <span className="font-medium text-gray-900">RM {Number(it.value || 0).toLocaleString()}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderStateTooltip = (props) => (
+    <FilteredTooltip {...props} hoveredKey={hoveredStateClusterKey} />
+  );
 
   if (loading) return (
     <div className="flex-1 flex items-center justify-center min-h-screen bg-gray-50">
@@ -958,13 +986,13 @@ export default function SegmentationDashboard() {
                       dx: -29,
                       dy: 0
                     }}/>
-                  <Tooltip formatter={v => `RM ${v.toLocaleString()}`} />
+                  <Tooltip content={renderStateTooltip} />
                   <Legend
                     layout="vertical"
                     align="right"
                     verticalAlign="middle"
                   />
-                  {summaries.map((s, idx) => (
+                  {orderedSummaries.map((s, idx) => (
                     <Bar
                       key={s.cluster}
                       dataKey={`cluster_${s.cluster}`}
@@ -974,6 +1002,8 @@ export default function SegmentationDashboard() {
                       strokeWidth={1}
                       name={s.suggestedName || `Cluster ${s.cluster}`}
                       onClick={handleStateBarClick}
+                      onMouseOver={() => setHoveredStateClusterKey(`cluster_${s.cluster}`)}
+                      onMouseLeave={() => setHoveredStateClusterKey(null)}
                       cursor="pointer"
                     />
                   ))}
