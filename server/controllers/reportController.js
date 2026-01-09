@@ -1,7 +1,7 @@
 import Report from '../models/reportModel.js';
 import datasetModel from '../models/datasetModel.js';
 import { getReportsBucket } from '../utils/gridfs.js';
-import { Types } from 'mongoose';
+import { ObjectId } from 'mongodb';
 import { generateAndStoreReportPDF } from '../services/pdfService.js';
 
 // Draft: create report metadata; PDF generation is optional/stubbed
@@ -112,7 +112,7 @@ export const getReportPdf = async (req, res) => {
     if (!doc.pdfFileId) return res.status(404).json({ success: false, message: 'PDF not generated for this report' });
 
     const bucket = getReportsBucket();
-    const fileId = new Types.ObjectId(String(doc.pdfFileId));
+    const fileId = new ObjectId(String(doc.pdfFileId));
     const downloadStream = bucket.openDownloadStream(fileId);
     res.setHeader('Content-Type', 'application/pdf');
     const safeTitle = (doc.title || doc.pdfFilename || 'report').replace(/\"/g, '');
@@ -163,7 +163,17 @@ export const deleteReport = async (req, res) => {
     if (doc.pdfFileId) {
       try {
         const bucket = getReportsBucket();
-        await bucket.delete(new Types.ObjectId(String(doc.pdfFileId)));
+        const fileId = new ObjectId(String(doc.pdfFileId));
+        // Primary deletion: removes file doc and associated chunks
+        await bucket.delete(fileId);
+        // Defensive cleanup: ensure any orphaned chunks are removed
+        try {
+          const db = bucket.s?.db;
+          const bname = bucket.s?.options?.bucketName || 'fs';
+          if (db) {
+            await db.collection(`${bname}.chunks`).deleteMany({ files_id: fileId });
+          }
+        } catch (_) { /* ignore */ }
       } catch (e) {
         console.warn('[deleteReport] Failed to delete PDF from GridFS:', e?.message);
       }
