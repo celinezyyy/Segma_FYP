@@ -526,6 +526,14 @@ export default function SegmentationDashboard() {
         if (saving) return;
         if (!segmentationId || !Array.isArray(summaries) || summaries.length === 0) return;
         setSaving(true);
+        // Show loading immediately on click
+        Swal.fire({
+          title: 'Saving report…',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          didOpen: () => { Swal.showLoading(); },
+        });
         // Retrieve dataset IDs from cache so dedup works server-side
         let customerDatasetId = null;
         let orderDatasetId = null;
@@ -547,7 +555,7 @@ export default function SegmentationDashboard() {
           generatePdf: true,
         };
 
-        // Capture and COMPOSE images into page-specific grids for PDF only (do not change UI)
+        // Capture and COMPOSE images into page-specific grids for PDF only (no UI change)
         try {
           // Helpers
           const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -573,13 +581,7 @@ export default function SegmentationDashboard() {
             return img;
           };
           const loadImage = (src) => new Promise((resolve) => { const im = new Image(); im.onload = () => resolve(im); im.src = src; });
-          const drawContain = (ctx, im, x, y, w, h) => {
-            if (!im) return;
-            const sx = w / im.width; const sy = h / im.height; const s = Math.min(sx, sy);
-            const dw = im.width * s; const dh = im.height * s;
-            const dx = x + (w - dw) / 2; const dy = y + (h - dh) / 2;
-            ctx.drawImage(im, dx, dy, dw, dh);
-          };
+
           // Slice a tall image into A4-like pages for PDF
           const sliceIntoPages = async (src, targetW = 1800, pageH = 2546) => {
             if (!src) return [];
@@ -604,7 +606,7 @@ export default function SegmentationDashboard() {
             return pages;
           };
 
-          // Let charts finish initial render
+          // Let charts finish initial render (one double rAF is enough)
           await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
 
           // Capture KPI grid and Segment cards grid exactly as seen
@@ -640,7 +642,7 @@ export default function SegmentationDashboard() {
             const segPages = await sliceIntoPages(segmentsImg);
             if (segPages.length) imagesPayload.segments = segPages;
           }
-          // Cluster detail snapshots (one page per cluster)
+          // Cluster detail snapshots (one page per cluster) with limited concurrency to reduce peak memory
           try {
             // Ensure the hidden snapshots are rendered
             await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
@@ -660,14 +662,6 @@ export default function SegmentationDashboard() {
         } catch (captureErr) {
           console.warn('Panel capture failed, continuing without images:', captureErr?.message);
         }
-        // Show loading spinner only after captures complete, to avoid interfering with chart rendering
-        Swal.fire({
-          title: 'Saving report…',
-          allowOutsideClick: false,
-          allowEscapeKey: false,
-          showConfirmButton: false,
-          didOpen: () => { Swal.showLoading(); },
-        });
         const res = await axios.post(`${backendUrl}/api/reports/save-report`, payload, { withCredentials: true });
         const id = res?.data?.data?.id;
         const pdf = res?.data?.data?.pdf;
