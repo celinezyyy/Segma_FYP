@@ -171,7 +171,7 @@ def standardize_transaction_method(df):
     
     # Step 2: Define patterns (non-capturing groups)
     patterns = {
-        "Cash": r"\b(?:cash|tunai|otc|counter)\b",
+        "Cash": r"\b(?:cash|tunai|otc|counter|cod)\b",
         "Card": r"\b(?:card|visa|master|credit|debit|amex|credit.?debit)\b",
         "E-Wallet": r"\b(?:tng|touch\s*n\s*go|grab\s*pay|grabpay|boost|shopee\s*pay|shopeepay|spaylater|duitnow|ewallet|e-?wallet|qr|qr\s*pay|qrcode)\b",
         "Online Banking": r"\b(?:bank|transfer|fpx|online\s*payment|maybank2u|cimbclicks|duitnow\s*qr|public\s*bank)\b",
