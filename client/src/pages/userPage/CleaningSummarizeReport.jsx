@@ -205,6 +205,30 @@ const DataQualityReport = () => {
     const { summary, detailed_messages } = report;
     const [showDetails, setShowDetails] = React.useState(false);
     
+    // Type-specific duplicates removed calculation to match user's definitions
+    const duplicatesRemoved = (() => {
+      const drr = summary?.duplicates_removed_rows;
+      const initial = summary?.initial_rows;
+      const afterDedup = summary?.rows_after_deduplication;
+      if (type === 'Order') {
+        return drr !== undefined ? Number(drr) : null;
+      }
+      if (type === 'Customer') {
+        // Customer: duplicates_removed_rows + (initial_rows - rows_after_deduplication - duplicates_removed_rows)
+        if (drr !== undefined && initial !== undefined && afterDedup !== undefined) {
+          return Number(drr) + (Number(initial) - Number(afterDedup) - Number(drr));
+        }
+        // Fallbacks to avoid NaN
+        if (initial !== undefined && afterDedup !== undefined) {
+          return Number(initial) - Number(afterDedup);
+        }
+        if (drr !== undefined) {
+          return Number(drr);
+        }
+      }
+      return null;
+    })();
+    
     // Determine dataset ID and name for download
     const datasetId = type === 'Customer' ? selectedCustomer : selectedOrder;
 
@@ -248,9 +272,9 @@ const DataQualityReport = () => {
                 <p className="text-xs text-gray-600 mt-1">Initial Rows</p>
               </div>
             )}
-            {summary.duplicates_removed_rows !== undefined && (
+            {duplicatesRemoved !== null && (
               <div className="bg-white rounded-lg p-3 text-center shadow-sm">
-                <p className="text-2xl font-bold text-red-500">{summary.duplicates_removed_rows + (summary.initial_rows-summary.rows_after_deduplication - summary.duplicates_removed_rows)}</p>
+                <p className="text-2xl font-bold text-red-500">{duplicatesRemoved}</p>
                 <p className="text-xs text-gray-600 mt-1">Duplicates Removed</p>
               </div>
             )}
