@@ -16,7 +16,7 @@ import { initGridFS } from "./utils/gridfs.js";
 // npm run server
 
 const app  = express();
-const port = process.env.PORT;
+const port = process.env.PORT || 5000;
 
 // Create HTTP server (so we can attach Socket.IO)
 const server = createServer(app);
@@ -24,7 +24,10 @@ const server = createServer(app);
 // Setup Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: 'http://localhost:5173', // Your frontend URL
+    origin: [
+      'http://localhost:5173',
+      process.env.FRONTEND_URL
+    ],
     methods: ['GET', 'POST'],
     credentials: true
   }
@@ -55,12 +58,24 @@ io.on("connection", (socket) => {
   });
 });
 
-const allowedOrigins = 'http://localhost:5173'
+const allowedOrigins = [
+  'http://localhost:5173',
+  process.env.FRONTEND_URL
+];
 // Increase JSON body size limit to accept dashboard images (base64)
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 app.use(cookieParser());
-app.use(cors({origin: allowedOrigins, credentials: true}));
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
 
 // Connect DB and Init GridFS
 connectDB().then(async (conn) => {
@@ -78,5 +93,3 @@ app.use('/api/admin', adminRouter);
 app.use('/api/dataset', datasetRouter);
 app.use('/api/segmentation', segmentationRouter);
 app.use('/api/reports', reportRouter);
-
-// server.listen(port, () => console.log(`Server started on PORT: ${port}`));
