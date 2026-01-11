@@ -62,8 +62,8 @@ export const AppContextProvider = (props) => {
                     } catch {}
                     // Reset client auth state and send user to login
                     try { setIsLoggedin(false); setUserData(null); } catch {}
-                    if (window.location.pathname !== '/login') {
-                        window.location.href = '/login';
+                    if (window.location.pathname !== '/api/auth/login') {
+                        window.location.href = '/api/auth/login';
                     }
                 }
                 return Promise.reject(error);
