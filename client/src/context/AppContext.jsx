@@ -1,3 +1,4 @@
+
 import { createContext, useState, useEffect } from "react";
 import Swal from 'sweetalert2';
 import axios from 'axios';
@@ -8,7 +9,7 @@ export const AppContextProvider = (props) => {
 
     axios.defaults.withCredentials = true;
 
-    const backendUrl = import.meta.env.VITE_API_URL;
+    const backendUrl = import.meta.env.VITE_BACKEND_URL;
     const [isLoggedin, setIsLoggedin] = useState(false);
     const [userData, setUserData] = useState(null);
 
@@ -50,30 +51,7 @@ export const AppContextProvider = (props) => {
     }
 
     useEffect(() => {
-        // Register interceptor once
-        const interceptorId = axios.interceptors.response.use(
-            (response) => response,
-            (error) => {
-                const status = error?.response?.status;
-                if (status === 401) {
-                    const msg = error?.response?.data?.message || 'Not Authorized. Session Expired, Please Login Again';
-                    try {
-                        Swal.fire({ icon: 'error', title: 'Session expired', text: msg });
-                    } catch {}
-                    // Reset client auth state and send user to login
-                    try { setIsLoggedin(false); setUserData(null); } catch {}
-                    if (window.location.pathname !== '/login') {
-                        window.location.href = '/login';
-                    }
-                }
-                return Promise.reject(error);
-            }
-        );
-
         getAuthState();
-
-        // Cleanup on unmount
-        return () => axios.interceptors.response.eject(interceptorId);
     }, []);
 
     const value = {
