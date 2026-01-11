@@ -1,0 +1,3 @@
+Order_ID,Customer_ID,Purchase Item,Purchase Date,Purchase Time,Purchase Channel,Total Spend,PurchaseQuantity,Transaction Method
+Unique ID for each order,Link to Customer_ID in customer data,Name of purchased item,Date of purchase (YYYY-MM-DD),"Time of purchase (HH:MM, 24-hour format)","Channel used (e.g., Online/In-store)","Total spending amount (e.g., 99.90)",Number of items purchased,"Payment method (e.g., Credit Card, Cash)"
+O1001,C001,Coffee Maker,2024-10-12,14:30,Online,199.9,1,Credit Card
