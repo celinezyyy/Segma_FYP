@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "postbuild": "copy /_redirects dist/_redirects || copy \\_redirects dist\\_redirects"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.0.1",
@@ -51,3 +52,4 @@
   "author": "",
   "license": "ISC"
 }
+
