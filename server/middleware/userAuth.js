@@ -5,7 +5,9 @@ const userAuth = async(req, res, next) =>{
     const {token} = req.cookies;
 
     if(!token){
-        return res.json({success:false, message: 'Not Authorized. Session Expired, Please Login Again'});    
+        // Clear any stale auth cookie and return 401 to allow client-side redirect
+        try { res.clearCookie('token'); } catch {}
+        return res.status(401).json({success:false, message: 'Not Authorized. Session Expired, Please Login Again'});    
     }
 
     try {
@@ -15,12 +17,15 @@ const userAuth = async(req, res, next) =>{
             req.userId = tokenDecode.id;
             req.role = tokenDecode.role; 
         }else{
-            return res.json({success:false, message: "Not Authorized. Session Expired, Please Login Again"});
+            try { res.clearCookie('token'); } catch {}
+            return res.status(401).json({success:false, message: "Not Authorized. Session Expired, Please Login Again"});
         }
         next();
         
     } catch (error) {
-        res.json({success:false, message: error.message});
+        // On token verification errors, treat as unauthorized and clear cookie
+        try { res.clearCookie('token'); } catch {}
+        res.status(401).json({success:false, message: 'Not Authorized. Session Expired, Please Login Again'});
     }
 }
 
