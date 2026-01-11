@@ -10,6 +10,7 @@
 /server/temp
 /server/python/cleaningPipeline/__pycache__
 # Build outputs
+/client/dist
 /server/dist
 /server/build
 
