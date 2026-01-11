@@ -4,6 +4,8 @@ import 'dotenv/config';
 import { createServer } from "http";     
 import { Server } from "socket.io";  
 import cookieParser from "cookie-parser";
+import path from "path";
+import { fileURLToPath } from "url";
 import connectDB from "./config/mongodb.js";
 import authRouter from "./routes/authRoutes.js";
 import userRouter from "./routes/userRoutes.js";
@@ -17,6 +19,8 @@ import { initGridFS } from "./utils/gridfs.js";
 
 const app  = express();
 const port = process.env.PORT || 5000;
+// Behind reverse proxies (Render), trust proxy so cookies/secure flags work correctly
+app.set('trust proxy', 1);
 
 // Create HTTP server (so we can attach Socket.IO)
 const server = createServer(app);
@@ -93,3 +97,24 @@ app.use('/api/admin', adminRouter);
 app.use('/api/dataset', datasetRouter);
 app.use('/api/segmentation', segmentationRouter);
 app.use('/api/reports', reportRouter);
+
+// --- Serve React SPA (optional fallback) ---
+// If you choose to deploy only the backend on Render, build the client into client/dist
+// and serve it from Express. This ensures routes like /login load the SPA.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const clientDistPath = path.resolve(__dirname, '../client/dist');
+
+// Serve static assets from the React build
+app.use(express.static(clientDistPath));
+
+// Wildcard route to serve index.html for any non-API paths (SPA routing)
+app.get('*', (req, res) => {
+  // Avoid intercepting API routes
+  if (req.path.startsWith('/api/')) return res.status(404).send('Not Found');
+  try {
+    return res.sendFile(path.join(clientDistPath, 'index.html'));
+  } catch (e) {
+    return res.status(404).send('Not Found');
+  }
+});
