@@ -107,16 +107,18 @@ const ViewFeedbackStatus = () => {
     <div className="flex min-h-screen">
       <UserSidebar />
       <main className="flex-grow px-4 md:px-8 pt-20 min-h-[calc(100vh-5rem)]">
-        <h2 className="text-3xl font-bold mb-6 text-[#1f3f66] text-center">My Feedback Status</h2>
-
-        <div className="mb-6 flex flex-wrap items-center justify-end">
-          <input
-            type="text"
-            placeholder="Search feedback..."
-            className="border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value.toLowerCase())}
-          />
+        {/* Title + Right-aligned search in one bar */}
+        <div className="mb-6 relative flex items-center">
+          <h2 className="absolute left-1/2 -translate-x-1/2 text-3xl font-bold text-[#1f3f66] text-center">My Feedback Status</h2>
+          <div className="ml-auto">
+            <input
+              type="text"
+              placeholder="Search feedback..."
+              className="border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value.toLowerCase())}
+            />
+          </div>
         </div>
 
         <div className="overflow-x-auto bg-white shadow-lg rounded-lg border-2 border-[#C3E5F1]">

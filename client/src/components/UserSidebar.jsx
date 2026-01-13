@@ -3,7 +3,6 @@ import Navbar from '../components/Navbar';
 
 const UserSidebar = () => {
   const [isOpen, setIsOpen] = useState(false); // Toggle sidebar expand/collapse
-  const [segOpen, setSegOpen] = useState(false); // Toggle segmentation submenu
   const [feedbackOpen, setFeedbackOpen] = useState(false); // Toggle feedback submenu
 
   return (
