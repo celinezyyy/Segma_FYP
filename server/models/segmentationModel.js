@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 
 const runSegmentationSchema = new mongoose.Schema({
-  selectedPair: [String],
   bestK: { type: Number },
   evaluation: { type: Object },
   cluster_summary: { type: Object },
@@ -15,7 +14,8 @@ const segmentationSchema = new mongoose.Schema({
   orderDatasetId: { type: mongoose.Schema.Types.ObjectId, ref: 'dataset', required: true },
   mergedFileId: { type: mongoose.Schema.Types.ObjectId, default: null },
   summary: { type: Object, default: null },
-  runsSegmentationResult: { type: [runSegmentationSchema], default: [] },
+  // Store only one latest segmentation result (single subdocument)
+  runsSegmentationResult: { type: runSegmentationSchema, default: null },
 }, { timestamps: true });
 
 // Ensure only one segmentation per user + dataset pair

@@ -700,28 +700,7 @@ export const runSegmentationFlow = async (req, res) => {
       return res.status(404).json({ message: 'Segmentation or merged data not found.' });
     }
 
-    // === CACHE: If a run with the same features already exists, return it directly ===
-    const existingRun = (segRecord.runsSegmentationResult || []).find(r => {
-      const saved = r.selectedPair || [];
-      // Must match length
-      if (saved.length !== features.length) return false;
-
-      // Check if every element in 'features' exists in 'saved' (order does not matter)
-      return features.every(f => saved.includes(f));
-    });
-    if (existingRun) {
-      const result = existingRun;
-      const responsePayload = {
-        success: true,
-        bestK: result.decision.selected_k,
-        clusterSummary: result.cluster_summary,
-        assignments: result.cluster_assignments,
-        selectedFeatures: features,
-      };
-      console.log('[DEBUG] Use back segment result, already run before.');
-      console.log('>>>>>>>>>>>>>>>>>>>>>>>>>> EXIT: runSegmentationFlow function >>>>>>>>>>>>>>>>>>>>>>>>');
-      return res.json(responsePayload);
-    }
+    // Cache disabled: always compute and overwrite single stored result
 
     const cwd = process.cwd();
     const isServerCwd = path.basename(cwd) === 'server';
@@ -755,9 +734,8 @@ export const runSegmentationFlow = async (req, res) => {
       return res.status(500).json({ message: 'Segmentation run failed', error: pyErr.message, debug: true });
     }
 
-    // Persist selection metadata for caching
-    result.selectedPair = features;
-    segRecord.runsSegmentationResult.push(result);
+    // Persist latest result (single stored document)
+    segRecord.runsSegmentationResult = result;
     await segRecord.save();
 
     // --------------------- Response ---------------------
@@ -786,9 +764,7 @@ export const showSegmentationResultInDashboard = async (req, res) => {
     if (!segmentationId) {
       return res.status(400).json({ success: false, message: 'segmentationId is required' });
     }
-    if (!Array.isArray(features) || features.length === 0) {
-      return res.status(400).json({ success: false, message: 'features (selectedPair) is required as a non-empty array' });
-    }
+    // Features are provided by client when running segmentation; for dashboard display, we use stored single result.
 
     const { userId } = req;
     const seg = userId
@@ -798,12 +774,10 @@ export const showSegmentationResultInDashboard = async (req, res) => {
     if (!seg) return res.status(404).json({ success: false, message: 'Segmentation record not found' });
     if (!seg.mergedFileId) return res.status(404).json({ success: false, message: 'Merged dataset not found' });
 
-    const reqSet = new Set(features.map(String));
-    const run = (seg.runsSegmentationResult || []).find(r => {
-      const saved = (r.selectedPair || []).map(String);
-      return saved.length === reqSet.size && saved.every(f => reqSet.has(f));
-    });
-    if (!run) return res.status(404).json({ success: false, message: 'No segmentation result found for the selected features. Please run segmentation first.' });
+    const run = seg.runsSegmentationResult;
+    if (!run) {
+      return res.status(404).json({ success: false, message: 'No segmentation result stored. Please run segmentation first.' });
+    }
 
     // Map customer -> cluster (robust to casing)
     const assignmentMap = new Map();
