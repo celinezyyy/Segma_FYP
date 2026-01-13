@@ -1,12 +1,13 @@
 import express from 'express';
 import userAuth from '../middleware/userAuth.js';
-import { createReport, listReports, getReportPdf, deleteReport, updateReport } from '../controllers/reportController.js';
+import { createReport, listReports, getReportPdf, deleteReport, updateReport, checkReportExists } from '../controllers/reportController.js';
 
 const router = express.Router();
 
 // All routes require authenticated user
 router.use(userAuth);
 
+router.get('/exists', checkReportExists);
 router.post('/save-report', createReport);
 router.get('/get-all-reports', listReports); //DONE CHECKING
 router.get('/:id/pdf', getReportPdf);

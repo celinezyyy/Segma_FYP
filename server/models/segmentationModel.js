@@ -6,7 +6,6 @@ const runSegmentationSchema = new mongoose.Schema({
   evaluation: { type: Object },
   cluster_summary: { type: Object },
   cluster_assignments: { type: Object },
-  feature_info: { type: Object },
   decision: { type: Object },
 }, { _id: false });
 

@@ -545,6 +545,31 @@ export default function SegmentationDashboard() {
             orderDatasetId = cached?.orderDatasetId || null;
           }
         } catch (_) {}
+
+        // 1) Preflight: Check existence before doing heavy capture
+        try {
+          const checkRes = await axios.get(
+            `${backendUrl}/api/reports/exists`,
+            {
+              params: { segmentationId, customerDatasetId, orderDatasetId },
+              withCredentials: true,
+            }
+          );
+          const exists = checkRes?.data?.data?.exists;
+          const existingId = checkRes?.data?.data?.id;
+          if (exists && existingId) {
+            Swal.close();
+            await Swal.fire({
+              icon: 'info',
+              title: 'Report already exists',
+              text: 'A report for this segmentation and datasets is already saved. You can view it in your Reports list.',
+              confirmButtonText: 'Go to Reports',
+              confirmButtonColor: '#3b82f6',
+            });
+            navigate('/reports');
+            return; // Skip capture & save
+          }
+        } catch (_) { /* ignore preflight failure, continue */ }
         const payload = {
           segmentationId,
           customerDatasetId,

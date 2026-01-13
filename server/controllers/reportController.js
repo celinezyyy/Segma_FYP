@@ -4,6 +4,32 @@ import { getReportsBucket } from '../utils/gridfs.js';
 import { ObjectId } from 'mongodb';
 import { generateAndStoreReportPDF } from '../services/pdfService.js';
 
+// Quick existence check (avoid heavy save/generation when already present)
+export const checkReportExists = async (req, res) => {
+  try {
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const { segmentationId, customerDatasetId = null, orderDatasetId = null } = req.query || {};
+    if (!segmentationId) {
+      return res.status(400).json({ success: false, message: 'segmentationId is required' });
+    }
+
+    const existing = await Report.findOne({
+      userId,
+      segmentationId,
+      customerDatasetId: customerDatasetId || null,
+      orderDatasetId: orderDatasetId || null,
+    }).select('_id pdfFileId createdAt').lean();
+
+    if (!existing) return res.json({ success: true, data: { exists: false } });
+    return res.json({ success: true, data: { exists: true, id: existing._id, hasPdf: Boolean(existing.pdfFileId) } });
+  } catch (err) {
+    console.error('[checkReportExists] error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to check report' });
+  }
+};
+
 // Draft: create report metadata; PDF generation is optional/stubbed
 export const createReport = async (req, res) => {
   try {
