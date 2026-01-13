@@ -22,8 +22,7 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
 
       const bucket = getReportsBucket();
       const uploadStream = bucket.openUploadStream(filename, {
-        contentType: 'application/pdf',
-        metadata: { reportId: String(report._id || ''), userId: String(userId || '') },
+        contentType: 'application/pdf'
       });
 
       // Pipe PDF into GridFS

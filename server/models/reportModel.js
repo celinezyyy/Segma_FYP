@@ -65,7 +65,7 @@ const ReportSchema = new mongoose.Schema(
     // Cluster summaries
     clusters: [ClusterSummarySchema],
 
-    // PDF metadata (stored in GridFS; using existing bucket for draft)
+    // PDF file (stored in GridFS)
     pdfFileId: { type: mongoose.Schema.Types.ObjectId, default: null },
     pdfFilename: { type: String },
     pdfSize: { type: Number },
