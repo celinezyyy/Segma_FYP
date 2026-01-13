@@ -9,10 +9,8 @@ const datasetSchema = new mongoose.Schema({
   isClean: { type: Boolean, default: false },
   fileId: { type: mongoose.Schema.Types.ObjectId, required: true },    
 
-  // ✅ Store data quality and summary messages from cleaning
-  metadata: {
-    data_quality_report: { type: Object, default: {} }, // full JSON report
-  },
+  // ✅ Store data quality and summary messages from cleaning directly (no metadata wrapper)
+  data_quality_report: { type: Object, default: {} },
 });
 
 const datasetModel = mongoose.models.dataset || mongoose.model('dataset', datasetSchema);

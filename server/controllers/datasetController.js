@@ -410,10 +410,8 @@ export const startDatasetCleaning = async (req, res) => {
       type: type,
       isClean: true,
       fileId: uploadStream.id,
-      metadata: {
-        ...(dataset.metadata || {}),
-        data_quality_report: report
-      }
+      // Store report at top-level (schema flattened)
+      data_quality_report: report
     });
 
     // Delete original file from GridFS
@@ -455,7 +453,8 @@ export const getDatasetReport = async (req, res) => {
     if (!dataset)
       return res.status(404).json({ success: false, message: "Dataset not found" });
 
-    const report = dataset.metadata?.data_quality_report;
+    // Backward-compatible: support either flattened or legacy nested location
+    const report = dataset.data_quality_report;
     return res.json({ success: true, report });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
