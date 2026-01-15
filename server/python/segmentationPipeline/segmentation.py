@@ -62,21 +62,17 @@ def run_segmentation(df: pd.DataFrame, selected_features: List[str]) -> Dict[str
         labels = km.fit_predict(X)
         sil = silhouette_score(X, labels)
         dbi = davies_bouldin_score(X, labels)
-        inertia = float(km.inertia_)
         counts = Counter(labels)
         sizes = [counts[i] for i in range(k)]
-        k_results.append({'k': k, 'silhouette': float(sil), 'dbi': float(dbi), 'inertia': inertia, 'sizes': sizes})
+        k_results.append({'k': k, 'silhouette': float(sil), 'dbi': float(dbi), 'sizes': sizes})
         if VERBOSE:
-            print(f"[SEGMENT][K-EVAL] k={k} sil={sil:.4f} dbi={dbi:.4f} inertia={inertia:.2f} sizes={sizes}", file=sys.stderr)
+            print(f"[SEGMENT][K-EVAL] k={k} sil={sil:.4f} dbi={dbi:.4f} sizes={sizes}", file=sys.stderr)
 
     # Silhouette = higher better (Range: -1 to 1)
         # How well customers fit inside their own cluster
         # How far they are from other cluster
     # DBI = lower better (Range: 0 to ∞)
         # How compact and separated clusters are
-    # Inertia  
-        # Total within-cluster variance
-        # Decreases as K increases
 
     # Composite selection: silhouette plateau + DBI threshold + size sanity + target K range
     kr = pd.DataFrame(k_results)
