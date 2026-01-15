@@ -44,14 +44,6 @@ const ReportSchema = new mongoose.Schema(
       order: { type: String },
     },
 
-    // Features / Pair context
-    // features: [{ type: String }],
-    // pair: {
-    //   id: { type: String },
-    //   label: { type: String },
-    //   tagline: { type: String },
-    // },
-
     // KPIs / Overview
     bestK: { type: Number, required: true },
     kpis: {

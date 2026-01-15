@@ -396,10 +396,39 @@ export const generateAndStoreReportPDF = ({ report, userId, images }) => {
         return y + 8;
       };
 
-      // ======================== Segment Cards =========================
+      // ======================== Segment Cards + State Chart =========================
+      const stateChartImg = images?.stateRevenue;
       const segmentImgs = Array.isArray(images?.segments) ? images.segments : (images?.segments ? [images.segments] : []);
-      if (segmentImgs.length) {
-        segmentImgs.forEach((img) => addImagesPage([img]));
+      
+      // Render state chart + segment cards on same page
+      if (stateChartImg || segmentImgs.length) {
+        doc.addPage();
+        const margin = 36;
+        const left = margin;
+        const contentW = doc.page.width - margin * 2;
+        
+        // Render state chart first (no title, just the chart)
+        if (stateChartImg) {
+          const buf = toBuffer(stateChartImg);
+          if (buf) {
+            const chartH = 300; // Fixed height for state chart
+            doc.image(buf, left, doc.y, { fit: [contentW, chartH], align: 'center' });
+            doc.y += chartH;
+          }
+        }
+        
+        // Render segment cards
+        segmentImgs.forEach((img) => {
+          const buf = toBuffer(img);
+          if (buf) {
+            const availableH = Math.max(0, (doc.page.height - margin) - doc.y);
+            if (availableH < 200) {
+              doc.addPage();
+            }
+            doc.image(buf, left, doc.y, { fit: [contentW, availableH], align: 'center' });
+            doc.y += availableH + 12;
+          }
+        });
       } else {
         // Fallback: legacy text-based cluster details
         doc.addPage();

@@ -667,6 +667,21 @@ export default function SegmentationDashboard() {
             const segPages = await sliceIntoPages(segmentsImg);
             if (segPages.length) imagesPayload.segments = segPages;
           }
+          // State chart capture
+          try {
+            const stateImg = await toPng(stateChartWrapperRef.current, {
+              cacheBust: true,
+              pixelRatio: 2,
+              backgroundColor: '#ffffff',
+              style: { width: '1800px' }
+            });
+            if (stateImg) {
+              imagesPayload.stateRevenue = stateImg;
+            }
+          } catch (e) {
+            console.warn('State chart capture failed:', e?.message);
+          }
+
           // Cluster detail snapshots (one page per cluster) with limited concurrency to reduce peak memory
           try {
             // Ensure the hidden snapshots are rendered
@@ -966,7 +981,9 @@ export default function SegmentationDashboard() {
               </div>
             </div>
 
-            {/* Row 2: States by Revenue full-width */}
+            </div>
+
+            {/* Row 2: States by Revenue full-width - SEPARATE from overview, will be with segment cards */}
             <div className="bg-white p-8 rounded-3xl shadow-xl mb-4" ref={stateChartWrapperRef}>
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-bold text-gray-800 mb-6">States by Revenue</h3>
@@ -1028,7 +1045,6 @@ export default function SegmentationDashboard() {
                   ))}
                 </BarChart>
               </ResponsiveContainer>
-            </div>
             </div>
 
             {/* Segment Cards */}
