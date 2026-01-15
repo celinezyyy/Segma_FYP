@@ -43,7 +43,7 @@ def run_segmentation(df: pd.DataFrame, selected_features: List[str]) -> Dict[str
         rfm_df['Recency'] = rfm_df['Recency'].max() - rfm_df['Recency']
 
     # Log-transform Frequency and Monetary
-    for col in ['Frequency', 'Monetary']:
+    for col in ['Frequency', 'Monetary', 'Recency']:
         if col in rfm_df.columns:
             rfm_df[col] = np.log1p(rfm_df[col])
 
@@ -56,8 +56,8 @@ def run_segmentation(df: pd.DataFrame, selected_features: List[str]) -> Dict[str
     # Evaluate K (2..10)
     from collections import Counter
     k_results = []
-    vlog("Begin K evaluation loop 2..10")
-    for k in range(2, 11):
+    vlog("Begin K evaluation loop 2..6")
+    for k in range(2, 7):
         km = KMeans(n_clusters=k, random_state=42, n_init=10)
         labels = km.fit_predict(X)
         sil = silhouette_score(X, labels)
@@ -68,6 +68,15 @@ def run_segmentation(df: pd.DataFrame, selected_features: List[str]) -> Dict[str
         k_results.append({'k': k, 'silhouette': float(sil), 'dbi': float(dbi), 'inertia': inertia, 'sizes': sizes})
         if VERBOSE:
             print(f"[SEGMENT][K-EVAL] k={k} sil={sil:.4f} dbi={dbi:.4f} inertia={inertia:.2f} sizes={sizes}", file=sys.stderr)
+
+    # Silhouette = higher better (Range: -1 to 1)
+        # How well customers fit inside their own cluster
+        # How far they are from other cluster
+    # DBI = lower better (Range: 0 to ∞)
+        # How compact and separated clusters are
+    # Inertia  
+        # Total within-cluster variance
+        # Decreases as K increases
 
     # Composite selection: silhouette plateau + DBI threshold + size sanity + target K range
     kr = pd.DataFrame(k_results)
