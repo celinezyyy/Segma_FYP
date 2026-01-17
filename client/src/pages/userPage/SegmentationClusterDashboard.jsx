@@ -48,7 +48,7 @@ export default function SegmentationClusterDashboard() {
   const baseStates = useMemo(
     () => (seg.states || []).map(s => ({
       name: s.name,
-      value: (s.revenue ?? s.count ?? 0),
+      value: (s.count ?? 0),
       count: s.count ?? 0,
       revenue: s.revenue ?? 0,
     })),
