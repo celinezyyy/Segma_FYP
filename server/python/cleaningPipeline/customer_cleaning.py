@@ -326,9 +326,9 @@ def handle_missing_values_customer(df):
     stats = {
         "customerid_removed": 0,
         "case1_api_filled": 0,
-        "case1_fallback_filled": 0,
-        "case2_filled": 0,
-        "case3_filled": 0
+        "case1_unknown_filled": 0,
+        "case2_unknown_filled": 0,
+        "case3_unknown_filled": 0
     }
 
     # --- Drop rows without ID ---
@@ -344,7 +344,10 @@ def handle_missing_values_customer(df):
     # --- City & State handling ---
     if {'city', 'state'}.issubset(df.columns):
         print("\n[LOG - STAGE 5] Handling missing city/state values...")
+        # Get Malaysia and Singapore states/regions
         malaysia_states = [sub.name for sub in pycountry.subdivisions if sub.country_code == 'MY']
+        singapore_states = [sub.name for sub in pycountry.subdivisions if sub.country_code == 'SG']
+        valid_states = malaysia_states + singapore_states
         cache = {}  # city -> validated state
         SLEEP_TIME = 1.2
         
@@ -358,16 +361,17 @@ def handle_missing_values_customer(df):
         
         for city in cities_to_query:
             if city not in cache:
-                # Call API
+                # Call API - try Malaysia first, then Singapore
                 try:
                     resp = requests.get(GEOCODE_URL, params={"q": f"{city}, Malaysia", "api_key": API_KEY}, timeout=10)
                     if resp.status_code == 200:
                         data = resp.json()
                         if isinstance(data, list) and data:
                             state_name = data[0].get("address", {}).get("state")
-                            if state_name and state_name in malaysia_states:
+                            if state_name and state_name in valid_states:
                                 cache[city] = state_name
                             else:
+                                # Try Singapore
                                 cache[city] = None
                         else:
                             cache[city] = None
@@ -377,6 +381,27 @@ def handle_missing_values_customer(df):
                 except Exception as e:
                     print(f"[WARN - STAGE 5] Failed to get state for city '{city}': {e}")
                     cache[city] = None
+
+                # Try Singapore if Malaysia query failed
+                if cache.get(city) is None:
+                    try:
+                        resp = requests.get(GEOCODE_URL, params={"q": f"{city}, Singapore", "api_key": API_KEY}, timeout=10)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            if isinstance(data, list) and data:
+                                state_name = data[0].get("address", {}).get("state")
+                                if state_name and state_name in valid_states:
+                                    cache[city] = state_name
+                                else:
+                                    cache[city] = None
+                            else:
+                                cache[city] = None
+                        else:
+                            cache[city] = None
+                        time.sleep(SLEEP_TIME)
+                    except Exception as e:
+                        print(f"[WARN - STAGE 5] Failed to get state for city '{city}' in Singapore: {e}")
+                        cache[city] = None
 
             # Fill values
             fill_state = cache.get(city)
@@ -403,39 +428,26 @@ def handle_missing_values_customer(df):
                 filled_count = mask_fill.sum()
                 df.loc[mask_fill, 'state'] = mode_state
                 df.loc[mask_fill, 'city'] = mode_city
-                stats["case1_fallback_filled"] += filled_count
-                print(f"[TRACE - STAGE 5] Filled {filled_count} row(s) → city='{mode_city}', state='{mode_state}' (Fallback)")
+                stats["case1_unknown_filled"] += filled_count
+                print(f"[TRACE - STAGE 5] Filled {filled_count} row(s) → city='{city}' → state='Unknown' (API invalid)")
 
-        # Case 2: missing city but state known → fill with mode city per state
+        # Case 2: missing city but state known → fill with Unknown
         print("\n[LOG - STAGE 5] Case 2: Filling missing city where state is known...")
         mask_case2 = (df['city'] == 'Unknown') & (df['state'] != 'Unknown')
         if mask_case2.any():
-            mode_city_per_state = (
-                df[df['city'] != 'Unknown'].groupby('state')['city']
-                .agg(lambda x: x.mode().iloc[0] if not x.mode().empty else 'Unknown')
-                .to_dict()
-            )
-            for state, city_mode in mode_city_per_state.items():
-                mask_fill = mask_case2 & (df['state'] == state)
-                filled_count = mask_fill.sum()
-                if filled_count > 0:
-                    df.loc[mask_fill, 'city'] = city_mode
-                    stats["case2_filled"] += filled_count
-                    print(f"[TRACE - STAGE 5] Filled {filled_count} row(s) → missing city for state='{state}' → city='{city_mode}'")
+            filled_count = mask_case2.sum()
+            df.loc[mask_case2, 'city'] = 'Unknown'
+            stats["case2_unknown_filled"] = filled_count
+            print(f"[TRACE - STAGE 5] Filled {filled_count} row(s) → missing city → city='Unknown'")
 
-        # Case 3: both missing → fill with most frequent pair
+        # Case 3: both missing → fill with Unknown
         print("\n[LOG - STAGE 5] Case 3: Filling missing city and state...")
         mask_case3 = (df['city'] == 'Unknown') & (df['state'] == 'Unknown')
         if mask_case3.any():
-            valid_pairs = df[(df['city'] != 'Unknown') & (df['state'] != 'Unknown')]
-            if not valid_pairs.empty:
-                city_mode, state_mode = valid_pairs.groupby(['city', 'state']).size().idxmax()
-                filled_count = mask_case3.sum()
-                df.loc[mask_case3, ['city', 'state']] = [city_mode, state_mode]
-                stats["case3_filled"] = filled_count
-                print(f"[TRACE - STAGE 5] Filled {filled_count} row(s) → missing city/state → City='{city_mode}', State='{state_mode}'")
-            else:
-                print("[WARN - STAGE 5] No valid city/state pairs to fill missing both values")
+            filled_count = mask_case3.sum()
+            df.loc[mask_case3, ['city', 'state']] = 'Unknown'
+            stats["case3_unknown_filled"] = filled_count
+            print(f"[TRACE - STAGE 5] Filled {filled_count} row(s) → missing city/state → city='Unknown', state='Unknown'")
     return df
 
 # ============================================= (CUSTOMER DATASET) STAGE 6: OUTLIER DETECTION =============================================
