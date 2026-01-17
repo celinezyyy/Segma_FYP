@@ -121,7 +121,7 @@ def standardize_dob(df):
         print("[LOG - STAGE 4] DOB parsing complete. Invalid dates kept as NaT")
         message = (
             "Since your dataset includes a Date of Birth information, we derived two useful fields "
-            "'age' and 'age_group' for segmentation purposes, and the original 'Date of Birth' column will be remove."
+            "'Age' and 'Age Group' for segmentation purposes, and the original 'Date of Birth' column will be remove."
         )
     else:
         print("[LOG - STAGE 4] DOB column not found, skipping")
