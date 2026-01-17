@@ -207,16 +207,17 @@ const DataQualityReport = () => {
     
     // Type-specific duplicates removed calculation to match user's definitions
     const duplicatesRemoved = (() => {
-      const drr = summary?.duplicates_removed_rows;
+      const drrCust = summary?.duplicates_removed_rows;
+      const drrOrder = summary?.duplicates_removed_rows + summary?.rows_removed_during_missing_value_handling;
       const initial = summary?.initial_rows;
       const afterDedup = summary?.rows_after_deduplication;
       if (type === 'Order') {
-        return drr !== undefined ? Number(drr) : null;
+        return drrOrder !== undefined ? Number(drrOrder) : null;
       }
       if (type === 'Customer') {
         // Customer: duplicates_removed_rows + (initial_rows - rows_after_deduplication - duplicates_removed_rows)
-        if (drr !== undefined && initial !== undefined && afterDedup !== undefined) {
-          return Number(drr) + (Number(initial) - Number(afterDedup) - Number(drr));
+        if (drrCust !== undefined && initial !== undefined && afterDedup !== undefined) {
+          return Number(drrCust) + (Number(initial) - Number(afterDedup) - Number(drrCust));
         }
         // Fallbacks to avoid NaN
         if (initial !== undefined && afterDedup !== undefined) {

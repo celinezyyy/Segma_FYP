@@ -289,12 +289,13 @@ def handle_missing_values_order(df):
 
     # Build message
     dropped_total = initial_count - len(df)
+    stats["dropped_total"] = dropped_total
     
     # Final summary
     print(f"[LOG - STAGE 4] Dropped total {dropped_total} rows ({dropped_total/initial_count:.2%}) due to missing critical data")
     print(f"[LOG - STAGE 4] Dataset now has {len(df)} rows after missing value handling")
 
-    return df
+    return df, stats
 
 # ============================================= (ORDER DATASET) STAGE 5: OUTLIER DETECTION =============================================
 def order_detect_outliers(df):
@@ -426,7 +427,8 @@ def clean_order_dataset(df, cleaned_output_path):
     # STAGE 4: MISSING VALUE HANDLING
     # ===============================================
     print("========== [STAGE 4 START] Missing Value Handling ==========")
-    df = handle_missing_values_order(df)
+    df, missing_value_stats = handle_missing_values_order(df)
+    report["summary"]["rows_removed_during_missing_value_handling"] = missing_value_stats["dropped_total"]
     print("✅ [STAGE 4 COMPLETE] Missing values handled.\n")
     
     # =============================================
@@ -440,7 +442,7 @@ def clean_order_dataset(df, cleaned_output_path):
     report["summary"].update({
         "total_rows_final": len(df),
         "total_columns_final": len(df.columns),
-        "final_columns": list(df.columns),  # Add list of remaining column names
+        # "final_columns": list(df.columns),  # Add list of remaining column names
     })
     # =============================================
     # SAVE CLEANED DATASET
