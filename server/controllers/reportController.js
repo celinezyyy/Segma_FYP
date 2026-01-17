@@ -212,3 +212,22 @@ export const deleteReport = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to delete report' });
   }
 };
+
+// Get total report count for current user
+export const getReportCount = async (req, res) => {
+  try {
+    const userId = req.userId;
+    
+    if (!userId) {
+      console.log('[getReportCount] Unauthorized - no userId');
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const count = await Report.countDocuments({ userId });
+    
+    return res.json({ success: true, count });
+  } catch (err) {
+    console.error('[getReportCount] error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to get report count' });
+  }
+};

@@ -1,6 +1,6 @@
 import express from 'express';
 import userAuth from '../middleware/userAuth.js';
-import { createReport, listReports, getReportPdf, deleteReport, updateReport, checkReportExists } from '../controllers/reportController.js';
+import { createReport, listReports, getReportPdf, deleteReport, updateReport, checkReportExists, getReportCount } from '../controllers/reportController.js';
 
 const router = express.Router();
 
@@ -8,12 +8,13 @@ const router = express.Router();
 router.use(userAuth);
 
 router.get('/exists', checkReportExists);
+router.get('/report-count', getReportCount);
+router.get('/get-all-reports', listReports);
 router.post('/save-report', createReport);
-router.get('/get-all-reports', listReports); //DONE CHECKING
-router.get('/:id/pdf', getReportPdf);
-router.delete('/delete-report/:id', deleteReport); //DONE CHECKING
+router.delete('/delete-report/:id', deleteReport);
 
-// Not use now for change file name update
+// Dynamic routes last (after specific routes)
+router.get('/:id/pdf', getReportPdf);
 router.put('/:id', updateReport);
 
 export default router;

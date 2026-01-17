@@ -11,7 +11,7 @@ const UserHome = () => {
   const navigate = useNavigate();
 
   const [datasetCounts, setDatasetCounts] = useState({ customer: 0, order: 0 });
-  const reportCount = 0; // Replace with real report count later
+  const [reportCount, setReportCount] = useState(0);
 
   useEffect(() => {
     const fetchCounts = async () => {
@@ -28,7 +28,22 @@ const UserHome = () => {
       }
     };
 
+    const fetchReportCount = async () => {
+      try {
+        const res = await axios.get(`${backendUrl}/api/reports/report-count`, {
+          withCredentials: true,
+        });
+        if (res.data.success) {
+          setReportCount(res.data.count);
+          console.log('Report count set to:', res.data.count);
+        }
+      } catch (err) {
+        console.error('Failed to fetch report count:', err);
+      }
+    };
+
     fetchCounts();
+    fetchReportCount();
   }, [backendUrl]);
 
   return (
