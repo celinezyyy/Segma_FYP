@@ -114,6 +114,7 @@ function SimpleBarChart({
   labelFormatter = null,
   xAxisLabel,
   yAxisLabel,
+  tooltipLabel = 'City',
 }) {
   const isHorizontal = orientation === 'horizontal';
   const computedHeight = height;
@@ -173,7 +174,7 @@ function SimpleBarChart({
             />
           </>
         )}
-        <Tooltip formatter={(value) => [`${value}`, 'Customers']} labelFormatter={(label) => `City: ${label}`} />
+        <Tooltip formatter={(value) => [`${value}`, 'Customers']} labelFormatter={(label) => `${tooltipLabel}: ${label}`} />
         <Bar dataKey={valueKey} fill="#3b82f6">
           {showLabels && (<LabelList position={isHorizontal ? 'right' : 'top'} content={renderBarLabel} />)}
         </Bar>
@@ -242,7 +243,15 @@ export default function ClusterDetailView({ seg }) {
     };
   }, [seg]);
 
-  const ageChartData = useMemo(() => (Array.isArray(seg.ageGroups) ? seg.ageGroups : []), [seg]);
+  const AGE_ORDER = ['Below 18', '18-24', '25-34', '35-44', '45-54', '55-64', '65+', 'Above 65'];
+  const ageChartData = useMemo(() => {
+    const groups = Array.isArray(seg.ageGroups) ? [...seg.ageGroups] : [];
+    return groups.sort((a, b) => {
+      const indexA = AGE_ORDER.indexOf(String(a.name));
+      const indexB = AGE_ORDER.indexOf(String(b.name));
+      return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+    });
+  }, [seg]);
 
   return (
     <div className="w-full max-w-[1800px] mx-auto">
@@ -277,6 +286,7 @@ export default function ClusterDetailView({ seg }) {
             barGap={5}
             xNumberTickFormatter={(v) => Math.round(Number(v || 0)).toLocaleString()}
             tooltipFormatter={(props) => [String(props?.payload?.count ?? 0), 'Customers']}
+            tooltipLabel="State"
           />
         </BarBox>
         <BarBox title="Top 5 Best Selling Products">
@@ -318,6 +328,7 @@ export default function ClusterDetailView({ seg }) {
                 yAxisLabel="Number of Customers"
                 height={240}
                 bottomMargin={60}
+                tooltipLabel="Age Group"
               />
             ) : (
               <p className="text-sm text-gray-500">No age group data available.</p>

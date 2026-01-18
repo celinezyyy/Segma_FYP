@@ -937,8 +937,11 @@ export default function SegmentationDashboard() {
                     <BarChart data={genderChartData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="cluster" interval={0} height={70} tickMargin={8} tick={<WrappedXAxisTick />} />
-                      <YAxis tick={{ fontSize: 12 }} />
-                      <Tooltip formatter={v => Number(v || 0).toLocaleString()} />
+                      <YAxis tick={{ fontSize: 12 }} label={{ value: 'Number of Customers', angle: -90, position: 'insideLeft', dy: 60, dx: 15 }} />
+                      <Tooltip 
+                        formatter={(value, name) => [`${Number(value || 0).toLocaleString()} customers`, name]}
+                        contentStyle={{ backgroundColor: '#fff', border: '1px solid #ccc', borderRadius: '4px' }}
+                      />
                       <Legend />
                       <Bar dataKey="male" name="Male" fill={COLORS[1]} onClick={handleGenderBarClick} cursor="pointer" />
                       <Bar dataKey="female" name="Female" fill={COLORS[2]} onClick={handleGenderBarClick} cursor="pointer" />
@@ -967,8 +970,11 @@ export default function SegmentationDashboard() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="cluster" interval={0} height={70} tickMargin={8}
                     tick={<WrappedXAxisTick />} />
-                      <YAxis tick={{ fontSize: 12 }} />
-                      <Tooltip formatter={v => Number(v || 0).toLocaleString()} />
+                      <YAxis tick={{ fontSize: 12 }} label={{ value: 'Number of Customers', angle: -90, position: 'insideLeft', dy: 60, dx: 15 }} />
+                      <Tooltip 
+                        formatter={(value, name) => [`${Number(value || 0).toLocaleString()} customers`, name]}
+                        contentStyle={{ backgroundColor: '#fff', border: '1px solid #ccc', borderRadius: '4px' }}
+                      />
                       <Legend />
                       {ageGroupKeys.map((k, i) => (
                         <Bar key={k} dataKey={k} stackId="age" fill={COLORS[i % COLORS.length]} onClick={handleAgeBarClick} cursor="pointer" />

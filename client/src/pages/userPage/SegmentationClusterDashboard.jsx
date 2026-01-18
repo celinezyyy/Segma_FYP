@@ -111,9 +111,15 @@ export default function SegmentationClusterDashboard() {
   }, [seg]);
 
   // Age group data — use backend order and values directly
-    const ageChartData = useMemo(() => (
-      Array.isArray(seg.ageGroups) ? seg.ageGroups : []
-    ), [seg]);
+    const AGE_ORDER = ['Below 18', '18-24', '25-34', '35-44', '45-54', '55-64', '65+', 'Above 65'];
+  const ageChartData = useMemo(() => {
+    const groups = Array.isArray(seg.ageGroups) ? [...seg.ageGroups] : [];
+    return groups.sort((a, b) => {
+      const indexA = AGE_ORDER.indexOf(String(a.name));
+      const indexB = AGE_ORDER.indexOf(String(b.name));
+      return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+    });
+  }, [seg]);
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -207,6 +213,7 @@ export default function SegmentationClusterDashboard() {
                     (props?.payload?.count ?? 0).toLocaleString(),
                     'Customers',
                   ]}
+                  tooltipLabel="State"
                 />
               </BarBox>
               <BarBox title="Top 5 Best Selling Products">
@@ -273,6 +280,7 @@ export default function SegmentationClusterDashboard() {
                         yAxisLabel="Number of Customers"
                           height={240}
                           bottomMargin={60}
+                          tooltipLabel="Age Group"
                       />
                     ) : (
                       <p className="text-sm text-gray-500">No age group data available.</p>
@@ -484,6 +492,7 @@ function SimpleBarChart({
   labelFormatter = null,
   xAxisLabel,
   yAxisLabel,
+  tooltipLabel = 'City',
 }) {
   const isHorizontal = orientation === 'horizontal';
   const computedHeight = height; // Use passed height (fixed now)
@@ -564,7 +573,7 @@ function SimpleBarChart({
         )}
         <Tooltip
           formatter={(value) => [`${value}`, 'Customers']}
-          labelFormatter={(label) => `City: ${label}`}
+          labelFormatter={(label) => `${tooltipLabel}: ${label}`}
         />
         <Bar dataKey={valueKey} fill="#3b82f6">
           {showLabels && (
