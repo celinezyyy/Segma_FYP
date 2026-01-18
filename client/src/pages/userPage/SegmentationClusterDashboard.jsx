@@ -46,7 +46,9 @@ export default function SegmentationClusterDashboard() {
   
 
   const baseStates = useMemo(
-    () => (seg.states || []).map(s => ({
+    () => (seg.states || [])
+      .filter(s => s.name !== 'Unknown')
+      .map(s => ({
       name: s.name,
       value: (s.count ?? 0),
       count: s.count ?? 0,
@@ -62,7 +64,9 @@ export default function SegmentationClusterDashboard() {
   }, [baseStates, stateSort]);
 
   const baseCities = useMemo(
-    () => (seg.cities || []).map(c => ({ name: c.name, value: (c.count ?? 0) })),
+    () => (seg.cities || [])
+      .filter(c => c.name !== 'Unknown')
+      .map(c => ({ name: c.name, value: (c.count ?? 0) })),
     [seg]
   );
 

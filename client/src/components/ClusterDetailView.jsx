@@ -189,7 +189,9 @@ export default function ClusterDetailView({ seg }) {
   const [stateSort, setStateSort] = useState('desc');
   const [citySort, setCitySort] = useState('desc');
 
-  const baseStates = useMemo(() => (seg.states || []).map(s => ({
+  const baseStates = useMemo(() => (seg.states || [])
+    .filter(s => s.name !== 'Unknown')
+    .map(s => ({
     name: s.name,
     value: (s.revenue ?? s.count ?? 0),
     count: s.count ?? 0,
@@ -202,7 +204,9 @@ export default function ClusterDetailView({ seg }) {
     return data.slice(0, 15);
   }, [baseStates, stateSort]);
 
-  const baseCities = useMemo(() => (seg.cities || []).map(c => ({ name: c.name, value: (c.count ?? 0) })), [seg]);
+  const baseCities = useMemo(() => (seg.cities || [])
+    .filter(c => c.name !== 'Unknown')
+    .map(c => ({ name: c.name, value: (c.count ?? 0) })), [seg]);
 
   const topCities = useMemo(() => {
     const data = [...baseCities];
