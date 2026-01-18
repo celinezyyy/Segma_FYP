@@ -71,19 +71,20 @@ def standardize_purchase_date(df):
         # Create standardized columns
         df.loc[:, "purchase date"] = df["purchase datetime"].dt.strftime("%Y-%m-%d")
         df.loc[:, "purchase date"] = df["purchase date"].replace("NaT", pd.NA)
-        df.loc[:, "purchase time"] = None
-        df.loc[has_time_mask, "purchase time"] = (
-            df.loc[has_time_mask, "purchase datetime"].dt.strftime("%H:%M:%S")
-        )
         
-        # Drop intermediate column
-        df.drop(columns=["purchase datetime"], inplace=True, errors="ignore")
-        
+        # Only create purchase time column if at least one row has time info
         if has_time_mask.any():
+            df.loc[:, "purchase time"] = None
+            df.loc[has_time_mask, "purchase time"] = (
+                df.loc[has_time_mask, "purchase datetime"].dt.strftime("%H:%M:%S")
+            )
             message = (
                 "Since your Purchase Date information have include time information, "
                 "so a separate 'purchase time' column has been derived to be used for segmentation later."
             )
+        
+        # Drop intermediate column
+        df.drop(columns=["purchase datetime"], inplace=True, errors="ignore")
     else:
         print("[WARN - STAGE 3] 'purchase date' column not found, skipping.")
     print("[LOG - STAGE 3] Purchase date standardization complete, NaN preserved.")
@@ -154,20 +155,19 @@ def handle_missing_values_order(df):
     """
     Strategy (for SME context):
     - Drop rows if (orderid, customerid, purchase date) are missing
-    - Drop rows if (purchase time) is missing (when time column exists)
     - Drop rows if (purchase item) is missing (important for segmentation analysis)
     - Drop rows if both (item price and total spend) are missing
     - Drop rows if (item price) is missing (critical for calculations)
     - Fill or calculate non-critical missing fields logically:
         - purchase quantity: calculate from (total spend / item price) if possible, otherwise fill with 1
         - total spend: calculate from (item price × quantity) if possible, otherwise drop row
+    Note: purchase time is optional and preserved as-is (None if not in original data)
     """
 
     initial_count = len(df)
    
     stats = {
         "critical_ids_removed": 0,
-        "purchase_time_removed": 0,
         "no_financial_removed": 0,
         "item_price_removed": 0,
         "total_spend_removed": 0,
@@ -176,20 +176,13 @@ def handle_missing_values_order(df):
     }
 
     # Drop rows missing critical identifiers (orderid, customerid, purchase date, purchase item)
-    critical_cols = ["orderid", "customerid", "purchase date", "purchase item"]
+    critical_cols = ["orderid", "customerid", "purchase date"]
     existing_critical = [c for c in critical_cols if c in df.columns]
     before_critical = len(df)
     df = df.dropna(subset=existing_critical)
     stats["critical_ids_removed"] = before_critical - len(df)
     print(f"[LOG - STAGE 4] Dropped {stats['critical_ids_removed']} rows with missing critical identifiers (OrderID, CustomerID, Purchase Date, Purchase Item)")
     
-    if "purchase time" in df.columns:
-        # Drop rows where purchase time is null
-        before_drop = len(df)
-        df = df.dropna(subset=["purchase time"])
-        stats["purchase_time_removed"] = before_drop - len(df)
-        print(f"[LOG - STAGE 4] Dropped {stats['purchase_time_removed']} rows with missing purchase time")
-
     # Drop rows missing both financial info
     before_financial = len(df)
     df = df.dropna(subset=["item price", "total spend"], how="all")

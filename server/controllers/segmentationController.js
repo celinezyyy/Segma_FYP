@@ -25,6 +25,7 @@ const aggregateOrderData = (orderRows) => {
         totalOrders: 0,          // Count of orders
         purchaseDates: [],       // Array of purchase dates for recency calculation
         items: [],               // Array of items purchased
+        purchaseTimes: [],       // Array of purchase times (optional, may remain empty)
       };
     }
 
@@ -55,8 +56,6 @@ const aggregateOrderData = (orderRows) => {
 
     // Collect purchase time if available (e.g., "14:35:00")
     if (purchaseTime) {
-      if (!customerOrders[customerId].purchaseTimes) 
-        customerOrders[customerId].purchaseTimes = [];
       customerOrders[customerId].purchaseTimes.push(purchaseTime);
     }
   });
@@ -867,7 +866,10 @@ export const showSegmentationResultInDashboard = async (req, res) => {
 
     const getTop = (obj, clusterSize) => {
       if (!obj || Object.keys(obj).length === 0) return { top: 'N/A', pct: 0 };
-      const entries = Object.entries(obj).sort((a, b) => b[1] - a[1]);
+      const entries = Object.entries(obj)
+        .filter(([name]) => name && name.toLowerCase() !== 'unknown') // Filter out "Unknown"
+        .sort((a, b) => b[1] - a[1]);
+      if (entries.length === 0) return { top: 'N/A', pct: 0 };
       const pct = Number(((entries[0][1] / clusterSize) * 100).toFixed(1));
       return { top: entries[0][0], pct };
     };

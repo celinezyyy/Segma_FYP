@@ -364,9 +364,7 @@ export default function SegmentationDashboard() {
   // State chart data for States vs Revenue
   const stateChartData = useMemo(() => {
     const allStatesSet = new Set();
-    summaries.forEach(s => (s.states || []).forEach(st => {
-      if (st.name !== 'Unknown') allStatesSet.add(st.name);
-    }));
+    summaries.forEach(s => (s.states || []).forEach(st => allStatesSet.add(st.name)));
     let allStates = Array.from(allStatesSet);
 
     // Apply filter if a state is selected
