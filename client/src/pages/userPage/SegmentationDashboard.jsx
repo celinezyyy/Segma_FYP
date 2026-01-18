@@ -58,6 +58,8 @@ export default function SegmentationDashboard() {
   const [selectedAgeClusterIndex, setSelectedAgeClusterIndex] = useState(null);
   const [saving, setSaving] = useState(false);
   const [hoveredStateClusterKey, setHoveredStateClusterKey] = useState(null);
+  const [hoveredGenderBar, setHoveredGenderBar] = useState(null);
+  const [hoveredAgeBar, setHoveredAgeBar] = useState(null);
 
   // ---------------- Components ----------------
   const MetricCard = ({ title, value, icon, bgColor }) => (
@@ -505,8 +507,34 @@ export default function SegmentationDashboard() {
     );
   };
 
+  const GenderAgeFilteredTooltip = ({ active, payload, label, hoveredKey }) => {
+    if (!active || !payload || !payload.length) return null;
+    const items = hoveredKey ? payload.filter(p => p.dataKey === hoveredKey) : payload;
+    if (!items.length) return null;
+    return (
+      <div className="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-md shadow-md p-3 text-sm">
+        <div className="font-semibold text-gray-800 mb-1">{label}</div>
+        {items.map((it, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: it.color }} />
+            <span className="text-gray-700">{it.name}:</span>
+            <span className="font-medium text-gray-900">{Number(it.value || 0).toLocaleString()} customers</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   const renderStateTooltip = (props) => (
     <FilteredTooltip {...props} hoveredKey={hoveredStateClusterKey} />
+  );
+
+  const renderGenderTooltip = (props) => (
+    <GenderAgeFilteredTooltip {...props} hoveredKey={hoveredGenderBar} />
+  );
+
+  const renderAgeTooltip = (props) => (
+    <GenderAgeFilteredTooltip {...props} hoveredKey={hoveredAgeBar} />
   );
 
   if (loading) return (
@@ -938,13 +966,10 @@ export default function SegmentationDashboard() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="cluster" interval={0} height={70} tickMargin={8} tick={<WrappedXAxisTick />} />
                       <YAxis tick={{ fontSize: 12 }} label={{ value: 'Number of Customers', angle: -90, position: 'insideLeft', dy: 60, dx: 15 }} />
-                      <Tooltip 
-                        formatter={(value, name) => [`${Number(value || 0).toLocaleString()} customers`, name]}
-                        contentStyle={{ backgroundColor: '#fff', border: '1px solid #ccc', borderRadius: '4px' }}
-                      />
+                      <Tooltip content={renderGenderTooltip} />
                       <Legend />
-                      <Bar dataKey="male" name="Male" fill={COLORS[1]} onClick={handleGenderBarClick} cursor="pointer" />
-                      <Bar dataKey="female" name="Female" fill={COLORS[2]} onClick={handleGenderBarClick} cursor="pointer" />
+                      <Bar dataKey="male" name="Male" fill={COLORS[1]} onClick={handleGenderBarClick} cursor="pointer" onMouseOver={() => setHoveredGenderBar('male')} onMouseLeave={() => setHoveredGenderBar(null)} />
+                      <Bar dataKey="female" name="Female" fill={COLORS[2]} onClick={handleGenderBarClick} cursor="pointer" onMouseOver={() => setHoveredGenderBar('female')} onMouseLeave={() => setHoveredGenderBar(null)} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -971,13 +996,10 @@ export default function SegmentationDashboard() {
                       <XAxis dataKey="cluster" interval={0} height={70} tickMargin={8}
                     tick={<WrappedXAxisTick />} />
                       <YAxis tick={{ fontSize: 12 }} label={{ value: 'Number of Customers', angle: -90, position: 'insideLeft', dy: 60, dx: 15 }} />
-                      <Tooltip 
-                        formatter={(value, name) => [`${Number(value || 0).toLocaleString()} customers`, name]}
-                        contentStyle={{ backgroundColor: '#fff', border: '1px solid #ccc', borderRadius: '4px' }}
-                      />
+                      <Tooltip content={renderAgeTooltip} />
                       <Legend />
                       {ageGroupKeys.map((k, i) => (
-                        <Bar key={k} dataKey={k} stackId="age" fill={COLORS[i % COLORS.length]} onClick={handleAgeBarClick} cursor="pointer" />
+                        <Bar key={k} dataKey={k} stackId="age" fill={COLORS[i % COLORS.length]} onClick={handleAgeBarClick} cursor="pointer" onMouseOver={() => setHoveredAgeBar(k)} onMouseLeave={() => setHoveredAgeBar(null)} />
                       ))}
                     </BarChart>
                   </ResponsiveContainer>
