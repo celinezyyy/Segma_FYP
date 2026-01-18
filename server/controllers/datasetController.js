@@ -37,8 +37,7 @@ export const uploadDataset = async (req, res) => {
         'Purchase Date',
         'Item Price',
         'Purchase Quantity',
-        'Total Spend',
-        'Transaction Method'
+        'Total Spend'
       ]
     };
 

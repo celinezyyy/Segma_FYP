@@ -149,47 +149,6 @@ def standardize_purchase_quantity(df):
 
     return df
 
-def standardize_transaction_method(df):
-    """
-    Standardize 'transaction method' into categories:
-    ['Cash', 'Card', 'E-Wallet', 'Online Banking', 'Auto-Debit', 'Cheque']
-    (Unknown represents missing values)
-    """
-    import re
-
-    print("[LOG - STAGE 3] Running standardize_transaction_method...")
-
-    if "transaction method" not in df.columns:
-        print("[LOG - STAGE 3] 'transaction method' column not found, skipping.")
-        return df
-    
-    # Step1: Only process non-null values
-    mask_notna = df["transaction method"].notna()
-    df.loc[mask_notna, "transaction method"] = (
-        df.loc[mask_notna, "transaction method"].astype(str).str.lower().str.strip()
-    )
-    
-    # Step 2: Define patterns (non-capturing groups)
-    patterns = {
-        "Cash": r"\b(?:cash|tunai|otc|counter|cod)\b",
-        "Card": r"\b(?:card|visa|master|credit|debit|amex|credit.?debit)\b",
-        "E-Wallet": r"\b(?:tng|touch\s*n\s*go|grab\s*pay|grabpay|boost|shopee\s*pay|shopeepay|spaylater|duitnow|ewallet|e-?wallet|qr|qr\s*pay|qrcode)\b",
-        "Online Banking": r"\b(?:bank|transfer|fpx|online\s*payment|maybank2u|cimbclicks|duitnow\s*qr|public\s*bank)\b",
-        "Auto-Debit": r"\b(?:auto.?debit|standing|recurring|subscription|auto\s*pay)\b",
-        "Cheque": r"\b(?:cheque|cek|check)\b",
-    }
-
-    # Step 4: Apply vectorized regex matching
-    for category, pattern in patterns.items():
-        mask = df["transaction method"].str.contains(pattern, flags=re.IGNORECASE, na=False, regex=True)
-        df.loc[mask, "transaction method"] = category
-
-    mask_unmatched = mask_notna & ~df["transaction method"].isin(patterns.keys())
-    df.loc[mask_unmatched, "transaction method"] = pd.NA
-
-    print("[LOG - STAGE 3] Transaction method standardized successfully, NaN preserved.")
-    return df
-
 # ============================================= (ORDER DATASET) STAGE 4: MISSING VALUE HANDLING =============================================
 def handle_missing_values_order(df):
     """
@@ -202,7 +161,6 @@ def handle_missing_values_order(df):
     - Fill or calculate non-critical missing fields logically:
         - purchase quantity: calculate from (total spend / item price) if possible, otherwise fill with 1
         - total spend: calculate from (item price × quantity) if possible, otherwise drop row
-        - transaction method: fill with "Unknown"
     """
 
     initial_count = len(df)
@@ -214,8 +172,7 @@ def handle_missing_values_order(df):
         "item_price_removed": 0,
         "total_spend_removed": 0,
         "qty_calculated": 0,
-        "total_spend_calculated": 0,
-        "transaction_method_filled": 0
+        "total_spend_calculated": 0
     }
 
     # Drop rows missing critical identifiers (orderid, customerid, purchase date, purchase item)
@@ -279,13 +236,6 @@ def handle_missing_values_order(df):
         df = df.dropna(subset=["total spend"])
         stats["total_spend_removed"] = before_drop - len(df)
         print(f"[LOG - STAGE 4] Dropped {stats['total_spend_removed']} rows with missing 'total spend' after calculation")
-
-    # Transaction method → Unknown
-    if "transaction method" in df.columns:
-        before_fill = df["transaction method"].isna().sum()
-        df["transaction method"] = df["transaction method"].replace(["", "NaN", None], np.nan)
-        df["transaction method"] = df["transaction method"].fillna("Unknown")
-        stats["transaction_method_filled"] = before_fill
 
     # Build message
     dropped_total = initial_count - len(df)
@@ -392,7 +342,7 @@ def clean_order_dataset(df, cleaned_output_path):
     # STAGE 1: SCHEMA & COLUMN VALIDATION
     # =============================================
     print("========== [STAGE 1 START] Schema & Column Validation ==========")
-    order_mandatory = ["orderid", "customerid", "purchase item", "purchase date", "item price", "purchase quantity", "total spend", "transaction method"]
+    order_mandatory = ["orderid", "customerid", "purchase item", "purchase date", "item price", "purchase quantity", "total spend"]
     df, mandatory_msg = check_mandatory_columns(df, dataset_type="order", mandatory_columns=order_mandatory)
     messages.append(mandatory_msg)
     report["detailed_messages"]["check_mandatory_columns"] = mandatory_msg
@@ -420,7 +370,6 @@ def clean_order_dataset(df, cleaned_output_path):
     report["detailed_messages"]["standardize_purchase_date"] = standardize_purchaseDateMessage
     df = standardized_item_price_and_total_spend(df)
     df = standardize_purchase_quantity(df)
-    df = standardize_transaction_method(df)
     print("✅ [STAGE 3 COMPLETE] Standardization and normalization finished.\n")
 
     # ===============================================
