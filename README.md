@@ -1,4 +1,4 @@
-# Final Year Project (FYP)
+# Final Year Project (Segma)
 
 **Topic: A WEB-BASED MARKET SEGMENTATION MODEL FOR SMALL ENTERPRISES**
 
